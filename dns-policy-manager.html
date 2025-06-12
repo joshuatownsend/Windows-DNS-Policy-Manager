@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows DNS Policy Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: float 20s linear infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateX(-50px) translateY(-50px); }
+            100% { transform: translateX(0px) translateY(0px); }
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            height: fit-content;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .policy-form {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .server-connection {
+            background: #e8f4fd;
+            border: 2px solid #3498db;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .server-connection h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .credential-section,
+        .session-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .connection-status {
+            margin-left: 10px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .connection-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .connection-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .connection-status.testing {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .criteria-section {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .criteria-section h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .criteria-item {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .criteria-item:hover {
+            border-color: #3498db;
+            box-shadow: 0 2px 10px rgba(52, 152, 219, 0.1);
+        }
+
+        .remove-criteria {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .remove-criteria:hover {
+            background: #c0392b;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2980b9, #21618c);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #229954, #1e8449);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .policy-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .policy-item {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .policy-item:hover {
+            border-color: #3498db;
+            box-shadow: 0 5px 20px rgba(52, 152, 219, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .policy-item.selected {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+
+        .policy-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .policy-action {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .action-allow {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .action-deny {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .action-ignore {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .policy-details {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .powershell-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #333;
+        }
+
+        .powershell-output pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        .add-criteria-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+
+        .add-criteria-btn:hover {
+            background: #138496;
+        }
+
+        .info-tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+            cursor: help;
+        }
+
+        .info-tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .info-tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .scope-config {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .scope-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .scope-item input {
+            flex: 1;
+        }
+
+        .scope-item button {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .backup-section,
+        .import-section,
+        .restore-section {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .backup-section h3,
+        .import-section h3,
+        .restore-section h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .backup-section p,
+        .import-section p,
+        .restore-section p {
+            color: #6c757d;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        .file-upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-area:hover {
+            border-color: #2980b9;
+            background: #f8f9fa;
+            transform: translateY(-2px);
+        }
+
+        .file-upload-area.dragover {
+            border-color: #27ae60;
+            background: #d4edda;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #495057;
+        }
+
+        .upload-text strong {
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .import-preview {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .import-preview h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+
+        .domain-list {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .policy-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .stat-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tab-container {
+            margin-bottom: 20px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Windows DNS Policy Manager</h1>
+            <p>Configure and manage DNS Query Resolution Policies for Windows Server</p>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <h3>Existing Policies</h3>
+                <div class="policy-list" id="policyList">
+                    <!-- Policies will be populated here -->
+                </div>
+                <button class="btn btn-secondary" onclick="loadPolicies()">Refresh Policies</button>
+            </div>
+
+            <div class="policy-form">
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-button active" onclick="showTab('create')">Create Policy</button>
+                        <button class="tab-button" onclick="showTab('backup')">Backup & Import</button>
+                        <button class="tab-button" onclick="showTab('powershell')">PowerShell Commands</button>
+                    </div>
+
+                    <div class="tab-content active" id="createTab">
+                        <!-- DNS Server Connection Section -->
+                        <div class="server-connection">
+                            <h3>DNS Server Connection</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="dnsServer">DNS Server *</label>
+                                    <input type="text" id="dnsServer" placeholder="DNS server IP, FQDN, or hostname" value="localhost">
+                                </div>
+                                <div class="form-group">
+                                    <label for="connectionType">Connection Method</label>
+                                    <select id="connectionType" onchange="toggleCredentialFields()">
+                                        <option value="local">Local Server (Current User)</option>
+                                        <option value="remote">Remote Server (Credentials)</option>
+                                        <option value="session">PowerShell Session</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div id="credentialFields" class="credential-section" style="display: none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="username">Username</label>
+                                        <input type="text" id="username" placeholder="DOMAIN\Username or Username">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="domain">Domain (Optional)</label>
+                                        <input type="text" id="domain" placeholder="Domain name">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="useCurrentCredentials"> Use current Windows credentials
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <button type="button" class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+                            <span id="connectionStatus" class="connection-status"></span>
+                        </div>
+
+                        <form id="policyForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="policyName">Policy Name *</label>
+                                    <input type="text" id="policyName" required placeholder="Enter policy name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="policyAction">Action *</label>
+                                    <select id="policyAction" required onchange="toggleScopeConfig()">
+                                        <option value="">Select Action</option>
+                                        <option value="ALLOW">Allow</option>
+                                        <option value="DENY">Deny</option>
+                                        <option value="IGNORE">Ignore</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="policyLevel">Policy Level</label>
+                                    <select id="policyLevel" onchange="toggleZoneField()">
+                                        <option value="Server">Server Level</option>
+                                        <option value="Zone">Zone Level</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="zoneNameGroup" style="display: none;">
+                                    <label for="zoneName">Zone Name</label>
+                                    <input type="text" id="zoneName" placeholder="e.g., contoso.com">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="condition">Condition Logic</label>
+                                    <select id="condition">
+                                        <option value="AND">AND (All criteria must match)</option>
+                                        <option value="OR">OR (Any criteria must match)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="processingOrder">Processing Order</label>
+                                    <input type="number" id="processingOrder" min="1" placeholder="1" value="1">
+                                </div>
+                            </div>
+
+                            <div id="scopeConfig" class="scope-config" style="display: none;">
+                                <h4>Zone Scopes (Required for ALLOW action)</h4>
+                                <div id="scopeList">
+                                    <div class="scope-item">
+                                        <input type="text" placeholder="Scope Name" class="scope-name">
+                                        <input type="number" placeholder="Weight" class="scope-weight" min="1" value="1">
+                                        <button type="button" onclick="removeScope(this)">Remove</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="add-criteria-btn" onclick="addScope()">Add Scope</button>
+                            </div>
+
+                            <div class="criteria-section">
+                                <h3>Policy Criteria</h3>
+                                <button type="button" class="add-criteria-btn" onclick="addCriteria()">Add Criteria</button>
+                                <div id="criteriaList">
+                                    <!-- Criteria will be added here -->
+                                </div>
+                            </div>
+
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-success" onclick="generatePolicy()">Generate Policy</button>
+                                <button type="button" class="btn btn-primary" onclick="exportPolicy()">Export PowerShell</button>
+                                <button type="button" class="btn btn-secondary" onclick="clearForm()">Clear Form</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="tab-content" id="backupTab">
+                        <div class="backup-section">
+                            <h3>Backup Current Policies</h3>
+                            <p>Export existing DNS policies from the server to a backup file for safekeeping or migration.</p>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="backupServer">DNS Server</label>
+                                    <input type="text" id="backupServer" placeholder="DNS server to backup from" value="localhost">
+                                </div>
+                                <div class="form-group">
+                                    <label for="backupFormat">Backup Format</label>
+                                    <select id="backupFormat">
+                                        <option value="json">JSON (Recommended)</option>
+                                        <option value="xml">XML</option>
+                                        <option value="powershell">PowerShell Script</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="includeZonePolicies" checked> Include Zone-Level Policies
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="includeServerPolicies" checked> Include Server-Level Policies
+                                </label>
+                            </div>
+                            
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" onclick="generateBackupScript()">Generate Backup Script</button>
+                                <button type="button" class="btn btn-success" onclick="exportCurrentPolicies()">Export Current Policies</button>
+                            </div>
+                            
+                            <div id="backupOutput" class="powershell-output" style="display: none; margin-top: 20px;">
+                                <pre id="backupCommands"></pre>
+                            </div>
+                        </div>
+
+                        <div class="import-section">
+                            <h3>Import Blocklist</h3>
+                            <p>Import domains from a text file or CSV to create blocking policies automatically.</p>
+                            
+                            <div class="file-upload-area" onclick="document.getElementById('blocklistFile').click()">
+                                <div class="upload-icon">📁</div>
+                                <div class="upload-text">
+                                    <strong>Click to select blocklist file</strong><br>
+                                    Supports: .txt, .csv files<br>
+                                    <span id="selectedFileName">No file selected</span>
+                                </div>
+                                <input type="file" id="blocklistFile" accept=".txt,.csv" style="display: none;" onchange="handleFileSelect(event)">
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="blocklistPolicyName">Policy Name</label>
+                                    <input type="text" id="blocklistPolicyName" placeholder="BlocklistPolicy" value="ImportedBlocklist">
+                                </div>
+                                <div class="form-group">
+                                    <label for="blocklistAction">Action</label>
+                                    <select id="blocklistAction">
+                                        <option value="IGNORE">IGNORE (Drop silently)</option>
+                                        <option value="DENY">DENY (Return refused)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="csvColumn">CSV Column (if CSV file)</label>
+                                    <input type="text" id="csvColumn" placeholder="domain, hostname, etc." value="domain">
+                                </div>
+                                <div class="form-group">
+                                    <label for="maxDomains">Max Domains per Policy</label>
+                                    <input type="number" id="maxDomains" value="100" min="1" max="1000">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Import Options:</label>
+                                <label>
+                                    <input type="checkbox" id="includeWildcards" checked> Add wildcard (*.) prefix to domains
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="skipComments"> Skip comment lines (starting with # or //)
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="validateDomains" checked> Validate domain format
+                                </label>
+                            </div>
+                            
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" onclick="previewBlocklist()" disabled id="previewBtn">Preview Import</button>
+                                <button type="button" class="btn btn-success" onclick="importBlocklist()" disabled id="importBtn">Generate Policies</button>
+                            </div>
+                            
+                            <div id="importPreview" class="import-preview" style="display: none;">
+                                <h4>Import Preview</h4>
+                                <div id="previewContent"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="powershellTab">
+                        <div class="powershell-output" id="powershellOutput">
+                            <pre># Generated PowerShell commands will appear here
+# Click "Generate Policy" to create the command</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let policies = [];
+        let selectedPolicy = null;
+        let criteriaCount = 0;
+        let scopeCount = 1;
+        let blocklistData = null;
+
+        // Initialize the application
+        function init() {
+            loadSamplePolicies();
+            addCriteria();
+        }
+
+        // Load sample policies for demonstration
+        function loadSamplePolicies() {
+            policies = [
+                {
+                    name: "BlockMalware",
+                    action: "IGNORE",
+                    level: "Server",
+                    criteria: [{ type: "FQDN", operator: "EQ", values: ["*.malware.com", "*.suspicious.net"] }],
+                    condition: "AND",
+                    processingOrder: 1
+                },
+                {
+                    name: "GeoRouting",
+                    action: "ALLOW",
+                    level: "Zone",
+                    zoneName: "contoso.com",
+                    criteria: [{ type: "ClientSubnet", operator: "EQ", values: ["USSubnet"] }],
+                    scopes: [{ name: "USScope", weight: 3 }, { name: "EuropeScope", weight: 1 }],
+                    condition: "AND",
+                    processingOrder: 2
+                }
+            ];
+            renderPolicies();
+        }
+
+        // Render policies in the sidebar
+        function renderPolicies() {
+            const policyList = document.getElementById('policyList');
+            policyList.innerHTML = '';
+
+            policies.forEach((policy, index) => {
+                const policyDiv = document.createElement('div');
+                policyDiv.className = `policy-item ${selectedPolicy === index ? 'selected' : ''}`;
+                policyDiv.onclick = () => selectPolicy(index);
+
+                const actionClass = `action-${policy.action.toLowerCase()}`;
+                const criteriaText = policy.criteria.map(c => `${c.type}: ${c.values.join(', ')}`).join(' | ');
+
+                policyDiv.innerHTML = `
+                    <div class="policy-name">${policy.name}</div>
+                    <div class="policy-action ${actionClass}">${policy.action}</div>
+                    <div class="policy-details">
+                        Level: ${policy.level}<br>
+                        ${policy.zoneName ? `Zone: ${policy.zoneName}<br>` : ''}
+                        Criteria: ${criteriaText}
+                    </div>
+                `;
+                policyList.appendChild(policyDiv);
+            });
+        }
+
+        // Add criteria to the form
+        function addCriteria(existingCriteria = null) {
+            const criteriaList = document.getElementById('criteriaList');
+            const criteriaDiv = document.createElement('div');
+            criteriaDiv.className = 'criteria-item';
+            criteriaDiv.id = `criteria-${criteriaCount}`;
+
+            const criteriaTypes = [
+                { value: 'ClientSubnet', label: 'Client Subnet' },
+                { value: 'FQDN', label: 'FQDN (Domain Name)' },
+                { value: 'QType', label: 'Query Type' },
+                { value: 'ServerInterface', label: 'Server Interface IP' },
+                { value: 'InternetProtocol', label: 'Internet Protocol' },
+                { value: 'TransportProtocol', label: 'Transport Protocol' },
+                { value: 'TimeOfDay', label: 'Time of Day' }
+            ];
+
+            criteriaDiv.innerHTML = `
+                <button type="button" class="remove-criteria" onclick="removeCriteria('criteria-${criteriaCount}')">×</button>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Criteria Type</label>
+                        <select class="criteria-type" onchange="updateCriteriaHelp(this)">
+                            ${criteriaTypes.map(type => `<option value="${type.value}" ${existingCriteria && existingCriteria.type === type.value ? 'selected' : ''}>${type.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Operator</label>
+                        <select class="criteria-operator">
+                            <option value="EQ" ${existingCriteria && existingCriteria.operator === 'EQ' ? 'selected' : ''}>EQ (Equals)</option>
+                            <option value="NE" ${existingCriteria && existingCriteria.operator === 'NE' ? 'selected' : ''}>NE (Not Equals)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Values (comma-separated)</label>
+                    <textarea class="criteria-values" rows="2" placeholder="Enter values separated by commas">${existingCriteria ? existingCriteria.values.join(', ') : ''}</textarea>
+                    <small class="criteria-help">Examples will appear here based on selected criteria type</small>
+                </div>
+            `;
+
+            criteriaList.appendChild(criteriaDiv);
+            updateCriteriaHelp(criteriaDiv.querySelector('.criteria-type'));
+            criteriaCount++;
+        }
+
+        // Update criteria help text
+        function updateCriteriaHelp(selectElement) {
+            const helpText = selectElement.parentElement.parentElement.parentElement.querySelector('.criteria-help');
+            const type = selectElement.value;
+            
+            const examples = {
+                'ClientSubnet': 'Example: 192.168.1.0/24, 10.0.0.0/8, SubnetName',
+                'FQDN': 'Example: *.contoso.com, www.example.com, *.malware.net',
+                'QType': 'Example: A, AAAA, CNAME, MX, NS, PTR, SOA, SRV, TXT, ANY',
+                'ServerInterface': 'Example: 192.168.1.10, 10.0.0.1',
+                'InternetProtocol': 'Example: IPv4, IPv6',
+                'TransportProtocol': 'Example: UDP, TCP',
+                'TimeOfDay': 'Example: 09:00-17:00, 18:00-23:59'
+            };
+
+            helpText.textContent = examples[type] || 'Enter appropriate values for the selected criteria type';
+        }
+
+        // Remove criteria
+        function removeCriteria(criteriaId) {
+            const criteriaElement = document.getElementById(criteriaId);
+            if (criteriaElement) {
+                criteriaElement.remove();
+            }
+        }
+
+        // Add scope for ALLOW action
+        function addScope(existingScope = null) {
+            const scopeList = document.getElementById('scopeList');
+            const scopeDiv = document.createElement('div');
+            scopeDiv.className = 'scope-item';
+
+            scopeDiv.innerHTML = `
+                <input type="text" placeholder="Scope Name" class="scope-name" value="${existingScope ? existingScope.name : ''}">
+                <input type="number" placeholder="Weight" class="scope-weight" min="1" value="${existingScope ? existingScope.weight : 1}">
+                <button type="button" onclick="removeScope(this)">Remove</button>
+            `;
+
+            scopeList.appendChild(scopeDiv);
+            scopeCount++;
+        }
+
+        // Remove scope
+        function removeScope(button) {
+            const scopeItem = button.parentElement;
+            scopeItem.remove();
+        }
+
+        // Toggle zone field visibility
+        function toggleZoneField() {
+            const policyLevel = document.getElementById('policyLevel').value;
+            const zoneNameGroup = document.getElementById('zoneNameGroup');
+            
+            if (policyLevel === 'Zone') {
+                zoneNameGroup.style.display = 'block';
+                document.getElementById('zoneName').required = true;
+            } else {
+                zoneNameGroup.style.display = 'none';
+                document.getElementById('zoneName').required = false;
+            }
+        }
+
+        // Toggle scope configuration
+        function toggleScopeConfig() {
+            const policyAction = document.getElementById('policyAction').value;
+            const scopeConfig = document.getElementById('scopeConfig');
+            
+            if (policyAction === 'ALLOW') {
+                scopeConfig.style.display = 'block';
+            } else {
+                scopeConfig.style.display = 'none';
+            }
+        }
+
+        // Toggle credential fields based on connection type
+        function toggleCredentialFields() {
+            const connectionType = document.getElementById('connectionType').value;
+            const credentialFields = document.getElementById('credentialFields');
+            
+            if (connectionType === 'remote') {
+                credentialFields.style.display = 'block';
+            } else {
+                credentialFields.style.display = 'none';
+            }
+        }
+
+        // Test connection to DNS server
+        function testConnection() {
+            const dnsServer = document.getElementById('dnsServer').value;
+            const statusElement = document.getElementById('connectionStatus');
+            
+            if (!dnsServer) {
+                statusElement.textContent = 'Please enter a DNS server';
+                statusElement.className = 'connection-status error';
+                return;
+            }
+            
+            statusElement.textContent = 'Testing connection...';
+            statusElement.className = 'connection-status testing';
+            
+            setTimeout(() => {
+                statusElement.textContent = 'Connection test commands generated - check PowerShell tab';
+                statusElement.className = 'connection-status success';
+                
+                const output = document.getElementById('powershellOutput');
+                output.innerHTML = `<pre># DNS Server Connection Test
+# Target Server: ${dnsServer}
+
+# Run this command to test the connection:
+Test-NetConnection -ComputerName "${dnsServer}" -Port 53
+
+# To check DNS Server service:
+Get-Service DNS${dnsServer !== 'localhost' ? ` -ComputerName "${dnsServer}"` : ''}
+
+# To verify DNS cmdlets are available:
+Get-Command *DnsServer* | Select-Object Name, ModuleName</pre>`;
+                
+                showTab('powershell');
+            }, 1500);
+        }
+
+        // Generate policy and PowerShell command
+        function generatePolicy() {
+            const dnsServer = document.getElementById('dnsServer').value;
+            const policyName = document.getElementById('policyName').value;
+            const policyAction = document.getElementById('policyAction').value;
+            const policyLevel = document.getElementById('policyLevel').value;
+            const zoneName = document.getElementById('zoneName').value;
+            const condition = document.getElementById('condition').value;
+            const processingOrder = document.getElementById('processingOrder').value;
+
+            if (!policyName || !policyAction) {
+                alert('Please fill in the required fields (Policy Name and Action)');
+                return;
+            }
+
+            // Collect criteria
+            const criteriaElements = document.querySelectorAll('.criteria-item');
+            const criteria = [];
+            
+            criteriaElements.forEach(element => {
+                const type = element.querySelector('.criteria-type').value;
+                const operator = element.querySelector('.criteria-operator').value;
+                const values = element.querySelector('.criteria-values').value.split(',').map(v => v.trim()).filter(v => v);
+                
+                if (values.length > 0) {
+                    criteria.push({ type, operator, values });
+                }
+            });
+
+            // Collect scopes for ALLOW action
+            let scopes = [];
+            if (policyAction === 'ALLOW') {
+                const scopeElements = document.querySelectorAll('.scope-item');
+                scopeElements.forEach(element => {
+                    const name = element.querySelector('.scope-name').value.trim();
+                    const weight = parseInt(element.querySelector('.scope-weight').value) || 1;
+                    
+                    if (name) {
+                        scopes.push({ name, weight });
+                    }
+                });
+            }
+
+            // Generate PowerShell command
+            let command = `Add-DnsServerQueryResolutionPolicy -Name "${policyName}" -Action ${policyAction}`;
+            
+            if (policyLevel === 'Zone' && zoneName) {
+                command += ` -ZoneName "${zoneName}"`;
+            }
+
+            // Add criteria parameters
+            criteria.forEach(criterion => {
+                const paramName = getCriteriaParameterName(criterion.type);
+                const valueString = criterion.values.join(',');
+                command += ` -${paramName} "${criterion.operator},${valueString}"`;
+            });
+
+            // Add condition if multiple criteria
+            if (criteria.length > 1) {
+                command += ` -Condition ${condition}`;
+            }
+
+            // Add processing order
+            if (processingOrder) {
+                command += ` -ProcessingOrder ${processingOrder}`;
+            }
+
+            // Add zone scopes for ALLOW action
+            if (policyAction === 'ALLOW' && scopes.length > 0) {
+                const scopeString = scopes.map(s => `${s.name},${s.weight}`).join(';');
+                command += ` -ZoneScope "${scopeString}"`;
+            }
+
+            // Add server connection parameters
+            if (dnsServer !== 'localhost') {
+                command += ` -ComputerName "${dnsServer}"`;
+            }
+
+            command += ' -PassThru';
+
+            // Display the command
+            const output = document.getElementById('powershellOutput');
+            const timestamp = new Date().toLocaleString();
+            
+            output.innerHTML = `<pre># Generated DNS Policy Command - ${timestamp}
+# Target DNS Server: ${dnsServer}
+
+${command}
+
+# To remove this policy, use:
+Remove-DnsServerQueryResolutionPolicy -Name "${policyName}"${policyLevel === 'Zone' && zoneName ? ` -ZoneName "${zoneName}"` : ''}${dnsServer !== 'localhost' ? ` -ComputerName "${dnsServer}"` : ''}
+
+# To view existing policies, use:
+Get-DnsServerQueryResolutionPolicy${policyLevel === 'Zone' && zoneName ? ` -ZoneName "${zoneName}"` : ''}${dnsServer !== 'localhost' ? ` -ComputerName "${dnsServer}"` : ''}</pre>`;
+
+            // Switch to PowerShell tab
+            showTab('powershell');
+
+            // Add to policies list
+            const newPolicy = {
+                name: policyName,
+                action: policyAction,
+                level: policyLevel,
+                zoneName: zoneName || null,
+                criteria: criteria,
+                scopes: scopes,
+                condition: condition,
+                processingOrder: parseInt(processingOrder) || 1,
+                server: dnsServer
+            };
+
+            policies.push(newPolicy);
+            renderPolicies();
+        }
+
+        // Get PowerShell parameter name for criteria type
+        function getCriteriaParameterName(type) {
+            const parameterMap = {
+                'ClientSubnet': 'ClientSubnet',
+                'FQDN': 'FQDN',
+                'QType': 'QType',
+                'ServerInterface': 'ServerInterface',
+                'InternetProtocol': 'InternetProtocol',
+                'TransportProtocol': 'TransportProtocol',
+                'TimeOfDay': 'TimeOfDay'
+            };
+            return parameterMap[type] || type;
+        }
+
+        // Generate backup script
+        function generateBackupScript() {
+            const backupServer = document.getElementById('backupServer').value || 'localhost';
+            const backupFormat = document.getElementById('backupFormat').value;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            
+            let script = `# DNS Policy Backup Script
+# Generated: ${new Date().toLocaleString()}
+# Target Server: ${backupServer}
+
+# Get all policies
+$policies = Get-DnsServerQueryResolutionPolicy${backupServer !== 'localhost' ? ` -ComputerName "${backupServer}"` : ''}
+
+# Export to ${backupFormat.toUpperCase()}
+$policies | Export-Clixml -Path "DNS-Policies-Backup-${timestamp}.xml"
+Write-Host "Backup saved to DNS-Policies-Backup-${timestamp}.xml"`;
+
+            document.getElementById('backupCommands').textContent = script;
+            document.getElementById('backupOutput').style.display = 'block';
+        }
+
+        // Export current policies
+        function exportCurrentPolicies() {
+            if (policies.length === 0) {
+                alert('No policies to export. Create some policies first.');
+                return;
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const backup = {
+                backupDate: new Date().toISOString(),
+                version: '1.0',
+                policies: policies
+            };
+            
+            const content = JSON.stringify(backup, null, 2);
+            const fileName = `dns-policies-backup-${timestamp}.json`;
+            downloadFile(content, fileName, 'application/json');
+        }
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const fileName = document.getElementById('selectedFileName');
+            const previewBtn = document.getElementById('previewBtn');
+            const importBtn = document.getElementById('importBtn');
+            
+            if (file) {
+                fileName.textContent = file.name;
+                previewBtn.disabled = false;
+                importBtn.disabled = false;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    blocklistData = {
+                        content: e.target.result,
+                        fileName: file.name
+                    };
+                };
+                reader.readAsText(file);
+            } else {
+                fileName.textContent = 'No file selected';
+                previewBtn.disabled = true;
+                importBtn.disabled = true;
+                blocklistData = null;
+            }
+        }
+
+        // Preview blocklist
+        function previewBlocklist() {
+            if (!blocklistData) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            try {
+                const domains = parseBlocklistFile(blocklistData.content, blocklistData.fileName);
+                const maxDomains = parseInt(document.getElementById('maxDomains').value) || 100;
+                const totalPolicies = Math.ceil(domains.length / maxDomains);
+                
+                document.getElementById('previewContent').innerHTML = `
+                    <div class="policy-stats">
+                        <div class="stat-item">
+                            <div class="stat-number">${domains.length}</div>
+                            <div class="stat-label">Total Domains</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${totalPolicies}</div>
+                            <div class="stat-label">Policies to Create</div>
+                        </div>
+                    </div>
+                    <h5>Sample Domains (first 20):</h5>
+                    <div class="domain-list">${domains.slice(0, 20).join('\n')}</div>
+                `;
+                
+                document.getElementById('importPreview').style.display = 'block';
+            } catch (error) {
+                alert('Error parsing file: ' + error.message);
+            }
+        }
+
+        // Parse blocklist file
+        function parseBlocklistFile(content, fileName) {
+            const includeWildcards = document.getElementById('includeWildcards').checked;
+            const skipComments = document.getElementById('skipComments').checked;
+            const validateDomains = document.getElementById('validateDomains').checked;
+            const csvColumn = document.getElementById('csvColumn').value.toLowerCase() || 'domain';
+            
+            let domains = [];
+            
+            if (fileName.endsWith('.csv')) {
+                const lines = content.split('\n');
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                const columnIndex = headers.indexOf(csvColumn);
+                
+                if (columnIndex === -1) {
+                    throw new Error(`Column '${csvColumn}' not found in CSV`);
+                }
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const columns = lines[i].split(',');
+                    if (columns.length > columnIndex) {
+                        const domain = columns[columnIndex].trim().replace(/['"]/g, '');
+                        if (domain) domains.push(domain);
+                    }
+                }
+            } else {
+                domains = content.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && (!skipComments || (!line.startsWith('#') && !line.startsWith('//'))));
+            }
+            
+            domains = domains.map(domain => {
+                domain = domain.replace(/^https?:\/\//, '').split('/')[0];
+                if (includeWildcards && !domain.startsWith('*.')) {
+                    domain = '*.' + domain;
+                }
+                return domain;
+            });
+            
+            if (validateDomains) {
+                const domainRegex = /^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+                domains = domains.filter(domain => domainRegex.test(domain));
+            }
+            
+            return [...new Set(domains)];
+        }
+
+        // Import blocklist
+        function importBlocklist() {
+            if (!blocklistData) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            try {
+                const domains = parseBlocklistFile(blocklistData.content, blocklistData.fileName);
+                const policyName = document.getElementById('blocklistPolicyName').value || 'ImportedBlocklist';
+                const action = document.getElementById('blocklistAction').value;
+                const maxDomains = parseInt(document.getElementById('maxDomains').value) || 100;
+                const dnsServer = document.getElementById('dnsServer').value || 'localhost';
+                
+                let commands = `# Blocklist Import - Generated ${new Date().toLocaleString()}
+# Source File: ${blocklistData.fileName}
+# Total Domains: ${domains.length}
+
+`;
+                
+                const chunks = [];
+                for (let i = 0; i < domains.length; i += maxDomains) {
+                    chunks.push(domains.slice(i, i + maxDomains));
+                }
+                
+                chunks.forEach((chunk, index) => {
+                    const policyNameWithIndex = chunks.length > 1 ? `${policyName}_${index + 1}` : policyName;
+                    const domainList = chunk.join(',');
+                    
+                    commands += `Add-DnsServerQueryResolutionPolicy -Name "${policyNameWithIndex}" -Action ${action} -FQDN "EQ,${domainList}"`;
+                    
+                    if (dnsServer !== 'localhost') {
+                        commands += ` -ComputerName "${dnsServer}"`;
+                    }
+                    
+                    commands += ` -PassThru\n\n`;
+                });
+                
+                document.getElementById('powershellOutput').innerHTML = `<pre>${commands}</pre>`;
+                showTab('powershell');
+                
+                alert(`Successfully imported ${domains.length} domains into ${chunks.length} policy(ies)`);
+                
+            } catch (error) {
+                alert('Error importing blocklist: ' + error.message);
+            }
+        }
+
+        // Download file helper
+        function downloadFile(content, fileName, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Show different tabs
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Clear form
+        function clearForm() {
+            document.getElementById('policyForm').reset();
+            document.getElementById('criteriaList').innerHTML = '';
+            document.getElementById('scopeList').innerHTML = '';
+            selectedPolicy = null;
+            criteriaCount = 0;
+            scopeCount = 1;
+            
+            document.getElementById('policyLevel').value = 'Server';
+            document.getElementById('condition').value = 'AND';
+            document.getElementById('processingOrder').value = '1';
+            
+            toggleZoneField();
+            toggleScopeConfig();
+            addCriteria();
+            addScope();
+            renderPolicies();
+        }
+
+        // Export policy to clipboard
+        function exportPolicy() {
+            const output = document.getElementById('powershellOutput');
+            const text = output.textContent;
+            
+            if (text.includes('Generated DNS Policy Command')) {
+                navigator.clipboard.writeText(text).then(() => {
+                    alert('PowerShell commands copied to clipboard!');
+                }).catch(() => {
+                    alert('Could not copy to clipboard. Please select and copy the text manually.');
+                });
+            } else {
+                alert('Please generate a policy first.');
+            }
+        }
+
+        // Load policies placeholder
+        function loadPolicies() {
+            alert('In a real implementation, this would connect to the DNS server and load existing policies.');
+        }
+
+        // Select policy
+        function selectPolicy(index) {
+            selectedPolicy = index;
+            renderPolicies();
+        }
+
+        // Initialize the application
+        window.onload = function() {
+            init();
+            
+            const output = document.getElementById('powershellOutput');
+            output.innerHTML = `<pre># DNS Policy Manager Ready
+# This tool helps you create Windows DNS Query Resolution Policies
+# 
+# Features:
+# - Visual policy builder with form validation
+# - Support for all DNS policy criteria types
+# - PowerShell command generation
+# - Policy backup and restore capabilities
+# - Blocklist import from TXT/CSV files
+# 
+# Click "Create Policy" tab to start building your DNS policy.
+# Click "Backup & Import" tab to backup existing policies or import blocklists.</pre>`;
+        };
+    </script>
+</body>
+</html>
