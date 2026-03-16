@@ -3,10 +3,10 @@
     'use strict';
 
     var NS = window.DNSPolicyManager;
+    var state = NS.state;
 
     /**
      * Wire all event listeners using event delegation.
-     * Replaces all inline onclick attributes from the original HTML.
      */
     function bindEvents() {
         // ── Delegated click handler on document ──────────────
@@ -57,6 +57,9 @@
                 case 'exportCurrentPolicies':
                     NS.exportCurrentPolicies();
                     break;
+                case 'backupFromServer':
+                    NS.backupFromServer();
+                    break;
                 case 'previewBlocklist':
                     NS.previewBlocklist();
                     break;
@@ -65,6 +68,9 @@
                     break;
                 case 'selectPolicy':
                     NS.selectPolicy(parseInt(target.getAttribute('data-index'), 10));
+                    break;
+                case 'removePolicy':
+                    NS.removePolicy(parseInt(target.getAttribute('data-index'), 10));
                     break;
                 case 'triggerFileSelect':
                     document.getElementById('blocklistFile').click();
@@ -94,6 +100,9 @@
                     break;
                 case 'handleFileSelect':
                     NS.handleFileSelect(target);
+                    break;
+                case 'toggleExecutionMode':
+                    NS.toggleExecutionMode(target);
                     break;
                 default:
                     break;
@@ -150,11 +159,44 @@
     }
 
     /**
+     * Toggle execution mode between 'generate' and 'execute'.
+     */
+    NS.toggleExecutionMode = function toggleExecutionMode(checkbox) {
+        state.executionMode = checkbox.checked ? 'execute' : 'generate';
+
+        // Update button labels
+        var genBtn = document.querySelector('[data-action="generatePolicy"]');
+        if (genBtn) {
+            genBtn.textContent = checkbox.checked ? 'Create Policy on Server' : 'Generate Policy';
+        }
+
+        var importBtn = document.getElementById('importBtn');
+        if (importBtn) {
+            importBtn.textContent = checkbox.checked ? 'Execute Policies on Server' : 'Generate Policies';
+        }
+    };
+
+    /**
      * Initialize the application.
      */
     function init() {
         bindEvents();
-        NS.loadSamplePolicies();
+
+        // Check bridge availability, then set up accordingly
+        if (NS.api) {
+            NS.api.checkBridge().then(function (result) {
+                if (result.success && result.status === 'ok') {
+                    // Bridge is available - start health monitoring, skip samples
+                    NS.api.startHealthCheck();
+                } else {
+                    // Bridge offline - load samples as usual
+                    NS.loadSamplePolicies();
+                }
+            });
+        } else {
+            NS.loadSamplePolicies();
+        }
+
         NS.addCriteria();
 
         // Set initial PowerShell output
@@ -168,6 +210,7 @@
             '# - Visual policy builder with form validation\n' +
             '# - Support for all DNS policy criteria types\n' +
             '# - PowerShell command generation\n' +
+            '# - Live server management via PowerShell bridge\n' +
             '# - Policy backup and restore capabilities\n' +
             '# - Blocklist import from TXT/CSV files\n' +
             '# \n' +

@@ -21,7 +21,13 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>Windows DNS Policy Manager</h1>
+            <div class="header-top">
+                <h1>Windows DNS Policy Manager</h1>
+                <div class="bridge-status" id="bridgeStatus">
+                    <span class="bridge-dot offline" id="bridgeStatusDot"></span>
+                    <span class="bridge-label" id="bridgeStatusLabel">Bridge: Offline</span>
+                </div>
+            </div>
             <p>Configure and manage DNS Query Resolution Policies for Windows Server</p>
         </header>
 
@@ -144,7 +150,10 @@
                                 </div>
                                 <div class="form-group" id="zoneNameGroup" style="display: none;">
                                     <label for="zoneName">Zone Name</label>
-                                    <input type="text" id="zoneName" placeholder="e.g., contoso.com">
+                                    <input type="text" id="zoneName" placeholder="e.g., contoso.com" list="zoneNameList">
+                                    <datalist id="zoneNameList">
+                                        <!-- Populated by JS when bridge is connected -->
+                                    </datalist>
                                 </div>
                             </div>
 
@@ -176,6 +185,15 @@
                                 <div id="criteriaList">
                                     <!-- Criteria rendered by JS -->
                                 </div>
+                            </div>
+
+                            <!-- Execution Mode Toggle -->
+                            <div class="execution-mode-toggle" id="executionModeToggle" style="display: none;">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="executionModeSwitch" data-action="toggleExecutionMode">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">Execute on server (live mode)</span>
                             </div>
 
                             <div class="btn-group">
@@ -224,6 +242,7 @@
                             <div class="btn-group">
                                 <button type="button" class="btn btn-primary" data-action="generateBackupScript">Generate Backup Script</button>
                                 <button type="button" class="btn btn-success" data-action="exportCurrentPolicies">Export Current Policies</button>
+                                <button type="button" class="btn btn-secondary" data-action="backupFromServer">Backup from Server</button>
                             </div>
 
                             <div id="backupOutput" class="powershell-output" style="display: none; margin-top: 20px;">
@@ -315,12 +334,13 @@
         </div>
     </div>
 
-    <!-- JS (dependency order: state first, then utils, UI, features, app last) -->
+    <!-- JS (dependency order: state first, then utils, UI, services, features, app last) -->
     <script src="js/state.js"></script>
     <script src="js/utils/download.js"></script>
     <script src="js/ui/toast.js"></script>
     <script src="js/ui/tabs.js"></script>
     <script src="js/ui/form.js"></script>
+    <script src="js/services/api.js"></script>
     <script src="js/features/criteria.js"></script>
     <script src="js/features/scopes.js"></script>
     <script src="js/features/connection.js"></script>

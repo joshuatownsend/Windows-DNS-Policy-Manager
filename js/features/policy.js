@@ -30,10 +30,10 @@
         output.appendChild(pre);
     }
 
-    NS.generatePolicy = function generatePolicy() {
-        // Validate first
-        if (!NS.validatePolicyForm()) return;
-
+    /**
+     * Collect policy data from the form into a plain object.
+     */
+    function collectPolicyData() {
         var dnsServer = document.getElementById('dnsServer').value;
         var policyName = document.getElementById('policyName').value.trim();
         var policyAction = document.getElementById('policyAction').value;
@@ -42,7 +42,6 @@
         var condition = document.getElementById('condition').value;
         var processingOrder = document.getElementById('processingOrder').value;
 
-        // Collect criteria
         var criteriaElements = document.querySelectorAll('.criteria-item');
         var criteria = [];
 
@@ -58,7 +57,6 @@
             }
         }
 
-        // Collect scopes for ALLOW action
         var scopes = [];
         if (policyAction === 'ALLOW') {
             var scopeElements = document.querySelectorAll('.scope-item');
@@ -71,76 +69,146 @@
             }
         }
 
-        // Generate PowerShell command
-        var cmd = 'Add-DnsServerQueryResolutionPolicy -Name "' + policyName + '" -Action ' + policyAction;
+        return {
+            server: dnsServer,
+            name: policyName,
+            action: policyAction,
+            level: policyLevel,
+            zoneName: (policyLevel === 'Zone' && zoneName) ? zoneName : null,
+            criteria: criteria,
+            scopes: scopes,
+            condition: condition,
+            processingOrder: parseInt(processingOrder, 10) || 1
+        };
+    }
 
-        if (policyLevel === 'Zone' && zoneName) {
-            cmd += ' -ZoneName "' + zoneName + '"';
+    /**
+     * Build the PowerShell command string from policy data.
+     */
+    function buildCommand(data) {
+        var cmd = 'Add-DnsServerQueryResolutionPolicy -Name "' + data.name + '" -Action ' + data.action;
+
+        if (data.zoneName) {
+            cmd += ' -ZoneName "' + data.zoneName + '"';
         }
 
-        criteria.forEach(function (c) {
+        data.criteria.forEach(function (c) {
             cmd += ' -' + getCriteriaParameterName(c.type) + ' "' + c.operator + ',' + c.values.join(',') + '"';
         });
 
-        if (criteria.length > 1) {
-            cmd += ' -Condition ' + condition;
+        if (data.criteria.length > 1) {
+            cmd += ' -Condition ' + data.condition;
         }
 
-        if (processingOrder) {
-            cmd += ' -ProcessingOrder ' + processingOrder;
+        if (data.processingOrder) {
+            cmd += ' -ProcessingOrder ' + data.processingOrder;
         }
 
-        if (policyAction === 'ALLOW' && scopes.length > 0) {
-            var scopeStr = scopes.map(function (s) { return s.name + ',' + s.weight; }).join(';');
+        if (data.action === 'ALLOW' && data.scopes.length > 0) {
+            var scopeStr = data.scopes.map(function (s) { return s.name + ',' + s.weight; }).join(';');
             cmd += ' -ZoneScope "' + scopeStr + '"';
         }
 
-        if (dnsServer !== 'localhost') {
-            cmd += ' -ComputerName "' + dnsServer + '"';
+        if (data.server !== 'localhost') {
+            cmd += ' -ComputerName "' + data.server + '"';
         }
 
         cmd += ' -PassThru';
+        return cmd;
+    }
 
-        // Display the command
+    NS.generatePolicy = function generatePolicy() {
+        if (!NS.validatePolicyForm()) return;
+
+        var data = collectPolicyData();
+        var cmd = buildCommand(data);
+
+        // If execute mode is active and bridge is connected, create on server
+        if (state.executionMode === 'execute' && state.bridgeConnected && NS.api) {
+            var btn = document.querySelector('[data-action="generatePolicy"]');
+            if (btn) btn.classList.add('loading');
+
+            NS.api.addPolicy(data).then(function (result) {
+                if (btn) btn.classList.remove('loading');
+
+                if (result.success) {
+                    // Show the command that was executed
+                    var timestamp = new Date().toLocaleString();
+                    setPowershellOutput(
+                        '# Policy Executed on Server - ' + timestamp + '\n' +
+                        '# Target DNS Server: ' + data.server + '\n' +
+                        '# Status: SUCCESS\n\n' +
+                        cmd
+                    );
+                    NS.showTab('powershell');
+
+                    // Add to local list with server source flag
+                    state.policies.push({
+                        name: data.name,
+                        action: data.action,
+                        level: data.level,
+                        zoneName: data.zoneName,
+                        criteria: data.criteria,
+                        scopes: data.scopes,
+                        condition: data.condition,
+                        processingOrder: data.processingOrder,
+                        server: data.server,
+                        fromServer: true
+                    });
+
+                    NS.renderPolicies();
+                    NS.toast.success('Policy "' + data.name + '" created on server.');
+                } else {
+                    NS.toast.error('Failed to create policy: ' + (result.error || 'Unknown error'));
+                    // Still show the command for manual execution
+                    showGeneratedCommand(data, cmd);
+                }
+            });
+            return;
+        }
+
+        // Fallback: generate command only (original behavior)
+        showGeneratedCommand(data, cmd);
+        state.policies.push({
+            name: data.name,
+            action: data.action,
+            level: data.level,
+            zoneName: data.zoneName,
+            criteria: data.criteria,
+            scopes: data.scopes,
+            condition: data.condition,
+            processingOrder: data.processingOrder,
+            server: data.server,
+            fromServer: false
+        });
+
+        NS.renderPolicies();
+        NS.toast.success('Policy "' + data.name + '" generated successfully.');
+    };
+
+    function showGeneratedCommand(data, cmd) {
         var timestamp = new Date().toLocaleString();
-        var zoneParam = (policyLevel === 'Zone' && zoneName) ? ' -ZoneName "' + zoneName + '"' : '';
-        var serverParam = dnsServer !== 'localhost' ? ' -ComputerName "' + dnsServer + '"' : '';
+        var zoneParam = data.zoneName ? ' -ZoneName "' + data.zoneName + '"' : '';
+        var serverParam = data.server !== 'localhost' ? ' -ComputerName "' + data.server + '"' : '';
 
         setPowershellOutput(
             '# Generated DNS Policy Command - ' + timestamp + '\n' +
-            '# Target DNS Server: ' + dnsServer + '\n\n' +
+            '# Target DNS Server: ' + data.server + '\n\n' +
             cmd + '\n\n' +
             '# To remove this policy, use:\n' +
-            'Remove-DnsServerQueryResolutionPolicy -Name "' + policyName + '"' + zoneParam + serverParam + '\n\n' +
+            'Remove-DnsServerQueryResolutionPolicy -Name "' + data.name + '"' + zoneParam + serverParam + '\n\n' +
             '# To view existing policies, use:\n' +
             'Get-DnsServerQueryResolutionPolicy' + zoneParam + serverParam
         );
 
         NS.showTab('powershell');
-
-        // Add to policies list
-        state.policies.push({
-            name: policyName,
-            action: policyAction,
-            level: policyLevel,
-            zoneName: zoneName || null,
-            criteria: criteria,
-            scopes: scopes,
-            condition: condition,
-            processingOrder: parseInt(processingOrder, 10) || 1,
-            server: dnsServer
-        });
-
-        NS.renderPolicies();
-        NS.toast.success('Policy "' + policyName + '" generated successfully.');
-    };
+    }
 
     /**
      * Render policy list using safe DOM methods (no innerHTML with user data).
      */
     NS.renderPolicies = function renderPolicies() {
         var policyList = document.getElementById('policyList');
-        // Clear safely
         while (policyList.firstChild) {
             policyList.removeChild(policyList.firstChild);
         }
@@ -161,20 +229,34 @@
             actionEl.className = 'policy-action action-' + policy.action.toLowerCase();
             actionEl.textContent = policy.action;
 
-            var criteriaText = policy.criteria.map(function (c) {
-                return c.type + ': ' + c.values.join(', ');
-            }).join(' | ');
-
             var detailsEl = document.createElement('div');
             detailsEl.className = 'policy-details';
-            var detailLines = ['Level: ' + policy.level];
-            if (policy.zoneName) detailLines.push('Zone: ' + policy.zoneName);
-            detailLines.push('Criteria: ' + criteriaText);
+            var detailLines = ['Level: ' + (policy.level || policy.Level || 'Server')];
+            if (policy.zoneName || policy.ZoneName) {
+                detailLines.push('Zone: ' + (policy.zoneName || policy.ZoneName));
+            }
+            if (policy.criteria && policy.criteria.length) {
+                var criteriaText = policy.criteria.map(function (c) {
+                    return c.type + ': ' + c.values.join(', ');
+                }).join(' | ');
+                detailLines.push('Criteria: ' + criteriaText);
+            }
             detailsEl.textContent = detailLines.join(' \u2022 ');
 
             div.appendChild(nameEl);
             div.appendChild(actionEl);
             div.appendChild(detailsEl);
+
+            // Delete button for server-sourced policies
+            if (policy.fromServer && state.bridgeConnected) {
+                var deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-delete-policy';
+                deleteBtn.setAttribute('data-action', 'removePolicy');
+                deleteBtn.setAttribute('data-index', index);
+                deleteBtn.setAttribute('aria-label', 'Delete policy ' + policy.name);
+                deleteBtn.textContent = '\u00D7';
+                div.appendChild(deleteBtn);
+            }
 
             policyList.appendChild(div);
         });
@@ -185,11 +267,40 @@
         NS.renderPolicies();
     };
 
+    NS.removePolicy = function removePolicy(index) {
+        var policy = state.policies[index];
+        if (!policy) return;
+
+        if (!state.bridgeConnected || !NS.api) {
+            NS.toast.warning('Bridge is offline. Cannot delete from server.');
+            return;
+        }
+
+        NS.api.removePolicy(
+            policy.name,
+            policy.server || state.connection.server,
+            policy.zoneName || policy.ZoneName
+        ).then(function (result) {
+            if (result.success) {
+                state.policies.splice(index, 1);
+                if (state.selectedPolicy === index) {
+                    state.selectedPolicy = null;
+                } else if (state.selectedPolicy !== null && state.selectedPolicy > index) {
+                    state.selectedPolicy--;
+                }
+                NS.renderPolicies();
+                NS.toast.success('Policy "' + policy.name + '" removed from server.');
+            } else {
+                NS.toast.error('Failed to remove: ' + (result.error || 'Unknown error'));
+            }
+        });
+    };
+
     NS.exportPolicy = function exportPolicy() {
         var output = document.getElementById('powershellOutput');
         var text = output.textContent;
 
-        if (!text.includes('Generated DNS Policy Command')) {
+        if (!text.includes('Generated DNS Policy Command') && !text.includes('Policy Executed')) {
             NS.toast.warning('Please generate a policy first.');
             return;
         }
@@ -205,9 +316,6 @@
         }
     };
 
-    /**
-     * Clipboard fallback using a hidden textarea.
-     */
     function fallbackCopy(text) {
         var textarea = document.createElement('textarea');
         textarea.value = text;
@@ -231,7 +339,8 @@
                 level: 'Server',
                 criteria: [{ type: 'FQDN', operator: 'EQ', values: ['*.malware.com', '*.suspicious.net'] }],
                 condition: 'AND',
-                processingOrder: 1
+                processingOrder: 1,
+                fromServer: false
             },
             {
                 name: 'GeoRouting',
@@ -241,13 +350,46 @@
                 criteria: [{ type: 'ClientSubnet', operator: 'EQ', values: ['USSubnet'] }],
                 scopes: [{ name: 'USScope', weight: 3 }, { name: 'EuropeScope', weight: 1 }],
                 condition: 'AND',
-                processingOrder: 2
+                processingOrder: 2,
+                fromServer: false
             }
         ];
         NS.renderPolicies();
     };
 
     NS.loadPolicies = function loadPolicies() {
-        NS.toast.info('In a real implementation, this would connect to the DNS server and load existing policies.');
+        if (!state.bridgeConnected || !NS.api) {
+            NS.toast.info('Bridge is offline. Connect to a DNS server via the bridge to load live policies.');
+            return;
+        }
+
+        var server = document.getElementById('dnsServer').value || 'localhost';
+        var btn = document.querySelector('[data-action="loadPolicies"]');
+        if (btn) btn.classList.add('loading');
+
+        NS.api.listPolicies(server).then(function (result) {
+            if (btn) btn.classList.remove('loading');
+
+            if (result.success) {
+                // Map server policy format to our format
+                state.policies = (result.policies || []).map(function (p) {
+                    return {
+                        name: p.Name,
+                        action: p.Action,
+                        level: p.Level || 'Server',
+                        zoneName: p.ZoneName || null,
+                        criteria: [],
+                        condition: p.Condition || 'AND',
+                        processingOrder: p.ProcessingOrder || 1,
+                        server: server,
+                        fromServer: true
+                    };
+                });
+                NS.renderPolicies();
+                NS.toast.success('Loaded ' + state.policies.length + ' policies from server.');
+            } else {
+                NS.toast.error('Failed to load policies: ' + (result.error || 'Unknown error'));
+            }
+        });
     };
 })();

@@ -567,3 +567,183 @@
     text-transform: uppercase;
     letter-spacing: var(--tracking-wider);
 }
+
+/* ── Bridge Status Indicator ──────────────────────────── */
+.header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+}
+
+.bridge-status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    border-radius: var(--r-full);
+    background: var(--surface-200);
+    border: 1px solid var(--border-subtle);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.bridge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--r-full);
+    flex-shrink: 0;
+    transition: background var(--duration-base) var(--ease-out),
+                box-shadow var(--duration-base) var(--ease-out);
+}
+
+.bridge-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.bridge-dot.offline {
+    background: var(--danger);
+    box-shadow: 0 0 4px rgba(244, 63, 94, 0.3);
+}
+
+.bridge-dot.checking {
+    background: var(--warning-text);
+    animation: bridgePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bridgePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(245, 158, 11, 0.3); }
+    50%      { opacity: 0.4; box-shadow: 0 0 12px rgba(245, 158, 11, 0.6); }
+}
+
+.bridge-label {
+    color: var(--text-tertiary);
+    letter-spacing: var(--tracking-wide);
+}
+
+/* ── Execution Mode Toggle ────────────────────────────── */
+.execution-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface-100);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-base);
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--surface-300);
+    border-radius: var(--r-full);
+    transition: background var(--duration-fast) var(--ease-out);
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background: var(--text-primary);
+    border-radius: var(--r-full);
+    transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--success);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+}
+
+.toggle-label {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ── Small Button ─────────────────────────────────────── */
+.btn-sm {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--text-xs);
+    height: 28px;
+}
+
+/* ── Loading Spinner ──────────────────────────────────── */
+.btn.loading {
+    pointer-events: none;
+    opacity: 0.7;
+    position: relative;
+}
+
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    right: var(--sp-2);
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin-top: -7px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: var(--r-full);
+    animation: btnSpin 0.6s linear infinite;
+}
+
+@keyframes btnSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Policy Delete Button ─────────────────────────────── */
+.btn-delete-policy {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    background: transparent;
+    color: var(--text-ghost);
+    border: none;
+    border-radius: var(--r-md);
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: var(--text-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.policy-item:hover .btn-delete-policy {
+    opacity: 1;
+}
+
+.btn-delete-policy:hover {
+    background: var(--danger-muted);
+    color: var(--danger-text);
+}

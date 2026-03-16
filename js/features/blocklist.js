@@ -13,8 +13,6 @@
 
         if (file) {
             fileName.textContent = file.name;
-            previewBtn.disabled = false;
-            importBtn.disabled = false;
 
             var reader = new FileReader();
             reader.onload = function (e) {
@@ -22,6 +20,8 @@
                     content: e.target.result,
                     fileName: file.name
                 };
+                previewBtn.disabled = false;
+                importBtn.disabled = false;
             };
             reader.readAsText(file);
         } else {
@@ -98,9 +98,6 @@
         return unique;
     };
 
-    /**
-     * Build preview content using safe DOM methods.
-     */
     NS.previewBlocklist = function previewBlocklist() {
         if (!state.blocklistData) {
             NS.toast.warning('Please select a file first.');
@@ -113,12 +110,10 @@
             var totalPolicies = Math.ceil(domains.length / maxDomains);
 
             var previewContent = document.getElementById('previewContent');
-            // Clear safely
             while (previewContent.firstChild) {
                 previewContent.removeChild(previewContent.firstChild);
             }
 
-            // Stats grid
             var statsDiv = document.createElement('div');
             statsDiv.className = 'policy-stats';
 
@@ -177,15 +172,53 @@
             var maxDomains = parseInt(document.getElementById('maxDomains').value, 10) || 100;
             var dnsServer = document.getElementById('dnsServer').value || 'localhost';
 
-            var commands =
-                '# Blocklist Import - Generated ' + new Date().toLocaleString() + '\n' +
-                '# Source File: ' + state.blocklistData.fileName + '\n' +
-                '# Total Domains: ' + domains.length + '\n\n';
-
             var chunks = [];
             for (var i = 0; i < domains.length; i += maxDomains) {
                 chunks.push(domains.slice(i, i + maxDomains));
             }
+
+            // If execute mode and bridge connected, execute directly
+            if (state.executionMode === 'execute' && state.bridgeConnected && NS.api) {
+                var btn = document.getElementById('importBtn');
+                if (btn) btn.classList.add('loading');
+
+                var completed = 0;
+                var failed = 0;
+
+                var executeChunk = function (index) {
+                    if (index >= chunks.length) {
+                        if (btn) btn.classList.remove('loading');
+                        NS.toast.success('Imported ' + domains.length + ' domains: ' + completed + ' policies created, ' + failed + ' failed.');
+                        return;
+                    }
+
+                    var chunk = chunks[index];
+                    var nameWithIndex = chunks.length > 1 ? policyName + '_' + (index + 1) : policyName;
+
+                    NS.api.addPolicy({
+                        name: nameWithIndex,
+                        action: action,
+                        server: dnsServer,
+                        criteria: [{ type: 'FQDN', operator: 'EQ', values: chunk }]
+                    }).then(function (result) {
+                        if (result.success) {
+                            completed++;
+                        } else {
+                            failed++;
+                        }
+                        executeChunk(index + 1);
+                    });
+                };
+
+                executeChunk(0);
+                return;
+            }
+
+            // Fallback: generate commands (original behavior)
+            var commands =
+                '# Blocklist Import - Generated ' + new Date().toLocaleString() + '\n' +
+                '# Source File: ' + state.blocklistData.fileName + '\n' +
+                '# Total Domains: ' + domains.length + '\n\n';
 
             chunks.forEach(function (chunk, index) {
                 var nameWithIndex = chunks.length > 1 ? policyName + '_' + (index + 1) : policyName;
@@ -196,7 +229,6 @@
                     ' -FQDN "EQ,' + domainList + '"' + serverParam + ' -PassThru\n\n';
             });
 
-            // Set output safely
             var output = document.getElementById('powershellOutput');
             var pre = document.createElement('pre');
             pre.textContent = commands;

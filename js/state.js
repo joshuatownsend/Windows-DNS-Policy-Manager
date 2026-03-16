@@ -9,6 +9,18 @@
         selectedPolicy: null,
         criteriaCount: 0,
         scopeCount: 1,
-        blocklistData: null
+        blocklistData: null,
+
+        // Bridge state
+        bridgeConnected: false,
+        connection: {
+            server: 'localhost',
+            type: 'local',
+            status: 'disconnected',
+            lastChecked: null,
+            serverInfo: null
+        },
+        serverZones: [],
+        executionMode: 'generate'   // 'generate' | 'execute'
     };
 })();
