@@ -72,6 +72,9 @@
                 case 'removePolicy':
                     NS.removePolicy(parseInt(target.getAttribute('data-index'), 10));
                     break;
+                case 'refreshZones':
+                    NS.refreshZones();
+                    break;
                 case 'triggerFileSelect':
                     document.getElementById('blocklistFile').click();
                     break;
@@ -177,6 +180,16 @@
     };
 
     /**
+     * Update policies empty state visibility.
+     */
+    NS.updatePoliciesEmptyState = function updatePoliciesEmptyState() {
+        var emptyEl = document.getElementById('policiesEmpty');
+        if (emptyEl) {
+            emptyEl.style.display = state.policies.length === 0 ? 'block' : 'none';
+        }
+    };
+
+    /**
      * Initialize the application.
      */
     function init() {
@@ -191,10 +204,12 @@
                 } else {
                     // Bridge offline - load samples as usual
                     NS.loadSamplePolicies();
+                    NS.updatePoliciesEmptyState();
                 }
             });
         } else {
             NS.loadSamplePolicies();
+            NS.updatePoliciesEmptyState();
         }
 
         NS.addCriteria();
@@ -214,13 +229,14 @@
             '# - Policy backup and restore capabilities\n' +
             '# - Blocklist import from TXT/CSV files\n' +
             '# \n' +
-            '# Click "Create Policy" tab to start building your DNS policy.\n' +
-            '# Click "Backup & Import" tab to backup existing policies or import blocklists.';
+            '# Use the Server tab to configure your DNS server connection.\n' +
+            '# Use the Create Policy tab to build DNS policies.\n' +
+            '# Use Backup & Import to backup existing policies or import blocklists.';
         output.textContent = '';
         output.appendChild(pre);
 
-        // Set initial tab ARIA state
-        NS.showTab('create');
+        // Set initial tab
+        NS.showTab('server');
     }
 
     // Boot on DOM ready

@@ -32,31 +32,34 @@
         </header>
 
         <div class="main-content">
-            <!-- ── Sidebar: Policy List ──────────────────────── -->
-            <aside class="sidebar">
-                <h3 id="policyListHeading">Existing Policies</h3>
-                <div class="policy-list"
-                     id="policyList"
-                     role="list"
-                     aria-labelledby="policyListHeading">
-                    <!-- Policies rendered by JS -->
-                </div>
-                <button class="btn btn-secondary" data-action="loadPolicies">Refresh Policies</button>
-            </aside>
-
-            <!-- ── Main Panel ────────────────────────────────── -->
             <div class="policy-form">
                 <div class="tab-container">
                     <!-- Tab Buttons -->
                     <div class="tab-buttons" role="tablist" aria-label="Policy management tabs">
                         <button class="tab-button active"
                                 role="tab"
+                                id="tab-server"
+                                data-action="showTab"
+                                data-tab="server"
+                                aria-selected="true"
+                                aria-controls="serverTab"
+                                tabindex="0">Server</button>
+                        <button class="tab-button"
+                                role="tab"
+                                id="tab-policies"
+                                data-action="showTab"
+                                data-tab="policies"
+                                aria-selected="false"
+                                aria-controls="policiesTab"
+                                tabindex="-1">Policies</button>
+                        <button class="tab-button"
+                                role="tab"
                                 id="tab-create"
                                 data-action="showTab"
                                 data-tab="create"
-                                aria-selected="true"
+                                aria-selected="false"
                                 aria-controls="createTab"
-                                tabindex="0">Create Policy</button>
+                                tabindex="-1">Create Policy</button>
                         <button class="tab-button"
                                 role="tab"
                                 id="tab-backup"
@@ -75,11 +78,11 @@
                                 tabindex="-1">PowerShell Commands</button>
                     </div>
 
-                    <!-- ── Tab: Create Policy ────────────────── -->
+                    <!-- ── Tab: Server ─────────────────────────── -->
                     <div class="tab-content active"
-                         id="createTab"
+                         id="serverTab"
                          role="tabpanel"
-                         aria-labelledby="tab-create"
+                         aria-labelledby="tab-server"
                          aria-hidden="false">
 
                         <!-- DNS Server Connection -->
@@ -118,9 +121,81 @@
                                 </div>
                             </div>
 
-                            <button type="button" class="btn btn-secondary" data-action="testConnection">Test Connection</button>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" data-action="testConnection">Test Connection</button>
+                            </div>
                             <span id="connectionStatus" class="connection-status" role="alert"></span>
                         </div>
+
+                        <!-- Server Info Panel (visible when connected) -->
+                        <div class="server-info-panel" id="serverInfoPanel" style="display: none;">
+                            <h3>Server Information</h3>
+                            <div class="server-info-grid" id="serverInfoGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- DNS Zones -->
+                        <div class="server-zones-panel" id="serverZonesPanel" style="display: none;">
+                            <h3>DNS Zones</h3>
+                            <div class="zones-toolbar">
+                                <button type="button" class="btn btn-secondary btn-sm" data-action="refreshZones">Refresh Zones</button>
+                                <span class="zone-count" id="zoneCount"></span>
+                            </div>
+                            <div class="zones-list" id="zonesList" role="list" aria-label="DNS zones">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Execution Mode -->
+                        <div class="server-execution-panel">
+                            <h3>Execution Mode</h3>
+                            <div class="execution-mode-toggle" id="executionModeToggle">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="executionModeSwitch" data-action="toggleExecutionMode">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <div class="toggle-label-group">
+                                    <span class="toggle-label">Execute on server (live mode)</span>
+                                    <span class="toggle-help">When enabled, policies are created directly on the DNS server instead of generating PowerShell commands.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Tab: Policies ───────────────────────── -->
+                    <div class="tab-content"
+                         id="policiesTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-policies"
+                         aria-hidden="true">
+
+                        <div class="policies-panel">
+                            <div class="policies-toolbar">
+                                <h3 id="policyListHeading">Existing Policies</h3>
+                                <div class="policies-toolbar-actions">
+                                    <button class="btn btn-secondary btn-sm" data-action="loadPolicies">Refresh from Server</button>
+                                </div>
+                            </div>
+                            <div class="policy-list"
+                                 id="policyList"
+                                 role="list"
+                                 aria-labelledby="policyListHeading">
+                                <!-- Policies rendered by JS -->
+                            </div>
+                            <div class="policies-empty" id="policiesEmpty">
+                                <div class="empty-icon">&#x1F4CB;</div>
+                                <p>No policies yet. Use the <strong>Create Policy</strong> tab to build your first policy, or <strong>Refresh from Server</strong> to load existing policies.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Tab: Create Policy ────────────────── -->
+                    <div class="tab-content"
+                         id="createTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-create"
+                         aria-hidden="true">
 
                         <!-- Policy Form -->
                         <form id="policyForm">
@@ -185,15 +260,6 @@
                                 <div id="criteriaList">
                                     <!-- Criteria rendered by JS -->
                                 </div>
-                            </div>
-
-                            <!-- Execution Mode Toggle -->
-                            <div class="execution-mode-toggle" id="executionModeToggle" style="display: none;">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="executionModeSwitch" data-action="toggleExecutionMode">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="toggle-label">Execute on server (live mode)</span>
                             </div>
 
                             <div class="btn-group">

@@ -85,33 +85,9 @@
     letter-spacing: var(--tracking-wide);
 }
 
-/* ── Main Grid ─────────────────────────────────────────── */
+/* ── Main Content ─────────────────────────────────────── */
 .main-content {
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    gap: 0;
     min-height: calc(100vh - 200px);
-}
-
-/* ── Sidebar ───────────────────────────────────────────── */
-.sidebar {
-    background: var(--surface-100);
-    border-right: 1px solid var(--border-subtle);
-    padding: var(--sp-6);
-    height: fit-content;
-    position: sticky;
-    top: 0;
-}
-
-.sidebar > h3 {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-wider);
-    color: var(--text-tertiary);
-    margin-bottom: var(--sp-4);
-    padding-bottom: var(--sp-3);
-    border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ── Policy Form Panel ─────────────────────────────────── */

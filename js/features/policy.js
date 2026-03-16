@@ -260,6 +260,11 @@
 
             policyList.appendChild(div);
         });
+
+        // Toggle empty state in policies tab
+        if (NS.updatePoliciesEmptyState) {
+            NS.updatePoliciesEmptyState();
+        }
     };
 
     NS.selectPolicy = function selectPolicy(index) {
