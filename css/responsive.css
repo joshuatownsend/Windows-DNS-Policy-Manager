@@ -1,0 +1,113 @@
+/* ── 1024px — Collapse to single column ────────────────── */
+@media (max-width: 1024px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── 768px — Tablet adjustments ────────────────────────── */
+@media (max-width: 768px) {
+    body {
+        padding: var(--space-md);
+    }
+
+    .header {
+        padding: var(--space-lg);
+    }
+
+    .header h1 {
+        font-size: 1.8em;
+    }
+
+    .main-content {
+        gap: var(--space-lg);
+        padding: var(--space-lg);
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .tab-buttons {
+        flex-wrap: wrap;
+    }
+
+    .tab-button {
+        padding: var(--space-md) var(--space-base);
+        font-size: var(--font-size-sm);
+    }
+
+    .btn-group {
+        flex-wrap: wrap;
+    }
+
+    .policy-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ── 480px — Phone adjustments ─────────────────────────── */
+@media (max-width: 480px) {
+    body {
+        padding: var(--space-sm);
+    }
+
+    .header h1 {
+        font-size: 1.4em;
+    }
+
+    .header p {
+        font-size: 0.9em;
+    }
+
+    .main-content {
+        padding: var(--space-base);
+        gap: var(--space-base);
+    }
+
+    .sidebar {
+        padding: var(--space-base);
+    }
+
+    .policy-form {
+        padding: var(--space-base);
+    }
+
+    .btn {
+        padding: var(--space-md) var(--space-base);
+        font-size: var(--font-size-sm);
+        width: 100%;
+    }
+
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .file-upload-area {
+        padding: var(--space-lg) var(--space-md);
+    }
+
+    .upload-icon {
+        font-size: 32px;
+    }
+
+    .policy-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .tab-buttons {
+        flex-direction: column;
+    }
+
+    .tab-button {
+        text-align: left;
+        border-bottom: none;
+        border-left: 3px solid transparent;
+    }
+
+    .tab-button.active,
+    .tab-button[aria-selected="true"] {
+        border-bottom-color: transparent;
+        border-left-color: var(--color-primary);
+    }
+}

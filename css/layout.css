@@ -1,0 +1,75 @@
+/* ── Container ─────────────────────────────────────────── */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: var(--color-bg-container);
+    border-radius: var(--radius-3xl);
+    box-shadow: var(--shadow-hero);
+    overflow: hidden;
+}
+
+/* ── Header ────────────────────────────────────────────── */
+.header {
+    background: linear-gradient(135deg, var(--gradient-header-start) 0%, var(--gradient-header-end) 100%);
+    color: white;
+    padding: var(--space-2xl);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: float 20s linear infinite;
+}
+
+@keyframes float {
+    0%   { transform: translateX(-50px) translateY(-50px); }
+    100% { transform: translateX(0px) translateY(0px); }
+}
+
+.header h1 {
+    font-size: var(--font-size-hero);
+    margin-bottom: var(--space-md);
+    position: relative;
+    z-index: 1;
+}
+
+.header p {
+    font-size: var(--font-size-xl);
+    opacity: 0.9;
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Main Grid ─────────────────────────────────────────── */
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--space-2xl);
+    padding: var(--space-2xl);
+}
+
+/* ── Sidebar ───────────────────────────────────────────── */
+.sidebar {
+    background: var(--color-bg-light);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-xl);
+    height: fit-content;
+    box-shadow: var(--shadow-card);
+}
+
+/* ── Policy Form Panel ─────────────────────────────────── */
+.policy-form {
+    background: var(--color-bg-white);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-2xl);
+    box-shadow: var(--shadow-card);
+}

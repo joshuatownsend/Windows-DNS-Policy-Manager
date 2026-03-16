@@ -1,0 +1,19 @@
+/* ── PowerShell Output Panel ───────────────────────────── */
+.powershell-output {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    margin-top: var(--space-lg);
+    max-height: 400px;
+    overflow-y: auto;
+    border: 2px solid #333;
+}
+
+.powershell-output pre {
+    margin: 0;
+    white-space: pre-wrap;
+}

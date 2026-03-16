@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows DNS Policy Manager</title>
+
+    <!-- CSS (order matters: tokens first, then base, layout, components, features, responsive) -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/powershell.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Windows DNS Policy Manager</h1>
+            <p>Configure and manage DNS Query Resolution Policies for Windows Server</p>
+        </header>
+
+        <div class="main-content">
+            <!-- ── Sidebar: Policy List ──────────────────────── -->
+            <aside class="sidebar">
+                <h3 id="policyListHeading">Existing Policies</h3>
+                <div class="policy-list"
+                     id="policyList"
+                     role="list"
+                     aria-labelledby="policyListHeading">
+                    <!-- Policies rendered by JS -->
+                </div>
+                <button class="btn btn-secondary" data-action="loadPolicies">Refresh Policies</button>
+            </aside>
+
+            <!-- ── Main Panel ────────────────────────────────── -->
+            <div class="policy-form">
+                <div class="tab-container">
+                    <!-- Tab Buttons -->
+                    <div class="tab-buttons" role="tablist" aria-label="Policy management tabs">
+                        <button class="tab-button active"
+                                role="tab"
+                                id="tab-create"
+                                data-action="showTab"
+                                data-tab="create"
+                                aria-selected="true"
+                                aria-controls="createTab"
+                                tabindex="0">Create Policy</button>
+                        <button class="tab-button"
+                                role="tab"
+                                id="tab-backup"
+                                data-action="showTab"
+                                data-tab="backup"
+                                aria-selected="false"
+                                aria-controls="backupTab"
+                                tabindex="-1">Backup &amp; Import</button>
+                        <button class="tab-button"
+                                role="tab"
+                                id="tab-powershell"
+                                data-action="showTab"
+                                data-tab="powershell"
+                                aria-selected="false"
+                                aria-controls="powershellTab"
+                                tabindex="-1">PowerShell Commands</button>
+                    </div>
+
+                    <!-- ── Tab: Create Policy ────────────────── -->
+                    <div class="tab-content active"
+                         id="createTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-create"
+                         aria-hidden="false">
+
+                        <!-- DNS Server Connection -->
+                        <div class="server-connection">
+                            <h3>DNS Server Connection</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="dnsServer">DNS Server *</label>
+                                    <input type="text" id="dnsServer" placeholder="DNS server IP, FQDN, or hostname" value="localhost" aria-required="true">
+                                </div>
+                                <div class="form-group">
+                                    <label for="connectionType">Connection Method</label>
+                                    <select id="connectionType" data-action="toggleCredentialFields">
+                                        <option value="local">Local Server (Current User)</option>
+                                        <option value="remote">Remote Server (Credentials)</option>
+                                        <option value="session">PowerShell Session</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="credentialFields" class="credential-section" style="display: none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="username">Username</label>
+                                        <input type="text" id="username" placeholder="DOMAIN\Username or Username">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="domain">Domain (Optional)</label>
+                                        <input type="text" id="domain" placeholder="Domain name">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="useCurrentCredentials"> Use current Windows credentials
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-secondary" data-action="testConnection">Test Connection</button>
+                            <span id="connectionStatus" class="connection-status" role="alert"></span>
+                        </div>
+
+                        <!-- Policy Form -->
+                        <form id="policyForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="policyName">Policy Name *</label>
+                                    <input type="text" id="policyName" required placeholder="Enter policy name" aria-required="true">
+                                </div>
+                                <div class="form-group">
+                                    <label for="policyAction">Action *</label>
+                                    <select id="policyAction" required data-action="toggleScopeConfig" aria-required="true">
+                                        <option value="">Select Action</option>
+                                        <option value="ALLOW">Allow</option>
+                                        <option value="DENY">Deny</option>
+                                        <option value="IGNORE">Ignore</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="policyLevel">Policy Level</label>
+                                    <select id="policyLevel" data-action="toggleZoneField">
+                                        <option value="Server">Server Level</option>
+                                        <option value="Zone">Zone Level</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="zoneNameGroup" style="display: none;">
+                                    <label for="zoneName">Zone Name</label>
+                                    <input type="text" id="zoneName" placeholder="e.g., contoso.com">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="condition">Condition Logic</label>
+                                    <select id="condition">
+                                        <option value="AND">AND (All criteria must match)</option>
+                                        <option value="OR">OR (Any criteria must match)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="processingOrder">Processing Order</label>
+                                    <input type="number" id="processingOrder" min="1" placeholder="1" value="1">
+                                </div>
+                            </div>
+
+                            <div id="scopeConfig" class="scope-config" style="display: none;">
+                                <h4>Zone Scopes (Required for ALLOW action)</h4>
+                                <div id="scopeList">
+                                    <!-- Scopes rendered by JS -->
+                                </div>
+                                <button type="button" class="add-criteria-btn" data-action="addScope">Add Scope</button>
+                            </div>
+
+                            <div class="criteria-section">
+                                <h3>Policy Criteria</h3>
+                                <button type="button" class="add-criteria-btn" data-action="addCriteria">Add Criteria</button>
+                                <div id="criteriaList">
+                                    <!-- Criteria rendered by JS -->
+                                </div>
+                            </div>
+
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-success" data-action="generatePolicy">Generate Policy</button>
+                                <button type="button" class="btn btn-primary" data-action="exportPolicy">Export PowerShell</button>
+                                <button type="button" class="btn btn-secondary" data-action="clearForm">Clear Form</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- ── Tab: Backup & Import ──────────────── -->
+                    <div class="tab-content"
+                         id="backupTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-backup"
+                         aria-hidden="true">
+
+                        <div class="backup-section">
+                            <h3>Backup Current Policies</h3>
+                            <p>Export existing DNS policies from the server to a backup file for safekeeping or migration.</p>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="backupServer">DNS Server</label>
+                                    <input type="text" id="backupServer" placeholder="DNS server to backup from" value="localhost">
+                                </div>
+                                <div class="form-group">
+                                    <label for="backupFormat">Backup Format</label>
+                                    <select id="backupFormat">
+                                        <option value="json">JSON (Recommended)</option>
+                                        <option value="xml">XML</option>
+                                        <option value="powershell">PowerShell Script</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="includeZonePolicies" checked> Include Zone-Level Policies
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="includeServerPolicies" checked> Include Server-Level Policies
+                                </label>
+                            </div>
+
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" data-action="generateBackupScript">Generate Backup Script</button>
+                                <button type="button" class="btn btn-success" data-action="exportCurrentPolicies">Export Current Policies</button>
+                            </div>
+
+                            <div id="backupOutput" class="powershell-output" style="display: none; margin-top: 20px;">
+                                <pre id="backupCommands"></pre>
+                            </div>
+                        </div>
+
+                        <div class="import-section">
+                            <h3>Import Blocklist</h3>
+                            <p>Import domains from a text file or CSV to create blocking policies automatically.</p>
+
+                            <div class="file-upload-area"
+                                 data-action="triggerFileSelect"
+                                 role="button"
+                                 tabindex="0"
+                                 aria-label="Click or press Enter to select a blocklist file">
+                                <div class="upload-icon">&#x1F4C1;</div>
+                                <div class="upload-text">
+                                    <strong>Click to select blocklist file</strong><br>
+                                    Supports: .txt, .csv files<br>
+                                    <span id="selectedFileName">No file selected</span>
+                                </div>
+                                <input type="file" id="blocklistFile" accept=".txt,.csv" style="display: none;" data-action="handleFileSelect">
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="blocklistPolicyName">Policy Name</label>
+                                    <input type="text" id="blocklistPolicyName" placeholder="BlocklistPolicy" value="ImportedBlocklist">
+                                </div>
+                                <div class="form-group">
+                                    <label for="blocklistAction">Action</label>
+                                    <select id="blocklistAction">
+                                        <option value="IGNORE">IGNORE (Drop silently)</option>
+                                        <option value="DENY">DENY (Return refused)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="csvColumn">CSV Column (if CSV file)</label>
+                                    <input type="text" id="csvColumn" placeholder="domain, hostname, etc." value="domain">
+                                </div>
+                                <div class="form-group">
+                                    <label for="maxDomains">Max Domains per Policy</label>
+                                    <input type="number" id="maxDomains" value="100" min="1" max="1000">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Import Options:</label>
+                                <label>
+                                    <input type="checkbox" id="includeWildcards" checked> Add wildcard (*.) prefix to domains
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="skipComments"> Skip comment lines (starting with # or //)
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="validateDomains" checked> Validate domain format
+                                </label>
+                            </div>
+
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" data-action="previewBlocklist" disabled id="previewBtn">Preview Import</button>
+                                <button type="button" class="btn btn-success" data-action="importBlocklist" disabled id="importBtn">Generate Policies</button>
+                            </div>
+
+                            <div id="importPreview" class="import-preview" style="display: none;">
+                                <h4>Import Preview</h4>
+                                <div id="previewContent"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Tab: PowerShell Commands ──────────── -->
+                    <div class="tab-content"
+                         id="powershellTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-powershell"
+                         aria-hidden="true">
+                        <div class="powershell-output" id="powershellOutput" aria-live="polite">
+                            <pre># Generated PowerShell commands will appear here
+# Click "Generate Policy" to create the command</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS (dependency order: state first, then utils, UI, features, app last) -->
+    <script src="js/state.js"></script>
+    <script src="js/utils/download.js"></script>
+    <script src="js/ui/toast.js"></script>
+    <script src="js/ui/tabs.js"></script>
+    <script src="js/ui/form.js"></script>
+    <script src="js/features/criteria.js"></script>
+    <script src="js/features/scopes.js"></script>
+    <script src="js/features/connection.js"></script>
+    <script src="js/features/policy.js"></script>
+    <script src="js/features/backup.js"></script>
+    <script src="js/features/blocklist.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
