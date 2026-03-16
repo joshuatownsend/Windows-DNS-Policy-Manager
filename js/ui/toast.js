@@ -21,8 +21,8 @@
             'z-index:10000',
             'display:flex',
             'flex-direction:column',
-            'gap:10px',
-            'max-width:400px',
+            'gap:8px',
+            'max-width:380px',
             'pointer-events:none'
         ].join(';');
         document.body.appendChild(container);
@@ -30,32 +30,33 @@
     }
 
     var icons = {
-        success: '\u2705',
-        error:   '\u274C',
-        warning: '\u26A0\uFE0F',
-        info:    '\u2139\uFE0F'
+        success: '\u2713',
+        error:   '\u2717',
+        warning: '\u26A0',
+        info:    '\u2139'
     };
 
     var bgColors = {
-        success: '#d4edda',
-        error:   '#f8d7da',
-        warning: '#fff3cd',
-        info:    '#d1ecf1'
+        success: 'rgba(16, 185, 129, 0.12)',
+        error:   'rgba(244, 63, 94, 0.12)',
+        warning: 'rgba(245, 158, 11, 0.12)',
+        info:    'rgba(6, 182, 212, 0.12)'
     };
 
     var textColors = {
-        success: '#155724',
-        error:   '#721c24',
-        warning: '#856404',
-        info:    '#0c5460'
+        success: '#34d399',
+        error:   '#fb7185',
+        warning: '#fbbf24',
+        info:    '#22d3ee'
     };
 
-    /**
-     * Show a toast notification.
-     * @param {string} message  — text to display
-     * @param {string} [type]   — 'success' | 'error' | 'warning' | 'info'
-     * @param {number} [duration] — ms before auto-dismiss (0 = manual only)
-     */
+    var borderColors = {
+        success: 'rgba(16, 185, 129, 0.2)',
+        error:   'rgba(244, 63, 94, 0.2)',
+        warning: 'rgba(245, 158, 11, 0.2)',
+        info:    'rgba(6, 182, 212, 0.2)'
+    };
+
     NS.toast.show = function show(message, type, duration) {
         type = type || 'info';
         duration = duration !== undefined ? duration : 4000;
@@ -67,28 +68,29 @@
             'display:flex',
             'align-items:flex-start',
             'gap:10px',
-            'padding:14px 18px',
+            'padding:12px 16px',
             'border-radius:8px',
             'font-family:inherit',
-            'font-size:14px',
+            'font-size:13px',
             'line-height:1.4',
-            'box-shadow:0 4px 12px rgba(0,0,0,0.15)',
+            'box-shadow:0 8px 24px rgba(0,0,0,0.4)',
             'pointer-events:auto',
             'opacity:0',
-            'transform:translateX(40px)',
-            'transition:opacity 0.3s ease, transform 0.3s ease',
-            'background:' + (bgColors[type] || bgColors.info),
-            'color:' + (textColors[type] || textColors.info),
-            'border:1px solid ' + (textColors[type] || textColors.info) + '33'
+            'transform:translateX(20px)',
+            'transition:opacity 0.25s cubic-bezier(0.16,1,0.3,1), transform 0.25s cubic-bezier(0.16,1,0.3,1)',
+            'background:#18181b',
+            'color:#fafafa',
+            'border:1px solid ' + (borderColors[type] || borderColors.info),
+            'backdrop-filter:blur(12px)'
         ].join(';');
 
         var icon = document.createElement('span');
         icon.setAttribute('aria-hidden', 'true');
         icon.textContent = icons[type] || icons.info;
-        icon.style.cssText = 'flex-shrink:0;font-size:18px;line-height:1';
+        icon.style.cssText = 'flex-shrink:0;font-size:14px;line-height:1.4;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:' + (bgColors[type] || bgColors.info) + ';color:' + (textColors[type] || textColors.info);
 
         var text = document.createElement('span');
-        text.style.cssText = 'flex:1';
+        text.style.cssText = 'flex:1;color:#d4d4d8';
         text.textContent = message;
 
         var close = document.createElement('button');
@@ -97,31 +99,31 @@
         close.style.cssText = [
             'background:none',
             'border:none',
-            'font-size:20px',
+            'font-size:16px',
             'cursor:pointer',
             'line-height:1',
-            'padding:0 0 0 8px',
-            'color:inherit',
-            'opacity:0.7',
+            'padding:0 0 0 6px',
+            'color:#52525b',
             'flex-shrink:0'
         ].join(';');
 
         function dismiss() {
             toast.style.opacity = '0';
-            toast.style.transform = 'translateX(40px)';
+            toast.style.transform = 'translateX(20px)';
             setTimeout(function () {
                 if (toast.parentNode) toast.parentNode.removeChild(toast);
-            }, 300);
+            }, 250);
         }
 
         close.addEventListener('click', dismiss);
+        close.addEventListener('mouseenter', function() { close.style.color = '#a1a1aa'; });
+        close.addEventListener('mouseleave', function() { close.style.color = '#52525b'; });
 
         toast.appendChild(icon);
         toast.appendChild(text);
         toast.appendChild(close);
         host.appendChild(toast);
 
-        // Trigger entrance animation
         requestAnimationFrame(function () {
             toast.style.opacity = '1';
             toast.style.transform = 'translateX(0)';
@@ -132,7 +134,6 @@
         }
     };
 
-    // Convenience methods
     NS.toast.success = function (msg, dur) { NS.toast.show(msg, 'success', dur); };
     NS.toast.error   = function (msg, dur) { NS.toast.show(msg, 'error', dur); };
     NS.toast.warning = function (msg, dur) { NS.toast.show(msg, 'warning', dur); };
