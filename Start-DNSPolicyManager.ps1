@@ -7,7 +7,7 @@
 #>
 
 param(
-    [int]$Port = 8600,
+    [int]$Port = 8650,
     [switch]$NoBrowser
 )
 
@@ -35,13 +35,67 @@ try {
     # Not running - start it
 }
 
-# Start bridge in background
-Write-Host "  Starting bridge on port $Port..." -ForegroundColor Yellow
-$bridgeJob = Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$bridgeScript`" -Port $Port" -PassThru -WindowStyle Normal
+# Kill stale bridge process on the same port (if any)
+# HttpListener uses HTTP.sys, so a stale registration can block the port
+# even after the process dies. Check both TCP connections and HTTP.sys.
+$staleKilled = $false
+try {
+    # Method 1: TCP connection check
+    $staleConn = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+        Where-Object { $_.State -eq 'Listen' }
+    if ($staleConn) {
+        $stalePid = $staleConn.OwningProcess
+        Write-Host "  Stopping stale bridge (PID: $stalePid) on port $Port..." -ForegroundColor Yellow
+        Stop-Process -Id $stalePid -Force -ErrorAction SilentlyContinue
+        $staleKilled = $true
+    }
+} catch {}
+try {
+    # Method 2: Find orphaned powershell processes running bridge.ps1
+    $bridgeProcs = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match 'bridge\.ps1' -and $_.ProcessId -ne $PID }
+    foreach ($proc in $bridgeProcs) {
+        Write-Host "  Stopping stale bridge process (PID: $($proc.ProcessId))..." -ForegroundColor Yellow
+        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+        $staleKilled = $true
+    }
+} catch {}
+if ($staleKilled) {
+    Start-Sleep -Milliseconds 1000
+}
 
-# Wait for health check (up to 5 seconds)
+# Start bridge in a new window, redirecting output to a log file for diagnostics
+$logFile = Join-Path $scriptDir 'bridge.log'
+Write-Host "  Starting bridge on port $Port..." -ForegroundColor Yellow
+
+# Check if we're running elevated (HttpListener typically requires it)
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+$bridgeCmd = "& '$bridgeScript' -Port $Port *>&1 | Tee-Object -FilePath '$logFile'; pause"
+$startArgs = @{
+    FilePath     = 'powershell'
+    ArgumentList = "-NoProfile -ExecutionPolicy Bypass -Command `"$bridgeCmd`""
+    PassThru     = $true
+    WindowStyle  = 'Normal'
+}
+
+if (-not $isAdmin) {
+    Write-Host '  Not elevated — requesting Administrator rights for bridge...' -ForegroundColor Yellow
+    $startArgs['Verb'] = 'RunAs'
+}
+
+try {
+    $bridgeJob = Start-Process @startArgs
+} catch {
+    Write-Host "  Failed to start bridge: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host '  Try running this script from an elevated PowerShell (Run as Administrator).' -ForegroundColor Yellow
+    return
+}
+
+# Wait for health check (up to 8 seconds)
 $ready = $false
-for ($i = 0; $i -lt 10; $i++) {
+for ($i = 0; $i -lt 16; $i++) {
     Start-Sleep -Milliseconds 500
     try {
         $health = Invoke-RestMethod -Uri "http://127.0.0.1:${Port}/api/health" -TimeoutSec 2 -ErrorAction Stop
@@ -50,7 +104,11 @@ for ($i = 0; $i -lt 10; $i++) {
             break
         }
     } catch {
-        # Not ready yet
+        # Check if bridge process has already exited (crashed)
+        if ($bridgeJob.HasExited) {
+            Write-Host '  Bridge process exited unexpectedly.' -ForegroundColor Red
+            break
+        }
     }
 }
 
@@ -63,8 +121,25 @@ if ($ready) {
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
 } else {
-    Write-Host '  Bridge failed to start within 5 seconds.' -ForegroundColor Red
-    Write-Host '  Check the bridge window for errors.' -ForegroundColor Yellow
+    Write-Host '  Bridge failed to start.' -ForegroundColor Red
+    # Show the log file contents for diagnostics
+    if (Test-Path $logFile) {
+        $logContent = Get-Content $logFile -Tail 15 -ErrorAction SilentlyContinue
+        if ($logContent) {
+            Write-Host ''
+            Write-Host '  Bridge output (last 15 lines):' -ForegroundColor Yellow
+            foreach ($line in $logContent) {
+                Write-Host "    $line" -ForegroundColor DarkGray
+            }
+        }
+    } else {
+        Write-Host '  No log file found. The bridge may have failed to launch PowerShell.' -ForegroundColor Yellow
+    }
+    Write-Host ''
+    Write-Host '  Common causes:' -ForegroundColor Yellow
+    Write-Host "    - Port $Port already in use (netstat -ano | findstr $Port)" -ForegroundColor DarkGray
+    Write-Host '    - DnsServer module not installed (Install-WindowsFeature RSAT-DNS-Server)' -ForegroundColor DarkGray
+    Write-Host '    - Insufficient permissions (run as Administrator)' -ForegroundColor DarkGray
 }
 
 Write-Host ''

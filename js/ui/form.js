@@ -90,6 +90,17 @@
             valid = false;
         }
 
+        // Recursion scope required for Recursion policy type
+        var policyTypeEl = document.getElementById('policyType');
+        var policyType = policyTypeEl ? policyTypeEl.value : 'QueryResolution';
+        if (policyType === 'Recursion') {
+            var recScope = document.getElementById('recursionScopeSelect');
+            if (recScope && !recScope.value) {
+                NS.toast.warning('Recursion scope is required for recursion policies.');
+                valid = false;
+            }
+        }
+
         // Scope names for ALLOW
         if (action === 'ALLOW') {
             var scopeNames = [];
@@ -112,6 +123,70 @@
 
         return valid;
     };
+
+    /* ── Policy Type Toggle ───────────────────────────── */
+
+    NS.togglePolicyType = function togglePolicyType() {
+        var policyType = document.getElementById('policyType').value;
+        var levelGroup = document.getElementById('policyLevel');
+        var scopeConfig = document.getElementById('scopeConfig');
+        var recursionScopeGroup = document.getElementById('recursionScopeGroup');
+        var actionSelect = document.getElementById('policyAction');
+        var zoneNameGroup = document.getElementById('zoneNameGroup');
+
+        // Reset visibility
+        if (recursionScopeGroup) recursionScopeGroup.style.display = 'none';
+        if (scopeConfig) scopeConfig.style.display = 'none';
+
+        switch (policyType) {
+            case 'Recursion':
+                // Force server-level, show recursion scope dropdown
+                if (levelGroup) {
+                    levelGroup.value = 'Server';
+                    levelGroup.disabled = true;
+                }
+                if (zoneNameGroup) zoneNameGroup.style.display = 'none';
+                if (recursionScopeGroup) recursionScopeGroup.style.display = 'block';
+                // Restore all actions
+                restoreActionOptions(actionSelect);
+                break;
+
+            case 'ZoneTransfer':
+                // Only DENY/IGNORE actions
+                if (levelGroup) levelGroup.disabled = false;
+                filterActionOptions(actionSelect, ['DENY', 'IGNORE']);
+                break;
+
+            default: // QueryResolution
+                if (levelGroup) levelGroup.disabled = false;
+                restoreActionOptions(actionSelect);
+                NS.toggleScopeConfig();
+                break;
+        }
+    };
+
+    function filterActionOptions(select, allowed) {
+        if (!select) return;
+        var current = select.value;
+        var options = select.querySelectorAll('option');
+        for (var i = 0; i < options.length; i++) {
+            var val = options[i].value;
+            if (val === '') continue; // placeholder
+            options[i].style.display = allowed.indexOf(val) !== -1 ? '' : 'none';
+        }
+        // Reset selection if current is not allowed
+        if (current && allowed.indexOf(current) === -1) {
+            select.value = '';
+        }
+    }
+
+    function restoreActionOptions(select) {
+        if (!select) return;
+        var options = select.querySelectorAll('option');
+        for (var i = 0; i < options.length; i++) {
+            options[i].style.display = '';
+        }
+    }
 
     /* ── Toggle helpers ─────────────────────────────────── */
 

@@ -4,14 +4,14 @@
     DNS Policy Manager - PowerShell HTTP Bridge
 .DESCRIPTION
     Local HTTP bridge that exposes DNS Server cmdlets as REST API endpoints.
-    Binds only to 127.0.0.1:8600 for security. Zero external dependencies.
+    Binds only to 127.0.0.1 (default port 8650) for security. Zero external dependencies.
 .NOTES
     Run with: powershell -ExecutionPolicy Bypass -File bridge.ps1
     Stop with: Ctrl+C
 #>
 
 param(
-    [int]$Port = 8600
+    [int]$Port = 8650
 )
 
 Set-StrictMode -Version Latest
@@ -52,7 +52,7 @@ function Send-Response {
 
     # CORS headers - safe because localhost-only
     $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
 
     $Response.OutputStream.Write($buffer, 0, $buffer.Length)
@@ -63,7 +63,7 @@ function Send-Preflight {
     param([System.Net.HttpListenerResponse]$Response)
     $Response.StatusCode = 204
     $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
     $Response.Headers.Add('Access-Control-Max-Age', '86400')
     $Response.ContentLength64 = 0
@@ -324,9 +324,17 @@ function Handle-PolicyMulti {
                     $splatParams['Condition'] = $policy.condition
                 }
 
-                if ($policy.action -eq 'ALLOW' -and $policy.scopes) {
+                if ($policy.action -eq 'ALLOW' -and $policy.scopes -and -not $policy.applyOnRecursion) {
                     $scopeStr = ($policy.scopes | ForEach-Object { "$($_.name),$($_.weight)" }) -join ';'
                     $splatParams['ZoneScope'] = $scopeStr
+                }
+
+                # Recursion policy support
+                if ($policy.applyOnRecursion) {
+                    $splatParams['ApplyOnRecursion'] = $true
+                    if ($policy.recursionScope) {
+                        $splatParams['RecursionScope'] = $policy.recursionScope
+                    }
                 }
 
                 $result = Add-DnsServerQueryResolutionPolicy @splatParams -ErrorAction Stop
@@ -350,6 +358,756 @@ function Handle-PolicyMulti {
         Send-Response -Response $Response -Body @{
             success = $allSuccess
             results = $results
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+# ── Client Subnet Handlers ───────────────────────────────────────────────────
+
+function Handle-GetSubnets {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $subnets = @(Get-DnsServerClientSubnet @params -ErrorAction Stop |
+            Select-Object Name, IPv4Subnet, IPv6Subnet)
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            subnets = $subnets
+        }
+    } catch {
+        if ($_.Exception.Message -match 'not found|does not exist|no.*subnet') {
+            Send-Response -Response $Response -Body @{
+                success = $true
+                subnets = @()
+            }
+        } else {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+}
+
+function Handle-CreateSubnet {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.name) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Subnet name is required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            Name = $Body.name
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        if ($Body.ipv4Subnet) {
+            $splatParams['IPv4Subnet'] = @($Body.ipv4Subnet -split ',\s*')
+        }
+        if ($Body.ipv6Subnet) {
+            $splatParams['IPv6Subnet'] = @($Body.ipv6Subnet -split ',\s*')
+        }
+
+        Add-DnsServerClientSubnet @splatParams -PassThru -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-DeleteSubnet {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$SubnetName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        $params = @{
+            Name  = $SubnetName
+            Force = $true
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+            $params['ComputerName'] = $server
+        }
+
+        Remove-DnsServerClientSubnet @params -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            removed = $SubnetName
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+# ── Zone Scope Handlers ──────────────────────────────────────────────────────
+
+function Handle-GetZoneScopes {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $zone = Get-QueryParam -Request $Request -Name 'zone'
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    if (-not $zone) {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = 'zone query parameter is required'
+        } -StatusCode 400
+        return
+    }
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $scopes = @(Get-DnsServerZoneScope -ZoneName $zone @params -ErrorAction Stop |
+            Select-Object ZoneScope, FileName)
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            scopes  = $scopes
+        }
+    } catch {
+        if ($_.Exception.Message -match 'not found|does not exist') {
+            Send-Response -Response $Response -Body @{
+                success = $true
+                scopes  = @()
+            }
+        } else {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+}
+
+function Handle-CreateZoneScope {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.zoneName -or -not $Body.name) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'zoneName and name are required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            ZoneName = $Body.zoneName
+            Name     = $Body.name
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        Add-DnsServerZoneScope @splatParams -PassThru -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-DeleteZoneScope {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ScopeName
+    )
+    $zone = Get-QueryParam -Request $Request -Name 'zone'
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    if (-not $zone) {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = 'zone query parameter is required'
+        } -StatusCode 400
+        return
+    }
+
+    try {
+        $params = @{
+            ZoneName = $zone
+            Name     = $ScopeName
+            Force    = $true
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+            $params['ComputerName'] = $server
+        }
+
+        Remove-DnsServerZoneScope @params -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            removed = $ScopeName
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-AddZoneScopeRecord {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.zoneName -or -not $Body.scopeName -or -not $Body.recordName) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'zoneName, scopeName, and recordName are required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            ZoneName  = $Body.zoneName
+            ZoneScope = $Body.scopeName
+            Name      = $Body.recordName
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        $recordType = if ($Body.recordType) { $Body.recordType } else { 'A' }
+
+        switch ($recordType) {
+            'A' {
+                $splatParams['A'] = $true
+                $splatParams['IPv4Address'] = $Body.recordValue
+            }
+            'AAAA' {
+                $splatParams['AAAA'] = $true
+                $splatParams['IPv6Address'] = $Body.recordValue
+            }
+            'CNAME' {
+                $splatParams['CName'] = $true
+                $splatParams['HostNameAlias'] = $Body.recordValue
+            }
+        }
+
+        Add-DnsServerResourceRecord @splatParams -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+# ── Recursion Scope Handlers ─────────────────────────────────────────────────
+
+function Handle-GetRecursionScopes {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $scopes = @(Get-DnsServerRecursionScope @params -ErrorAction Stop |
+            Select-Object Name, EnableRecursion, Forwarder)
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            scopes  = $scopes
+        }
+    } catch {
+        if ($_.Exception.Message -match 'not found|does not exist') {
+            Send-Response -Response $Response -Body @{
+                success = $true
+                scopes  = @()
+            }
+        } else {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+}
+
+function Handle-CreateRecursionScope {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.name) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Recursion scope name is required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            Name = $Body.name
+        }
+
+        if ($null -ne $Body.enableRecursion) {
+            $splatParams['EnableRecursion'] = [bool]$Body.enableRecursion
+        }
+
+        if ($Body.forwarder) {
+            $splatParams['Forwarder'] = @($Body.forwarder -split ',\s*')
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        Add-DnsServerRecursionScope @splatParams -PassThru -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-SetRecursionScope {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body,
+        [string]$ScopeName
+    )
+
+    try {
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            Name = $ScopeName
+        }
+
+        if ($null -ne $Body.enableRecursion) {
+            $splatParams['EnableRecursion'] = [bool]$Body.enableRecursion
+        }
+
+        if ($Body.forwarder) {
+            $splatParams['Forwarder'] = @($Body.forwarder -split ',\s*')
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        Set-DnsServerRecursionScope @splatParams -PassThru -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-DeleteRecursionScope {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ScopeName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        $params = @{
+            Name  = $ScopeName
+            Force = $true
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+            $params['ComputerName'] = $server
+        }
+
+        Remove-DnsServerRecursionScope @params -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            removed = $ScopeName
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+# ── Zone Transfer Policy Handlers ────────────────────────────────────────────
+
+function Handle-GetZoneTransferPolicies {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $zone = Get-QueryParam -Request $Request -Name 'zone'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $policies = @()
+        if ($zone) {
+            $policies = @(Get-DnsServerZoneTransferPolicy -ZoneName $zone @params -ErrorAction Stop |
+                Select-Object Name, Action, ProcessingOrder, IsEnabled, Condition,
+                    @{N='Level';E={'Zone'}},
+                    @{N='ZoneName';E={$zone}})
+        } else {
+            $policies = @(Get-DnsServerZoneTransferPolicy @params -ErrorAction Stop |
+                Select-Object Name, Action, ProcessingOrder, IsEnabled, Condition,
+                    @{N='Level';E={'Server'}},
+                    @{N='ZoneName';E={$null}})
+        }
+
+        Send-Response -Response $Response -Body @{
+            success  = $true
+            policies = $policies
+        }
+    } catch {
+        if ($_.Exception.Message -match 'not found|does not exist|no.*policy') {
+            Send-Response -Response $Response -Body @{
+                success  = $true
+                policies = @()
+            }
+        } else {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+}
+
+function Handle-CreateZoneTransferPolicy {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.name) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Policy name is required'
+            } -StatusCode 400
+            return
+        }
+
+        $splatParams = @{
+            Name     = $Body.name
+            Action   = if ($Body.action) { $Body.action } else { 'DENY' }
+            PassThru = $true
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        if ($Body.zoneName) {
+            $splatParams['ZoneName'] = $Body.zoneName
+        }
+
+        if ($Body.processingOrder) {
+            $splatParams['ProcessingOrder'] = [int]$Body.processingOrder
+        }
+
+        if ($Body.criteria) {
+            foreach ($c in $Body.criteria) {
+                $paramName = $c.type
+                $value = "$($c.operator),$($c.values -join ',')"
+                $splatParams[$paramName] = $value
+            }
+        }
+
+        if ($Body.criteria -and $Body.criteria.Count -gt 1 -and $Body.condition) {
+            $splatParams['Condition'] = $Body.condition
+        }
+
+        $result = Add-DnsServerZoneTransferPolicy @splatParams -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            policy  = @{
+                Name            = $result.Name
+                Action          = $result.Action
+                ProcessingOrder = $result.ProcessingOrder
+            }
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-DeleteZoneTransferPolicy {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$PolicyName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $zone = Get-QueryParam -Request $Request -Name 'zone'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        $params = @{
+            Name  = $PolicyName
+            Force = $true
+        }
+
+        if ($zone) {
+            $params['ZoneName'] = $zone
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+            $params['ComputerName'] = $server
+        }
+
+        Remove-DnsServerZoneTransferPolicy @params -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            removed = $PolicyName
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+# ── Policy State Handler ─────────────────────────────────────────────────────
+
+function Handle-SetPolicyState {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body,
+        [string]$PolicyName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $zone = Get-QueryParam -Request $Request -Name 'zone'
+    $policyType = Get-QueryParam -Request $Request -Name 'type'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        $params = @{
+            Name = $PolicyName
+        }
+
+        if ($null -ne $Body -and $null -ne $Body.isEnabled) {
+            $params['IsEnabled'] = [string]$Body.isEnabled
+        }
+
+        if ($zone) {
+            $params['ZoneName'] = $zone
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+            $params['ComputerName'] = $server
+        }
+
+        if ($policyType -eq 'transfer') {
+            Set-DnsServerZoneTransferPolicy @params -ErrorAction Stop
+        } else {
+            Set-DnsServerQueryResolutionPolicy @params -ErrorAction Stop
+        }
+
+        Send-Response -Response $Response -Body @{
+            success = $true
         }
     } catch {
         Send-Response -Response $Response -Body @{
@@ -560,10 +1318,18 @@ function Handle-CreatePolicy {
             $splatParams['Condition'] = $Body.condition
         }
 
-        # Add zone scopes
-        if ($Body.action -eq 'ALLOW' -and $Body.scopes) {
+        # Add zone scopes (only for non-recursion policies)
+        if ($Body.action -eq 'ALLOW' -and $Body.scopes -and -not $Body.applyOnRecursion) {
             $scopeStr = ($Body.scopes | ForEach-Object { "$($_.name),$($_.weight)" }) -join ';'
             $splatParams['ZoneScope'] = $scopeStr
+        }
+
+        # Recursion policy support
+        if ($Body.applyOnRecursion) {
+            $splatParams['ApplyOnRecursion'] = $true
+            if ($Body.recursionScope) {
+                $splatParams['RecursionScope'] = $Body.recursionScope
+            }
         }
 
         $result = Add-DnsServerQueryResolutionPolicy @splatParams -ErrorAction Stop
@@ -778,6 +1544,124 @@ function Route-Request {
             '^/api/health$' {
                 Handle-Health -Response $response
             }
+            # ── Client Subnets ──────────────────────────────
+            '^/api/subnets$' {
+                switch ($method) {
+                    'GET' {
+                        Handle-GetSubnets -Response $response -Request $request
+                    }
+                    'POST' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-CreateSubnet -Response $response -Body $body
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            '^/api/subnets/([^/]+)$' {
+                if ($method -eq 'DELETE') {
+                    $subnetName = [System.Uri]::UnescapeDataString($Matches[1])
+                    Handle-DeleteSubnet -Response $response -Request $request -SubnetName $subnetName
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            # ── Zone Scopes ─────────────────────────────────
+            '^/api/zonescopes/records$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-AddZoneScopeRecord -Response $response -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/zonescopes$' {
+                switch ($method) {
+                    'GET' {
+                        Handle-GetZoneScopes -Response $response -Request $request
+                    }
+                    'POST' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-CreateZoneScope -Response $response -Body $body
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            '^/api/zonescopes/([^/]+)$' {
+                if ($method -eq 'DELETE') {
+                    $scopeName = [System.Uri]::UnescapeDataString($Matches[1])
+                    Handle-DeleteZoneScope -Response $response -Request $request -ScopeName $scopeName
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            # ── Recursion Scopes ────────────────────────────
+            '^/api/recursionscopes$' {
+                switch ($method) {
+                    'GET' {
+                        Handle-GetRecursionScopes -Response $response -Request $request
+                    }
+                    'POST' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-CreateRecursionScope -Response $response -Body $body
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            '^/api/recursionscopes/([^/]+)$' {
+                switch ($method) {
+                    'PUT' {
+                        $body = Read-RequestBody -Request $request
+                        $scopeName = [System.Uri]::UnescapeDataString($Matches[1])
+                        Handle-SetRecursionScope -Response $response -Body $body -ScopeName $scopeName
+                    }
+                    'DELETE' {
+                        $scopeName = [System.Uri]::UnescapeDataString($Matches[1])
+                        Handle-DeleteRecursionScope -Response $response -Request $request -ScopeName $scopeName
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            # ── Zone Transfer Policies ──────────────────────
+            '^/api/transferpolicies$' {
+                switch ($method) {
+                    'GET' {
+                        Handle-GetZoneTransferPolicies -Response $response -Request $request
+                    }
+                    'POST' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-CreateZoneTransferPolicy -Response $response -Body $body
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            '^/api/transferpolicies/([^/]+)$' {
+                if ($method -eq 'DELETE') {
+                    $policyName = [System.Uri]::UnescapeDataString($Matches[1])
+                    Handle-DeleteZoneTransferPolicy -Response $response -Request $request -PolicyName $policyName
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            # ── Policy State ────────────────────────────────
+            '^/api/policies/([^/]+)/state$' {
+                if ($method -eq 'PUT') {
+                    $body = Read-RequestBody -Request $request
+                    $policyName = [System.Uri]::UnescapeDataString($Matches[1])
+                    Handle-SetPolicyState -Response $response -Request $request -Body $body -PolicyName $policyName
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
             '^/api/connect$' {
                 if ($method -eq 'POST') {
                     $body = Read-RequestBody -Request $request
@@ -882,11 +1766,49 @@ function Route-Request {
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 $prefix = "http://127.0.0.1:${Port}/"
-$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add($prefix)
+$listener = $null
+
+# Remove stale URL ACL reservations that can block HttpListener
+try {
+    $aclCheck = & netsh http show urlacl url=$prefix 2>&1 | Out-String
+    if ($aclCheck -match 'Reserved URL') {
+        Write-Log "Removing stale URL ACL for $prefix ..."
+        $null = & netsh http delete urlacl url=$prefix 2>&1
+    }
+} catch {}
+
+# Try binding with multiple prefix formats for compatibility
+$prefixes = @($prefix, "http://localhost:${Port}/")
+$started = $false
+
+foreach ($pfx in $prefixes) {
+    try {
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add($pfx)
+        $listener.Start()
+        $started = $true
+        $prefix = $pfx
+        break
+    } catch {
+        Write-Log "Bind failed on $pfx : $($_.Exception.Message)" 'WARN'
+        try { $listener.Close() } catch {}
+        $listener = $null
+    }
+}
+
+if (-not $started) {
+    Write-Host ''
+    Write-Host '  ERROR: Could not bind HTTP listener on port $Port.' -ForegroundColor Red
+    Write-Host '  This usually means:' -ForegroundColor Yellow
+    Write-Host '    1. Another process is using the port, OR' -ForegroundColor DarkGray
+    Write-Host '    2. PowerShell is not running as Administrator' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '  Fix: Run Start-DNSPolicyManager.ps1 from an elevated PowerShell.' -ForegroundColor Cyan
+    Write-Host ''
+    exit 1
+}
 
 try {
-    $listener.Start()
     Write-Host ''
     Write-Host '  DNS Policy Manager - PowerShell Bridge' -ForegroundColor Cyan
     Write-Host "  Listening on $prefix" -ForegroundColor Green

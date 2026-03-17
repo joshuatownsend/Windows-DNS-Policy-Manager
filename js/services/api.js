@@ -5,7 +5,7 @@
     var NS = window.DNSPolicyManager = window.DNSPolicyManager || {};
     var state = NS.state;
 
-    var BRIDGE_URL = 'http://127.0.0.1:8600';
+    var BRIDGE_URL = 'http://127.0.0.1:8650';
     var REQUEST_TIMEOUT = 15000;
     var HEALTH_INTERVAL = 30000;
 
@@ -134,6 +134,127 @@
             serverId: serverId,
             username: username,
             password: password
+        });
+    };
+
+    // ── Client Subnets ────────────────────────────────────────
+
+    api.listSubnets = function (server, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/subnets' + qs);
+    };
+
+    api.createSubnet = function (data) {
+        return request('POST', '/api/subnets', data);
+    };
+
+    api.deleteSubnet = function (name, server, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('DELETE', '/api/subnets/' + encodeURIComponent(name) + qs);
+    };
+
+    // ── Zone Scopes ─────────────────────────────────────────
+
+    api.listZoneScopes = function (zone, server, serverId, credentialMode) {
+        var params = [];
+        if (zone) params.push('zone=' + encodeURIComponent(zone));
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/zonescopes' + qs);
+    };
+
+    api.createZoneScope = function (data) {
+        return request('POST', '/api/zonescopes', data);
+    };
+
+    api.deleteZoneScope = function (name, zone, server, serverId, credentialMode) {
+        var params = [];
+        if (zone) params.push('zone=' + encodeURIComponent(zone));
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('DELETE', '/api/zonescopes/' + encodeURIComponent(name) + qs);
+    };
+
+    api.addZoneScopeRecord = function (data) {
+        return request('POST', '/api/zonescopes/records', data);
+    };
+
+    // ── Recursion Scopes ────────────────────────────────────
+
+    api.listRecursionScopes = function (server, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/recursionscopes' + qs);
+    };
+
+    api.createRecursionScope = function (data) {
+        return request('POST', '/api/recursionscopes', data);
+    };
+
+    api.setRecursionScope = function (name, data) {
+        return request('PUT', '/api/recursionscopes/' + encodeURIComponent(name), data);
+    };
+
+    api.deleteRecursionScope = function (name, server, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('DELETE', '/api/recursionscopes/' + encodeURIComponent(name) + qs);
+    };
+
+    // ── Zone Transfer Policies ──────────────────────────────
+
+    api.listZoneTransferPolicies = function (server, zone, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (zone) params.push('zone=' + encodeURIComponent(zone));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/transferpolicies' + qs);
+    };
+
+    api.addZoneTransferPolicy = function (policy) {
+        return request('POST', '/api/transferpolicies', policy);
+    };
+
+    api.removeZoneTransferPolicy = function (name, server, zone, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (zone) params.push('zone=' + encodeURIComponent(zone));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('DELETE', '/api/transferpolicies/' + encodeURIComponent(name) + qs);
+    };
+
+    // ── Policy State ────────────────────────────────────────
+
+    api.setPolicyState = function (name, isEnabled, server, zone, policyType) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (zone) params.push('zone=' + encodeURIComponent(zone));
+        if (policyType) params.push('type=' + encodeURIComponent(policyType));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('PUT', '/api/policies/' + encodeURIComponent(name) + '/state' + qs, {
+            isEnabled: isEnabled
         });
     };
 

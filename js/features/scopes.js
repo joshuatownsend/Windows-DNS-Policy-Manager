@@ -18,6 +18,7 @@
         nameInput.placeholder = 'Scope Name';
         nameInput.className = 'scope-name';
         nameInput.value = existingScope ? existingScope.name : '';
+        nameInput.setAttribute('list', 'scopeNameDatalist');
 
         var weightInput = document.createElement('input');
         weightInput.type = 'number';

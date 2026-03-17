@@ -89,6 +89,100 @@
                     document.getElementById('blocklistFile').click();
                     break;
 
+                // ── DNS Objects ─────────────────────────────
+                case 'addSubnet':
+                    NS.addSubnetFromForm();
+                    break;
+                case 'deleteSubnet':
+                    var subnetName = target.getAttribute('data-name');
+                    if (subnetName && confirm('Delete subnet "' + subnetName + '"?')) {
+                        NS.removeSubnet(subnetName);
+                    }
+                    break;
+                case 'refreshSubnets':
+                    NS.loadSubnets();
+                    break;
+                case 'addZoneScope':
+                    NS.addZoneScopeFromForm();
+                    break;
+                case 'deleteZoneScope':
+                    var zsScopeName = target.getAttribute('data-name');
+                    var zsZone = target.getAttribute('data-zone');
+                    if (zsScopeName && confirm('Delete zone scope "' + zsScopeName + '"?')) {
+                        NS.removeZoneScope(zsScopeName, zsZone);
+                    }
+                    break;
+                case 'showAddRecordForm':
+                    NS.showAddRecordForm(target.getAttribute('data-scope'), target.getAttribute('data-zone'));
+                    break;
+                case 'addRecordToScope':
+                    NS.addRecordToScope(target.getAttribute('data-scope'), target.getAttribute('data-zone'));
+                    break;
+                case 'cancelAddRecord':
+                    NS.cancelAddRecord();
+                    break;
+                case 'addRecursionScope':
+                    NS.addRecursionScopeFromForm();
+                    break;
+                case 'deleteRecursionScope':
+                    var rsName = target.getAttribute('data-name');
+                    if (rsName && confirm('Delete recursion scope "' + rsName + '"?')) {
+                        NS.removeRecursionScope(rsName);
+                    }
+                    break;
+                case 'toggleRecursionScope':
+                    NS.toggleRecursionScope(target.getAttribute('data-name'), target.getAttribute('data-enabled'));
+                    break;
+                case 'refreshRecursionScopes':
+                    NS.loadRecursionScopes();
+                    break;
+                case 'toggleObjectSection':
+                    var sectionId = target.getAttribute('data-section');
+                    if (!sectionId && target.parentElement) {
+                        sectionId = target.parentElement.getAttribute('data-section');
+                    }
+                    if (sectionId) {
+                        var section = document.getElementById(sectionId);
+                        if (section) {
+                            section.classList.toggle('collapsed');
+                        }
+                    }
+                    break;
+
+                // ── Policy State ────────────────────────────
+                case 'togglePolicyState':
+                    NS.togglePolicyState(parseInt(target.getAttribute('data-index'), 10));
+                    break;
+
+                // ── Wizards ─────────────────────────────────
+                case 'startWizard':
+                    NS.startWizard(target.getAttribute('data-scenario'));
+                    break;
+                case 'wizardNext':
+                    NS.wizardNext();
+                    break;
+                case 'wizardBack':
+                    NS.wizardBack();
+                    break;
+                case 'wizardCancel':
+                    NS.wizardCancel();
+                    break;
+                case 'wizardGenerate':
+                    NS.wizardGenerate();
+                    break;
+                case 'wizardExecute':
+                    NS.wizardExecute();
+                    break;
+                case 'wizardAddRegion':
+                    NS.wizardAddRegion();
+                    break;
+                case 'wizardAddTimeWindow':
+                    NS.wizardAddTimeWindow();
+                    break;
+                case 'wizardAddBackend':
+                    NS.wizardAddBackend();
+                    break;
+
                 // ── Server Management ────────────────────────
                 case 'addServerModal':
                     NS.showAddServerModal();
@@ -150,6 +244,12 @@
                     break;
                 case 'toggleAllTargetServers':
                     NS.toggleAllTargetServers();
+                    break;
+                case 'togglePolicyType':
+                    NS.togglePolicyType();
+                    break;
+                case 'loadZoneScopesForZone':
+                    NS.loadZoneScopesForSelected();
                     break;
                 default:
                     break;

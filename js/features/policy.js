@@ -41,6 +41,15 @@
         var condition = document.getElementById('condition').value;
         var processingOrder = document.getElementById('processingOrder').value;
 
+        // Policy type (Query Resolution, Recursion, Zone Transfer)
+        var policyTypeEl = document.getElementById('policyType');
+        var policyType = policyTypeEl ? policyTypeEl.value : 'QueryResolution';
+
+        // Recursion-specific fields
+        var applyOnRecursion = policyType === 'Recursion';
+        var recursionScopeEl = document.getElementById('recursionScopeSelect');
+        var recursionScope = (applyOnRecursion && recursionScopeEl) ? recursionScopeEl.value : null;
+
         // Get target servers from checkboxes
         var targetServers = NS.getSelectedTargetServers ? NS.getSelectedTargetServers() : [];
 
@@ -90,7 +99,10 @@
             criteria: criteria,
             scopes: scopes,
             condition: condition,
-            processingOrder: parseInt(processingOrder, 10) || 1
+            processingOrder: parseInt(processingOrder, 10) || 1,
+            policyType: policyType,
+            applyOnRecursion: applyOnRecursion,
+            recursionScope: recursionScope
         };
     }
 
@@ -98,7 +110,12 @@
      * Build the PowerShell command string from policy data.
      */
     function buildCommand(data, serverOverride) {
-        var cmd = 'Add-DnsServerQueryResolutionPolicy -Name "' + data.name + '" -Action ' + data.action;
+        var policyType = data.policyType || 'QueryResolution';
+        var cmdlet = policyType === 'ZoneTransfer'
+            ? 'Add-DnsServerZoneTransferPolicy'
+            : 'Add-DnsServerQueryResolutionPolicy';
+
+        var cmd = cmdlet + ' -Name "' + data.name + '" -Action ' + data.action;
 
         if (data.zoneName) {
             cmd += ' -ZoneName "' + data.zoneName + '"';
@@ -116,7 +133,16 @@
             cmd += ' -ProcessingOrder ' + data.processingOrder;
         }
 
-        if (data.action === 'ALLOW' && data.scopes.length > 0) {
+        // Recursion policy
+        if (policyType === 'Recursion' && data.applyOnRecursion) {
+            cmd += ' -ApplyOnRecursion';
+            if (data.recursionScope) {
+                cmd += ' -RecursionScope "' + data.recursionScope + '"';
+            }
+        }
+
+        // Zone scopes (only for non-recursion query resolution policies)
+        if (policyType !== 'Recursion' && policyType !== 'ZoneTransfer' && data.action === 'ALLOW' && data.scopes.length > 0) {
             var scopeStr = data.scopes.map(function (s) { return s.name + ',' + s.weight; }).join(';');
             cmd += ' -ZoneScope "' + scopeStr + '"';
         }
@@ -192,10 +218,16 @@
                 processingOrder: data.processingOrder,
                 server: singleServer.hostname,
                 serverId: singleServer.id,
-                credentialMode: singleServer.credentialMode
+                credentialMode: singleServer.credentialMode,
+                applyOnRecursion: data.applyOnRecursion,
+                recursionScope: data.recursionScope
             };
 
-            NS.api.addPolicy(singlePayload).then(function (result) {
+            var apiCall = (data.policyType === 'ZoneTransfer')
+                ? NS.api.addZoneTransferPolicy(singlePayload)
+                : NS.api.addPolicy(singlePayload);
+
+            apiCall.then(function (result) {
                 if (btn) btn.classList.remove('loading');
 
                 if (result.success) {
@@ -386,9 +418,29 @@
             }
             detailsEl.textContent = detailLines.join(' \u2022 ');
 
+            // Enabled/Disabled badge
+            var isEnabled = policy.IsEnabled !== false && policy.isEnabled !== false;
+            if (policy.fromServer && !isEnabled) {
+                div.classList.add('policy-disabled');
+                var disabledBadge = document.createElement('span');
+                disabledBadge.className = 'policy-badge-disabled';
+                disabledBadge.textContent = 'DISABLED';
+                div.appendChild(disabledBadge);
+            }
+
             div.appendChild(nameEl);
             div.appendChild(actionEl);
             div.appendChild(detailsEl);
+
+            // Enable/Disable toggle for server-sourced policies
+            if (policy.fromServer && state.bridgeConnected) {
+                var toggleBtn = document.createElement('button');
+                toggleBtn.className = 'btn btn-secondary btn-sm';
+                toggleBtn.setAttribute('data-action', 'togglePolicyState');
+                toggleBtn.setAttribute('data-index', index);
+                toggleBtn.textContent = isEnabled ? 'Disable' : 'Enable';
+                div.appendChild(toggleBtn);
+            }
 
             // Delete button for server-sourced policies
             if (policy.fromServer && state.bridgeConnected) {
@@ -444,6 +496,34 @@
                 NS.toast.success('Policy "' + policy.name + '" removed from server.');
             } else {
                 NS.toast.error('Failed to remove: ' + (result.error || 'Unknown error'));
+            }
+        });
+    };
+
+    NS.togglePolicyState = function togglePolicyState(index) {
+        var policy = state.policies[index];
+        if (!policy || !policy.fromServer) return;
+
+        var isEnabled = policy.IsEnabled !== false && policy.isEnabled !== false;
+        var newState = !isEnabled;
+
+        var activeServer = NS.getActiveServer ? NS.getActiveServer() : null;
+        var server = policy.server || (activeServer ? activeServer.hostname : 'localhost');
+
+        NS.api.setPolicyState(
+            policy.name,
+            newState,
+            server,
+            policy.zoneName || policy.ZoneName,
+            policy.policyType === 'ZoneTransfer' ? 'transfer' : null
+        ).then(function (result) {
+            if (result.success) {
+                policy.IsEnabled = newState;
+                policy.isEnabled = newState;
+                NS.renderPolicies();
+                NS.toast.success('Policy "' + policy.name + '" ' + (newState ? 'enabled' : 'disabled') + '.');
+            } else {
+                NS.toast.error('Failed: ' + (result.error || 'Unknown error'));
             }
         });
     };

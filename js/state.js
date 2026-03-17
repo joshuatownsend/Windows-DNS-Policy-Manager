@@ -19,6 +19,19 @@
         activeServerId: null,   // Currently selected server in Server tab
 
         serverZones: [],
-        executionMode: 'generate'   // 'generate' | 'execute'
+        executionMode: 'generate',   // 'generate' | 'execute'
+
+        // DNS Objects (Phase 1)
+        clientSubnets: [],          // [{ Name, IPv4Subnet, IPv6Subnet }]
+        zoneScopes: {},             // { "zone.com": [{ Name, ZoneName }] }
+        recursionScopes: [],        // [{ Name, EnableRecursion, Forwarder }]
+
+        // Wizard state (Phase 4)
+        wizardState: {
+            scenarioId: null,
+            currentStep: 0,
+            totalSteps: 0,
+            data: {}
+        }
     };
 })();

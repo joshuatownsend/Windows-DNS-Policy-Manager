@@ -123,7 +123,15 @@
 
     NS.updateCriteriaHelp = function updateCriteriaHelp(selectElement) {
         var helpText = selectElement.closest('.criteria-item').querySelector('.criteria-help');
-        helpText.textContent = examples[selectElement.value] || 'Enter appropriate values for the selected criteria type';
+        var text = examples[selectElement.value] || 'Enter appropriate values for the selected criteria type';
+
+        // Append available client subnet names when type is ClientSubnet
+        if (selectElement.value === 'ClientSubnet' && state.clientSubnets && state.clientSubnets.length > 0) {
+            var names = state.clientSubnets.map(function (s) { return s.Name; }).join(', ');
+            text += ' | Available subnets: ' + names;
+        }
+
+        helpText.textContent = text;
     };
 
     NS.removeCriteria = function removeCriteria(criteriaId) {

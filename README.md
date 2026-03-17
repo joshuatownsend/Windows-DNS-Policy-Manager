@@ -32,7 +32,7 @@ Optionally connect to a live DNS server via the included PowerShell bridge for r
 ### Live mode (connected to DNS server)
 
 1. Double-click `server/start.bat` (or run `Start-DNSPolicyManager.ps1`)
-2. The PowerShell bridge starts on `http://127.0.0.1:8600` and the browser opens automatically
+2. The PowerShell bridge starts on `http://127.0.0.1:8650` and the browser opens automatically
 3. The header shows **Bridge: Connected** (green dot)
 4. Enable the **Execute on server** toggle to create policies directly on the DNS server
 5. Use **Refresh Policies** to load existing policies from the server
@@ -45,7 +45,7 @@ Optionally connect to a live DNS server via the included PowerShell bridge for r
 ```
 Browser (index.html)                    PowerShell Bridge (bridge.ps1)
 ─────────────────────                   ──────────────────────────────
-  fetch('/api/...')     ──HTTP──►    [System.Net.HttpListener] :8600
+  fetch('/api/...')     ──HTTP──►    [System.Net.HttpListener] :8650
                                            │
                                      Executes DNS cmdlets:
                                      Get-DnsServerQueryResolutionPolicy
@@ -81,7 +81,7 @@ Browser (index.html)                    PowerShell Bridge (bridge.ps1)
 index.html                    HTML shell with ARIA attributes
 Start-DNSPolicyManager.ps1    Launcher: starts bridge + opens browser
 server/
-  bridge.ps1                  PowerShell HTTP bridge (localhost:8600)
+  bridge.ps1                  PowerShell HTTP bridge (localhost:8650)
   start.bat                   Double-click launcher
 css/
   variables.css               Design tokens (colors, spacing, radii, shadows)

@@ -28,7 +28,7 @@
                     <span class="bridge-label" id="bridgeStatusLabel">Bridge: Offline</span>
                 </div>
             </div>
-            <p>Configure and manage DNS Query Resolution Policies for Windows Server</p>
+            <p>Configure and manage DNS Policies for Windows Server</p>
         </header>
 
         <div class="main-content">
@@ -46,6 +46,14 @@
                                 tabindex="0">Server</button>
                         <button class="tab-button"
                                 role="tab"
+                                id="tab-objects"
+                                data-action="showTab"
+                                data-tab="objects"
+                                aria-selected="false"
+                                aria-controls="objectsTab"
+                                tabindex="-1">DNS Objects</button>
+                        <button class="tab-button"
+                                role="tab"
                                 id="tab-policies"
                                 data-action="showTab"
                                 data-tab="policies"
@@ -60,6 +68,14 @@
                                 aria-selected="false"
                                 aria-controls="createTab"
                                 tabindex="-1">Create Policy</button>
+                        <button class="tab-button"
+                                role="tab"
+                                id="tab-wizards"
+                                data-action="showTab"
+                                data-tab="wizards"
+                                aria-selected="false"
+                                aria-controls="wizardsTab"
+                                tabindex="-1">Wizards</button>
                         <button class="tab-button"
                                 role="tab"
                                 id="tab-backup"
@@ -135,6 +151,82 @@
                         </div>
                     </div>
 
+                    <!-- ── Tab: DNS Objects ───────────────────── -->
+                    <div class="tab-content"
+                         id="objectsTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-objects"
+                         aria-hidden="true">
+
+                        <!-- Client Subnets Section -->
+                        <div class="dns-objects-section">
+                            <div class="dns-objects-header" data-action="toggleObjectSection" data-section="subnetsSection">
+                                <h3>Client Subnets</h3>
+                                <span class="collapse-indicator">&#x25BC;</span>
+                            </div>
+                            <div class="dns-objects-body" id="subnetsSection">
+                                <p class="form-help">Named subnets used in policy criteria (e.g., <code>-ClientSubnet "EQ,NorthAmericaSubnet"</code>).</p>
+                                <div id="subnetList" role="list" aria-label="Client subnets">
+                                    <!-- Rendered by JS -->
+                                </div>
+                                <div class="dns-inline-form">
+                                    <input type="text" id="subnetName" placeholder="Subnet name">
+                                    <input type="text" id="subnetIPv4" placeholder="IPv4 CIDRs (e.g., 10.0.0.0/8)">
+                                    <input type="text" id="subnetIPv6" placeholder="IPv6 CIDRs (optional)">
+                                    <button class="btn btn-primary btn-sm" data-action="addSubnet">Add Subnet</button>
+                                </div>
+                                <button class="btn btn-secondary btn-sm" data-action="refreshSubnets" style="margin-top: 8px;">Refresh</button>
+                            </div>
+                        </div>
+
+                        <!-- Zone Scopes Section -->
+                        <div class="dns-objects-section">
+                            <div class="dns-objects-header" data-action="toggleObjectSection" data-section="zoneScopesSection">
+                                <h3>Zone Scopes</h3>
+                                <span class="collapse-indicator">&#x25BC;</span>
+                            </div>
+                            <div class="dns-objects-body" id="zoneScopesSection">
+                                <p class="form-help">Zone scopes allow ALLOW policies to route queries to different record sets within the same zone.</p>
+                                <div class="form-group">
+                                    <label for="zoneScopeZoneSelect">Zone</label>
+                                    <select id="zoneScopeZoneSelect" data-action="loadZoneScopesForZone">
+                                        <option value="">Select a zone...</option>
+                                    </select>
+                                </div>
+                                <div id="zoneScopeList" role="list" aria-label="Zone scopes">
+                                    <!-- Rendered by JS -->
+                                </div>
+                                <div class="dns-inline-form">
+                                    <input type="text" id="newZoneScopeName" placeholder="New scope name">
+                                    <button class="btn btn-primary btn-sm" data-action="addZoneScope">Add Scope</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recursion Scopes Section -->
+                        <div class="dns-objects-section">
+                            <div class="dns-objects-header" data-action="toggleObjectSection" data-section="recursionScopesSection">
+                                <h3>Recursion Scopes</h3>
+                                <span class="collapse-indicator">&#x25BC;</span>
+                            </div>
+                            <div class="dns-objects-body" id="recursionScopesSection">
+                                <p class="form-help">Control recursion behavior per client group. The default scope "." can be modified but not deleted.</p>
+                                <div id="recursionScopeList" role="list" aria-label="Recursion scopes">
+                                    <!-- Rendered by JS -->
+                                </div>
+                                <div class="dns-inline-form">
+                                    <input type="text" id="recursionScopeName" placeholder="Scope name">
+                                    <label class="inline-checkbox">
+                                        <input type="checkbox" id="recursionScopeEnable" checked> Enable Recursion
+                                    </label>
+                                    <input type="text" id="recursionScopeForwarder" placeholder="Forwarder IPs (optional)">
+                                    <button class="btn btn-primary btn-sm" data-action="addRecursionScope">Add Scope</button>
+                                </div>
+                                <button class="btn btn-secondary btn-sm" data-action="refreshRecursionScopes" style="margin-top: 8px;">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ── Tab: Policies ───────────────────────── -->
                     <div class="tab-content"
                          id="policiesTab"
@@ -171,6 +263,17 @@
 
                         <!-- Policy Form -->
                         <form id="policyForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="policyType">Policy Type</label>
+                                    <select id="policyType" data-action="togglePolicyType">
+                                        <option value="QueryResolution">Query Resolution</option>
+                                        <option value="Recursion">Recursion</option>
+                                        <option value="ZoneTransfer">Zone Transfer</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="policyName">Policy Name *</label>
@@ -226,6 +329,20 @@
                                 <button type="button" class="add-criteria-btn" data-action="addScope">Add Scope</button>
                             </div>
 
+                            <div class="form-group" id="recursionScopeGroup" style="display: none;">
+                                <label for="recursionScopeSelect">Recursion Scope</label>
+                                <select id="recursionScopeSelect">
+                                    <option value="">Select recursion scope...</option>
+                                    <!-- Populated by JS from state.recursionScopes -->
+                                </select>
+                                <small class="form-help">Target recursion scope for this policy. Create scopes in the DNS Objects tab.</small>
+                            </div>
+
+                            <!-- Hidden datalist for scope name autocomplete -->
+                            <datalist id="scopeNameDatalist">
+                                <!-- Populated by JS from state.zoneScopes -->
+                            </datalist>
+
                             <div class="criteria-section">
                                 <h3>Policy Criteria</h3>
                                 <button type="button" class="add-criteria-btn" data-action="addCriteria">Add Criteria</button>
@@ -248,6 +365,22 @@
                                 <button type="button" class="btn btn-secondary" data-action="clearForm">Clear Form</button>
                             </div>
                         </form>
+                    </div>
+
+                    <!-- ── Tab: Wizards ─────────────────────── -->
+                    <div class="tab-content"
+                         id="wizardsTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-wizards"
+                         aria-hidden="true">
+
+                        <div class="wizards-panel">
+                            <h3>Scenario Wizards</h3>
+                            <p class="form-help">Guided workflows that create all prerequisite objects and policies for common DNS scenarios.</p>
+                            <div id="wizardContent">
+                                <!-- Wizard grid or active wizard rendered by JS -->
+                            </div>
+                        </div>
                     </div>
 
                     <!-- ── Tab: Backup & Import ──────────────── -->
@@ -431,9 +564,13 @@
     <script src="js/features/scopes.js"></script>
     <script src="js/features/servers.js"></script>
     <script src="js/features/connection.js"></script>
+    <script src="js/features/subnets.js"></script>
+    <script src="js/features/zonescopes.js"></script>
+    <script src="js/features/recursionscopes.js"></script>
     <script src="js/features/policy.js"></script>
     <script src="js/features/backup.js"></script>
     <script src="js/features/blocklist.js"></script>
+    <script src="js/features/wizards.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

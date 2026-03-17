@@ -47,6 +47,16 @@
             activeBtn.setAttribute('aria-selected', 'true');
             activeBtn.setAttribute('tabindex', '0');
         }
+
+        // Tab-specific data loading
+        if (tabName === 'objects') {
+            if (NS.loadSubnets) NS.loadSubnets();
+            if (NS.loadRecursionScopes) NS.loadRecursionScopes();
+            if (NS.populateZoneScopeZoneSelect) NS.populateZoneScopeZoneSelect();
+        }
+        if (tabName === 'wizards') {
+            if (NS.showWizardGrid) NS.showWizardGrid();
+        }
     };
 
     /**
