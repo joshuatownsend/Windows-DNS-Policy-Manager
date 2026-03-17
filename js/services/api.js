@@ -275,6 +275,16 @@
         });
     };
 
+    api.copyPolicies = function (sourceServer, targetServers, zone, sourceServerId, sourceCredentialMode) {
+        return request('POST', '/api/policies/copy', {
+            sourceServer: sourceServer,
+            targetServers: targetServers,
+            zone: zone || null,
+            sourceServerId: sourceServerId || null,
+            sourceCredentialMode: sourceCredentialMode || 'currentUser'
+        });
+    };
+
     // ── Health Check Polling ────────────────────────────────
 
     function updateBridgeStatus(connected, info) {

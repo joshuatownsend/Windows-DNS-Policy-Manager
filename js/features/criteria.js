@@ -6,20 +6,22 @@
     var state = NS.state;
 
     var criteriaTypes = [
-        { value: 'ClientSubnet',     label: 'Client Subnet' },
-        { value: 'FQDN',            label: 'FQDN (Domain Name)' },
-        { value: 'QType',           label: 'Query Type' },
-        { value: 'ServerInterface',  label: 'Server Interface IP' },
-        { value: 'InternetProtocol', label: 'Internet Protocol' },
-        { value: 'TransportProtocol',label: 'Transport Protocol' },
-        { value: 'TimeOfDay',       label: 'Time of Day' }
+        { value: 'ClientSubnet',      label: 'Client Subnet' },
+        { value: 'FQDN',              label: 'FQDN (Domain Name)' },
+        { value: 'QType',             label: 'Query Type' },
+        { value: 'ServerInterfaceIP', label: 'Server Interface IP (Query/Recursion)' },
+        { value: 'ServerInterface',   label: 'Server Interface (Zone Transfer)' },
+        { value: 'InternetProtocol',  label: 'Internet Protocol' },
+        { value: 'TransportProtocol', label: 'Transport Protocol' },
+        { value: 'TimeOfDay',         label: 'Time of Day' }
     ];
 
     var examples = {
         ClientSubnet:      'Example: 192.168.1.0/24, 10.0.0.0/8, SubnetName',
         FQDN:              'Example: *.contoso.com, www.example.com, *.malware.net',
         QType:             'Example: A, AAAA, CNAME, MX, NS, PTR, SOA, SRV, TXT, ANY',
-        ServerInterface:   'Example: 192.168.1.10, 10.0.0.1',
+        ServerInterfaceIP: 'Example: 10.0.0.1, 192.168.1.10 (for query resolution / recursion policies)',
+        ServerInterface:   'Example: 10.0.0.1, 192.168.1.10 (for zone transfer policies)',
         InternetProtocol:  'Example: IPv4, IPv6',
         TransportProtocol: 'Example: UDP, TCP',
         TimeOfDay:         'Example: 09:00-17:00, 18:00-23:59'

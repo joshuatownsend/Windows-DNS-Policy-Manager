@@ -9,6 +9,7 @@
         ClientSubnet:      'ClientSubnet',
         FQDN:              'FQDN',
         QType:             'QType',
+        ServerInterfaceIP: 'ServerInterfaceIP',
         ServerInterface:   'ServerInterface',
         InternetProtocol:  'InternetProtocol',
         TransportProtocol: 'TransportProtocol',
@@ -587,6 +588,119 @@
             }
         ];
         NS.renderPolicies();
+    };
+
+    // ── Policy Copy ───────────────────────────────────────
+
+    NS.showCopyPoliciesModal = function showCopyPoliciesModal() {
+        var modal = document.getElementById('copyPoliciesModal');
+        if (!modal) return;
+
+        // Populate source info
+        var sourceEl = document.getElementById('copySourceServer');
+        var activeServer = NS.getActiveServer ? NS.getActiveServer() : null;
+        if (sourceEl && activeServer) {
+            sourceEl.textContent = activeServer.name + ' (' + activeServer.hostname + ')';
+        }
+
+        // Populate target server checkboxes
+        var targetList = document.getElementById('copyTargetServers');
+        if (targetList) {
+            while (targetList.firstChild) targetList.removeChild(targetList.firstChild);
+
+            var servers = state.servers || [];
+            servers.forEach(function (srv) {
+                if (activeServer && srv.id === activeServer.id) return;
+                var label = document.createElement('label');
+                label.className = 'checkbox-label';
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'copy-target-cb';
+                cb.value = srv.id;
+                cb.setAttribute('data-hostname', srv.hostname);
+                cb.setAttribute('data-cred-mode', srv.credentialMode);
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(' ' + srv.name + ' (' + srv.hostname + ')'));
+                targetList.appendChild(label);
+            });
+        }
+
+        // Populate zone select
+        var zoneSelect = document.getElementById('copyZoneSelect');
+        if (zoneSelect) {
+            while (zoneSelect.firstChild) zoneSelect.removeChild(zoneSelect.firstChild);
+            var allOpt = document.createElement('option');
+            allOpt.value = '';
+            allOpt.textContent = 'All server-level policies';
+            zoneSelect.appendChild(allOpt);
+            (state.serverZones || []).forEach(function (z) {
+                var zoneName = z.ZoneName || z.zoneName || z;
+                var opt = document.createElement('option');
+                opt.value = zoneName;
+                opt.textContent = zoneName;
+                zoneSelect.appendChild(opt);
+            });
+        }
+
+        modal.style.display = 'flex';
+    };
+
+    NS.hideCopyPoliciesModal = function hideCopyPoliciesModal() {
+        var modal = document.getElementById('copyPoliciesModal');
+        if (modal) modal.style.display = 'none';
+    };
+
+    NS.executeCopyPolicies = function executeCopyPolicies() {
+        var activeServer = NS.getActiveServer ? NS.getActiveServer() : null;
+        if (!activeServer || !NS.api) {
+            NS.toast.warning('No active server selected.');
+            return;
+        }
+
+        var checkboxes = document.querySelectorAll('.copy-target-cb:checked');
+        if (checkboxes.length === 0) {
+            NS.toast.warning('Select at least one target server.');
+            return;
+        }
+
+        var targets = [];
+        for (var i = 0; i < checkboxes.length; i++) {
+            targets.push({
+                serverId: checkboxes[i].value,
+                hostname: checkboxes[i].getAttribute('data-hostname'),
+                credentialMode: checkboxes[i].getAttribute('data-cred-mode')
+            });
+        }
+
+        var zoneSelect = document.getElementById('copyZoneSelect');
+        var zone = zoneSelect ? zoneSelect.value : '';
+
+        var btn = document.querySelector('[data-action="executeCopyPolicies"]');
+        if (btn) btn.classList.add('loading');
+
+        NS.api.copyPolicies(
+            activeServer.hostname,
+            targets,
+            zone,
+            activeServer.id,
+            activeServer.credentialMode
+        ).then(function (result) {
+            if (btn) btn.classList.remove('loading');
+            NS.hideCopyPoliciesModal();
+
+            if (result.success) {
+                var results = result.results || [];
+                var ok = results.filter(function (r) { return r.success; }).length;
+                var fail = results.length - ok;
+                if (fail === 0) {
+                    NS.toast.success('Copied ' + (result.totalFound || 0) + ' policies to ' + ok + ' server(s).');
+                } else {
+                    NS.toast.warning(ok + ' succeeded, ' + fail + ' failed.');
+                }
+            } else {
+                NS.toast.error('Copy failed: ' + (result.error || 'Unknown error'));
+            }
+        });
     };
 
     NS.loadPolicies = function loadPolicies() {

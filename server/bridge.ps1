@@ -265,6 +265,106 @@ function Handle-SessionCredential {
     }
 }
 
+function Handle-CopyPolicies {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.sourceServer -or -not $Body.targetServers) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'sourceServer and targetServers are required'
+            } -StatusCode 400
+            return
+        }
+
+        $zone = if ($Body.zone) { $Body.zone } else { $null }
+        $sourceServerId = if ($Body.sourceServerId) { $Body.sourceServerId } else { $null }
+        $sourceCredMode = if ($Body.sourceCredentialMode) { $Body.sourceCredentialMode } else { 'currentUser' }
+
+        # Build params for source server
+        $getSplatParams = @{}
+        if ($sourceServerId) {
+            $credParams = Resolve-ServerCredential -ServerId $sourceServerId -CredentialMode $sourceCredMode -Hostname $Body.sourceServer
+            foreach ($key in $credParams.Keys) { $getSplatParams[$key] = $credParams[$key] }
+        } elseif ($Body.sourceServer -ne 'localhost' -and $Body.sourceServer -ne $env:COMPUTERNAME) {
+            $getSplatParams['ComputerName'] = $Body.sourceServer
+        }
+        if ($zone) { $getSplatParams['ZoneName'] = $zone }
+
+        # Get policies from source
+        $policies = Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction Stop
+
+        $results = @()
+        foreach ($targetObj in $Body.targetServers) {
+            $targetHost = if ($targetObj.hostname) { $targetObj.hostname } else { $targetObj }
+            $targetServerId = if ($targetObj.serverId) { $targetObj.serverId } else { $null }
+            $targetCredMode = if ($targetObj.credentialMode) { $targetObj.credentialMode } else { 'currentUser' }
+
+            try {
+                $copiedCount = 0
+                foreach ($policy in $policies) {
+                    $addSplatParams = @{
+                        Name            = $policy.Name
+                        Action          = $policy.Action.ToString()
+                        ProcessingOrder = $policy.ProcessingOrder
+                    }
+
+                    if ($targetServerId) {
+                        $tCredParams = Resolve-ServerCredential -ServerId $targetServerId -CredentialMode $targetCredMode -Hostname $targetHost
+                        foreach ($key in $tCredParams.Keys) { $addSplatParams[$key] = $tCredParams[$key] }
+                    } elseif ($targetHost -ne 'localhost' -and $targetHost -ne $env:COMPUTERNAME) {
+                        $addSplatParams['ComputerName'] = $targetHost
+                    }
+
+                    if ($zone) { $addSplatParams['ZoneName'] = $zone }
+                    if ($policy.Condition) { $addSplatParams['Condition'] = $policy.Condition.ToString() }
+
+                    # Copy criteria
+                    if ($policy.ClientSubnet) { $addSplatParams['ClientSubnet'] = $policy.ClientSubnet }
+                    if ($policy.FQDN) { $addSplatParams['FQDN'] = $policy.FQDN }
+                    if ($policy.ServerInterfaceIP) { $addSplatParams['ServerInterfaceIP'] = $policy.ServerInterfaceIP }
+                    if ($policy.QType) { $addSplatParams['QType'] = $policy.QType }
+                    if ($policy.TimeOfDay) { $addSplatParams['TimeOfDay'] = $policy.TimeOfDay }
+                    if ($policy.TransportProtocol) { $addSplatParams['TransportProtocol'] = $policy.TransportProtocol }
+                    if ($policy.InternetProtocol) { $addSplatParams['InternetProtocol'] = $policy.InternetProtocol }
+
+                    # Copy zone scopes if present
+                    if ($policy.ZoneScope) { $addSplatParams['ZoneScope'] = $policy.ZoneScope }
+
+                    Add-DnsServerQueryResolutionPolicy @addSplatParams -ErrorAction Stop
+                    $copiedCount++
+                }
+
+                $results += @{
+                    hostname = $targetHost
+                    success  = $true
+                    copied   = $copiedCount
+                }
+            } catch {
+                $results += @{
+                    hostname = $targetHost
+                    success  = $false
+                    error    = $_.Exception.Message
+                }
+            }
+        }
+
+        Send-Response -Response $Response -Body @{
+            success    = $true
+            results    = $results
+            totalFound = @($policies).Count
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
 function Handle-PolicyMulti {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -697,6 +797,11 @@ function Handle-AddZoneScopeRecord {
                 $splatParams['CName'] = $true
                 $splatParams['HostNameAlias'] = $Body.recordValue
             }
+        }
+
+        # Optional TTL (in seconds)
+        if ($Body.ttl -and [int]$Body.ttl -gt 0) {
+            $splatParams['TimeToLive'] = [System.TimeSpan]::FromSeconds([int]$Body.ttl)
         }
 
         Add-DnsServerResourceRecord @splatParams -ErrorAction Stop
@@ -1696,6 +1801,14 @@ function Route-Request {
                 if ($method -eq 'DELETE') {
                     $serverId = [System.Uri]::UnescapeDataString($Matches[1])
                     Handle-DeleteCredential -Response $response -ServerId $serverId
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/policies/copy$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-CopyPolicies -Response $response -Body $body
                 } else {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
                 }

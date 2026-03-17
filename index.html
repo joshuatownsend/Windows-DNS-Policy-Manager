@@ -239,6 +239,7 @@
                                 <h3 id="policyListHeading">Existing Policies</h3>
                                 <div class="policies-toolbar-actions">
                                     <button class="btn btn-secondary btn-sm" data-action="loadPolicies">Refresh from Server</button>
+                                    <button class="btn btn-secondary btn-sm" data-action="showCopyPoliciesModal">Copy to Server</button>
                                 </div>
                             </div>
                             <div class="policy-list"
@@ -549,6 +550,30 @@
             <div class="btn-group">
                 <button class="btn btn-primary" data-action="saveServerModal">Save</button>
                 <button class="btn btn-secondary" data-action="cancelServerModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Copy Policies Modal -->
+    <div class="modal-backdrop" id="copyPoliciesModal" style="display: none;">
+        <div class="modal-dialog">
+            <h3>Copy Policies to Server</h3>
+            <div class="form-group">
+                <label>Source Server</label>
+                <div id="copySourceServer" class="form-help" style="font-weight:bold;"></div>
+            </div>
+            <div class="form-group">
+                <label>Zone (optional)</label>
+                <select id="copyZoneSelect"></select>
+            </div>
+            <div class="form-group">
+                <label>Target Server(s)</label>
+                <div id="copyTargetServers"></div>
+            </div>
+            <p class="form-help">Copies all query resolution policies from the source server to the selected target(s). Zone scopes in AD replicate automatically but policies do not.</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" data-action="executeCopyPolicies">Copy Policies</button>
+                <button class="btn btn-secondary" data-action="cancelCopyPolicies">Cancel</button>
             </div>
         </div>
     </div>

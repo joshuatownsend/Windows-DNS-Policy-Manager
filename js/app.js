@@ -182,6 +182,32 @@
                 case 'wizardAddBackend':
                     NS.wizardAddBackend();
                     break;
+                case 'wizardAddTodDatacenter':
+                    NS.wizardAddTodDatacenter();
+                    break;
+                case 'wizardAddGeolbRegion':
+                    NS.wizardAddGeolbRegion();
+                    break;
+                case 'wizardAddGeolbDatacenter':
+                    NS.wizardAddGeolbDatacenter();
+                    break;
+                case 'wizardAddPsRegion':
+                    NS.wizardAddPsRegion();
+                    break;
+                case 'wizardAddPsSecondary':
+                    NS.wizardAddPsSecondary();
+                    break;
+
+                // ── Policy Copy ──────────────────────────────
+                case 'showCopyPoliciesModal':
+                    NS.showCopyPoliciesModal();
+                    break;
+                case 'executeCopyPolicies':
+                    NS.executeCopyPolicies();
+                    break;
+                case 'cancelCopyPolicies':
+                    NS.hideCopyPoliciesModal();
+                    break;
 
                 // ── Server Management ────────────────────────
                 case 'addServerModal':
@@ -310,6 +336,15 @@
             modal.addEventListener('click', function (e) {
                 if (e.target === modal) {
                     NS.hideServerModal();
+                }
+            });
+        }
+
+        var copyModal = document.getElementById('copyPoliciesModal');
+        if (copyModal) {
+            copyModal.addEventListener('click', function (e) {
+                if (e.target === copyModal) {
+                    NS.hideCopyPoliciesModal();
                 }
             });
         }

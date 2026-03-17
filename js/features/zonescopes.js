@@ -228,6 +228,13 @@
         valueInput.id = 'recordValueInput';
         valueInput.placeholder = 'IP address or hostname';
 
+        var ttlInput = document.createElement('input');
+        ttlInput.type = 'number';
+        ttlInput.id = 'recordTtlInput';
+        ttlInput.placeholder = 'TTL (seconds, optional)';
+        ttlInput.min = '0';
+        ttlInput.style.width = '180px';
+
         var addBtn = document.createElement('button');
         addBtn.className = 'btn btn-primary btn-sm';
         addBtn.setAttribute('data-action', 'addRecordToScope');
@@ -243,6 +250,7 @@
         form.appendChild(typeSelect);
         form.appendChild(nameInput);
         form.appendChild(valueInput);
+        form.appendChild(ttlInput);
         form.appendChild(addBtn);
         form.appendChild(cancelBtn);
 
@@ -258,6 +266,8 @@
         var recordType = document.getElementById('recordTypeSelect').value;
         var recordName = document.getElementById('recordNameInput').value.trim();
         var recordValue = document.getElementById('recordValueInput').value.trim();
+        var ttlEl = document.getElementById('recordTtlInput');
+        var ttl = ttlEl ? parseInt(ttlEl.value, 10) : 0;
 
         if (!recordName || !recordValue) {
             NS.toast.warning('Record name and value are required.');
@@ -267,7 +277,7 @@
         var params = getServerParams();
         if (!params) return;
 
-        NS.api.addZoneScopeRecord({
+        var payload = {
             zoneName: zone,
             scopeName: scopeName,
             recordName: recordName,
@@ -276,7 +286,10 @@
             server: params.server,
             serverId: params.serverId,
             credentialMode: params.credentialMode
-        }).then(function (result) {
+        };
+        if (ttl > 0) payload.ttl = ttl;
+
+        NS.api.addZoneScopeRecord(payload).then(function (result) {
             if (result.success) {
                 NS.toast.success(recordType + ' record added to scope "' + scopeName + '".');
                 var form = document.getElementById('addRecordInlineForm');
