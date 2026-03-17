@@ -1588,3 +1588,243 @@
 .wizard-nav .btn:first-child {
     margin-right: auto;
 }
+
+/* ── Zone Management ───────────────────────────────────── */
+
+.zone-management-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: var(--sp-4);
+    min-height: 500px;
+}
+
+.zone-list-panel {
+    border-right: 1px solid var(--border-default);
+    padding-right: var(--sp-4);
+    overflow-y: auto;
+    max-height: 700px;
+}
+
+.zone-list-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-3);
+}
+
+.zone-list-toolbar h3 {
+    margin: 0;
+}
+
+.zone-list-search {
+    width: 100%;
+    margin-bottom: var(--sp-3);
+    padding: var(--sp-2);
+    background: var(--surface-100);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-base);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+}
+
+.zone-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+}
+
+.zone-list-item {
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-base);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out);
+    border: 1px solid transparent;
+}
+
+.zone-list-item:hover {
+    background: var(--surface-200);
+}
+
+.zone-list-item.active {
+    background: var(--surface-300);
+    border-color: var(--accent);
+}
+
+.zone-list-item-name {
+    font-weight: 600;
+    font-size: var(--text-sm);
+    margin-bottom: 2px;
+    word-break: break-all;
+}
+
+.zone-list-item-meta {
+    display: flex;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+}
+
+.zone-list-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--sp-6);
+    font-size: var(--text-sm);
+}
+
+.zone-detail-panel {
+    overflow-y: auto;
+    max-height: 700px;
+}
+
+.zone-detail-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+    flex-wrap: wrap;
+}
+
+.zone-detail-header h3 {
+    margin: 0;
+}
+
+.zone-detail-badges {
+    display: flex;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+}
+
+/* Records toolbar */
+
+.zone-records-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+    flex-wrap: wrap;
+}
+
+.zone-records-toolbar select {
+    max-width: 140px;
+}
+
+.zone-record-search {
+    flex: 1;
+    min-width: 120px;
+    max-width: 240px;
+    padding: var(--sp-2);
+    background: var(--surface-100);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-base);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+}
+
+/* Records table */
+
+.zone-records-table {
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-base);
+    overflow: hidden;
+}
+
+.zone-record-header {
+    display: flex;
+    background: var(--surface-200);
+    font-weight: 600;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+    padding: var(--sp-2) var(--sp-3);
+}
+
+.zone-record-row {
+    display: flex;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-default);
+    align-items: center;
+    font-size: var(--text-sm);
+    transition: background var(--duration-fast);
+}
+
+.zone-record-row:nth-child(even) {
+    background: var(--surface-50, rgba(255,255,255,0.02));
+}
+
+.zone-record-row:hover {
+    background: var(--surface-200);
+}
+
+.zone-record-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: var(--sp-2);
+}
+
+.zr-name   { flex: 0 0 20%; }
+.zr-type   { flex: 0 0 10%; }
+.zr-ttl    { flex: 0 0 8%; }
+.zr-data   { flex: 1 1 auto; min-width: 0; }
+.zr-actions { flex: 0 0 12%; display: flex; gap: var(--sp-1); justify-content: flex-end; }
+
+.zone-records-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--sp-6);
+    font-size: var(--text-sm);
+}
+
+/* Record type badges */
+
+.record-type-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: var(--r-sm);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--surface-0);
+    letter-spacing: 0.5px;
+}
+
+/* Extra-small button for record actions */
+
+.btn-xs {
+    height: 24px;
+    padding: 0 var(--sp-2);
+    font-size: 11px;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #c82333;
+    border-color: #bd2130;
+}
+
+/* Record type fields in modal */
+
+.record-type-fields {
+    margin-bottom: var(--sp-3);
+}
+
+/* Modal wide variant */
+
+.modal-wide {
+    max-width: 600px;
+}
+
+/* Zone card clickable in server tab */
+
+.zone-card.clickable {
+    cursor: pointer;
+    transition: border-color var(--duration-fast);
+}
+
+.zone-card.clickable:hover {
+    border-color: var(--accent);
+}

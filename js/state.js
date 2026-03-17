@@ -26,6 +26,11 @@
         zoneScopes: {},             // { "zone.com": [{ Name, ZoneName }] }
         recursionScopes: [],        // [{ Name, EnableRecursion, Forwarder }]
 
+        // Zone management
+        selectedZone: null,         // Full zone detail object from getZoneDetails
+        zoneRecords: [],            // Flattened record array from getZoneRecords
+        zoneRecordFilter: { type: '', search: '' },
+
         // Wizard state (Phase 4)
         wizardState: {
             scenarioId: null,

@@ -209,6 +209,48 @@
                     NS.hideCopyPoliciesModal();
                     break;
 
+                // ── Zone Management ─────────────────────────
+                case 'selectZone':
+                    var zoneName = target.getAttribute('data-zone');
+                    if (!zoneName && target.parentElement) {
+                        zoneName = target.parentElement.getAttribute('data-zone');
+                        if (!zoneName && target.parentElement.parentElement) {
+                            zoneName = target.parentElement.parentElement.getAttribute('data-zone');
+                        }
+                    }
+                    if (zoneName) NS.selectZone(zoneName);
+                    break;
+                case 'refreshZoneList':
+                    NS.refreshZoneList();
+                    break;
+                case 'navigateToZone':
+                    var navZone = target.getAttribute('data-zone');
+                    if (!navZone && target.parentElement) {
+                        navZone = target.parentElement.getAttribute('data-zone');
+                    }
+                    if (navZone) NS.navigateToZone(navZone);
+                    break;
+                case 'showAddRecordModal':
+                    NS.showAddRecordModal();
+                    break;
+                case 'showEditRecordModal':
+                    var editIdx = target.getAttribute('data-index');
+                    if (editIdx !== null) NS.showEditRecordModal(parseInt(editIdx, 10));
+                    break;
+                case 'deleteZoneRecord':
+                    var delIdx = target.getAttribute('data-index');
+                    if (delIdx !== null) NS.removeZoneRecord(parseInt(delIdx, 10));
+                    break;
+                case 'saveRecordModal':
+                    NS.saveRecordFromModal();
+                    break;
+                case 'cancelRecordModal':
+                    NS.hideRecordModal();
+                    break;
+                case 'saveZoneSettings':
+                    NS.saveZoneSettings();
+                    break;
+
                 // ── Server Management ────────────────────────
                 case 'addServerModal':
                     NS.showAddServerModal();
@@ -274,8 +316,33 @@
                 case 'togglePolicyType':
                     NS.togglePolicyType();
                     break;
+                case 'filterZoneRecords':
+                    NS.filterZoneRecords();
+                    break;
+                case 'toggleRecordTypeFields':
+                    NS.toggleRecordTypeFields();
+                    break;
+                case 'filterZoneList':
+                    NS.filterZoneList();
+                    break;
                 case 'loadZoneScopesForZone':
                     NS.loadZoneScopesForSelected();
+                    break;
+                default:
+                    break;
+            }
+        });
+
+        // ── Input handlers for live filtering ─────────────────
+        document.addEventListener('input', function (e) {
+            var target = e.target;
+            var action = target.getAttribute('data-action');
+            switch (action) {
+                case 'filterZoneList':
+                    NS.filterZoneList();
+                    break;
+                case 'filterZoneRecords':
+                    NS.filterZoneRecords();
                     break;
                 default:
                     break;
@@ -336,6 +403,15 @@
             modal.addEventListener('click', function (e) {
                 if (e.target === modal) {
                     NS.hideServerModal();
+                }
+            });
+        }
+
+        var recordModal = document.getElementById('recordModal');
+        if (recordModal) {
+            recordModal.addEventListener('click', function (e) {
+                if (e.target === recordModal) {
+                    NS.hideRecordModal();
                 }
             });
         }

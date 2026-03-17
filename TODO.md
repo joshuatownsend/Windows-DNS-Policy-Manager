@@ -20,3 +20,15 @@ The Primary-Secondary wizard generates correct PowerShell commands but can't exe
 ## Wizard Processing Order Management
 
 Several wizards now generate multiple policies with specific processing orders. Consider adding a visual processing order editor that shows the policy evaluation chain and lets users reorder policies.
+
+## Zone Management Enhancements
+- Zone creation (`Add-DnsServerPrimaryZone`, `Add-DnsServerSecondaryZone`) — add "Create Zone" button in Zones tab
+- Zone deletion (`Remove-DnsServerZone`) — add delete option with confirmation
+- Zone type conversion (`ConvertTo-DnsServerPrimaryZone` / `ConvertTo-DnsServerSecondaryZone`)
+- DNSSEC management (signing, key rollover, trust anchor distribution)
+- Record pagination for very large zones (>1000 records) — server-side paging or virtual scroll
+- Zone aging/scavenging settings (`Set-DnsServerZoneAging`)
+- Bulk record import/export (CSV/zone file format)
+
+## Other
+- Call Windows Server Best Practices Analyzer for DNS role and report results through the app. Schedule this to run regularly.

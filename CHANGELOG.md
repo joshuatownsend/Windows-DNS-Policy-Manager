@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Zones tab** — New dedicated tab (8th, between DNS Objects and Policies) with two-panel layout: zone list sidebar + zone detail panel. Browse all zones, view zone settings, and manage DNS resource records.
+- **Zone record management (CRUD)** — Full create, read, update, delete for A, AAAA, CNAME, MX, SRV, TXT, NS, and PTR records. SOA records are read-only. Type-sensitive modal form with validation.
+- **Zone settings editor** — View and edit Dynamic Update and Replication Scope settings for primary/AD-integrated zones.
+- **Zone record filtering** — Filter records by type (dropdown) and search by hostname/data (text input) with live filtering.
+- **Clickable zone cards** — Zone cards in the Server tab now navigate to the Zones tab and select that zone.
+- **Bridge endpoints for zone management** — 6 new handlers: `GET /api/zones/{name}` (details), `GET /api/zones/{name}/records` (list records), `POST /api/zones/{name}/records` (add), `PUT /api/zones/{name}/records` (update via remove+add with rollback), `DELETE /api/zones/{name}/records` (remove), `PUT /api/zones/{name}/settings` (edit zone settings).
+- **DELETE request body support** — API client now sends request body for DELETE methods (needed for record deletion).
+
+
 - **ServerInterfaceIP criteria type** — New criteria type for query resolution and recursion policies, separate from ServerInterface (zone transfer). Used in MS Scenarios 5, 6, and 7.
 - **Record TTL support** — Zone scope records can now be created with a custom TTL (Time-To-Live) in seconds. The bridge passes `-TimeToLive` to `Add-DnsServerResourceRecord`. Recommended for cloud offload (Scenario 4) and load balancing (Scenario 8).
 - **Default zone scope fallback records** — Geo-location wizard now includes a "Default / Fallback IP" field that generates `Add-DnsServerResourceRecord` commands for the default zone scope, ensuring clients from unmatched regions still receive a response (MS Scenario 1).

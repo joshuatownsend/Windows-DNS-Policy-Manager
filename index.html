@@ -54,6 +54,14 @@
                                 tabindex="-1">DNS Objects</button>
                         <button class="tab-button"
                                 role="tab"
+                                id="tab-zones"
+                                data-action="showTab"
+                                data-tab="zones"
+                                aria-selected="false"
+                                aria-controls="zonesTab"
+                                tabindex="-1">Zones</button>
+                        <button class="tab-button"
+                                role="tab"
                                 id="tab-policies"
                                 data-action="showTab"
                                 data-tab="policies"
@@ -223,6 +231,114 @@
                                     <button class="btn btn-primary btn-sm" data-action="addRecursionScope">Add Scope</button>
                                 </div>
                                 <button class="btn btn-secondary btn-sm" data-action="refreshRecursionScopes" style="margin-top: 8px;">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Tab: Zones ────────────────────────────── -->
+                    <div class="tab-content"
+                         id="zonesTab"
+                         role="tabpanel"
+                         aria-labelledby="tab-zones"
+                         aria-hidden="true">
+
+                        <div class="zone-management-layout">
+                            <!-- Zone list sidebar -->
+                            <div class="zone-list-panel">
+                                <div class="zone-list-toolbar">
+                                    <h3>Zones</h3>
+                                    <button class="btn btn-secondary btn-xs" data-action="refreshZoneList">Refresh</button>
+                                </div>
+                                <input type="text" id="zoneListFilter" class="zone-list-search"
+                                       placeholder="Filter zones... (*, ?, /regex/)" data-action="filterZoneList">
+                                <div id="zoneListItems" class="zone-list-items" role="list" aria-label="DNS zones">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Zone detail panel -->
+                            <div class="zone-detail-panel" id="zoneDetailPanel" style="display: none;">
+                                <!-- Zone header -->
+                                <div class="zone-detail-header">
+                                    <h3 id="zoneDetailName">—</h3>
+                                    <div id="zoneDetailBadges" class="zone-detail-badges"></div>
+                                </div>
+
+                                <!-- Zone Settings -->
+                                <div class="dns-objects-section">
+                                    <div class="dns-objects-header" data-action="toggleObjectSection" data-section="zoneSettingsSection">
+                                        <h4>Zone Settings</h4>
+                                        <span class="collapse-indicator">&#x25BC;</span>
+                                    </div>
+                                    <div class="dns-objects-body" id="zoneSettingsSection">
+                                        <div class="server-info-grid" id="zoneSettingsGrid">
+                                            <!-- Populated by JS -->
+                                        </div>
+                                        <div id="zoneSettingsForm" style="display: none; margin-top: 12px;">
+                                            <h5>Edit Settings</h5>
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="zoneSettingsDynUpdate">Dynamic Update</label>
+                                                    <select id="zoneSettingsDynUpdate">
+                                                        <option value="None">None</option>
+                                                        <option value="Secure">Secure Only</option>
+                                                        <option value="NonsecureAndSecure">Nonsecure and Secure</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="zoneSettingsReplScope">Replication Scope</label>
+                                                    <select id="zoneSettingsReplScope">
+                                                        <option value="">N/A</option>
+                                                        <option value="Domain">Domain</option>
+                                                        <option value="Forest">Forest</option>
+                                                        <option value="Legacy">Legacy</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-primary btn-sm" data-action="saveZoneSettings">Save Settings</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Zone Records -->
+                                <div class="dns-objects-section">
+                                    <div class="dns-objects-header" data-action="toggleObjectSection" data-section="zoneRecordsSection">
+                                        <h4>Resource Records</h4>
+                                        <span class="collapse-indicator">&#x25BC;</span>
+                                    </div>
+                                    <div class="dns-objects-body" id="zoneRecordsSection">
+                                        <div class="zone-records-toolbar">
+                                            <select id="recordTypeFilter" data-action="filterZoneRecords">
+                                                <option value="">All Types</option>
+                                                <option value="A">A</option>
+                                                <option value="AAAA">AAAA</option>
+                                                <option value="CNAME">CNAME</option>
+                                                <option value="MX">MX</option>
+                                                <option value="SRV">SRV</option>
+                                                <option value="TXT">TXT</option>
+                                                <option value="NS">NS</option>
+                                                <option value="PTR">PTR</option>
+                                                <option value="SOA">SOA</option>
+                                            </select>
+                                            <input type="text" id="recordSearchFilter" placeholder="Search... (*, ?, /regex/)"
+                                                   data-action="filterZoneRecords" class="zone-record-search">
+                                            <span id="zoneRecordCount" class="zone-count"></span>
+                                            <button class="btn btn-primary btn-sm" data-action="showAddRecordModal">Add Record</button>
+                                        </div>
+                                        <div class="zone-records-table">
+                                            <div class="zone-record-header">
+                                                <div class="zone-record-cell zr-name">Name</div>
+                                                <div class="zone-record-cell zr-type">Type</div>
+                                                <div class="zone-record-cell zr-ttl">TTL</div>
+                                                <div class="zone-record-cell zr-data">Data</div>
+                                                <div class="zone-record-cell zr-actions">Actions</div>
+                                            </div>
+                                            <div id="zoneRecordsBody">
+                                                <!-- Rendered by JS -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -578,6 +694,113 @@
         </div>
     </div>
 
+    <!-- Record Modal -->
+    <div class="modal-backdrop" id="recordModal" style="display: none;">
+        <div class="modal-dialog modal-wide">
+            <h3 id="recordModalTitle">Add Record</h3>
+            <input type="hidden" id="recordModalMode" value="add">
+            <input type="hidden" id="recordModalOrigIndex" value="">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="recordModalName">Hostname *</label>
+                    <input type="text" id="recordModalName" placeholder="e.g., www, mail, @">
+                </div>
+                <div class="form-group">
+                    <label for="recordModalType">Record Type</label>
+                    <select id="recordModalType" data-action="toggleRecordTypeFields">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                        <option value="CNAME">CNAME</option>
+                        <option value="MX">MX</option>
+                        <option value="SRV">SRV</option>
+                        <option value="TXT">TXT</option>
+                        <option value="NS">NS</option>
+                        <option value="PTR">PTR</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="recordModalTTL">TTL (seconds)</label>
+                    <input type="number" id="recordModalTTL" value="3600" min="0">
+                </div>
+            </div>
+            <!-- Type-specific fields -->
+            <div class="record-type-fields" id="recordFields-A">
+                <div class="form-group">
+                    <label for="recordFieldIPv4">IPv4 Address *</label>
+                    <input type="text" id="recordFieldIPv4" placeholder="e.g., 192.168.1.1">
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-AAAA" style="display:none;">
+                <div class="form-group">
+                    <label for="recordFieldIPv6">IPv6 Address *</label>
+                    <input type="text" id="recordFieldIPv6" placeholder="e.g., 2001:db8::1">
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-CNAME" style="display:none;">
+                <div class="form-group">
+                    <label for="recordFieldAlias">Host Name Alias *</label>
+                    <input type="text" id="recordFieldAlias" placeholder="e.g., server1.contoso.com">
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-MX" style="display:none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="recordFieldMX">Mail Exchange *</label>
+                        <input type="text" id="recordFieldMX" placeholder="e.g., mail.contoso.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="recordFieldMXPref">Preference</label>
+                        <input type="number" id="recordFieldMXPref" value="10" min="0">
+                    </div>
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-SRV" style="display:none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="recordFieldSRVTarget">Target Domain *</label>
+                        <input type="text" id="recordFieldSRVTarget" placeholder="e.g., sipserver.contoso.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="recordFieldSRVPort">Port *</label>
+                        <input type="number" id="recordFieldSRVPort" placeholder="5061" min="1" max="65535">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="recordFieldSRVPriority">Priority</label>
+                        <input type="number" id="recordFieldSRVPriority" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="recordFieldSRVWeight">Weight</label>
+                        <input type="number" id="recordFieldSRVWeight" value="0" min="0">
+                    </div>
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-TXT" style="display:none;">
+                <div class="form-group">
+                    <label for="recordFieldTXT">Text *</label>
+                    <textarea id="recordFieldTXT" rows="3" placeholder="e.g., v=spf1 include:_spf.google.com ~all"></textarea>
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-NS" style="display:none;">
+                <div class="form-group">
+                    <label for="recordFieldNS">Name Server *</label>
+                    <input type="text" id="recordFieldNS" placeholder="e.g., ns1.contoso.com">
+                </div>
+            </div>
+            <div class="record-type-fields" id="recordFields-PTR" style="display:none;">
+                <div class="form-group">
+                    <label for="recordFieldPTR">PTR Domain Name *</label>
+                    <input type="text" id="recordFieldPTR" placeholder="e.g., server1.contoso.com">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" data-action="saveRecordModal">Save</button>
+                <button class="btn btn-secondary" data-action="cancelRecordModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- JS (dependency order: state first, then utils, UI, services, features, app last) -->
     <script src="js/state.js"></script>
     <script src="js/utils/download.js"></script>
@@ -592,6 +815,7 @@
     <script src="js/features/subnets.js"></script>
     <script src="js/features/zonescopes.js"></script>
     <script src="js/features/recursionscopes.js"></script>
+    <script src="js/features/zones.js"></script>
     <script src="js/features/policy.js"></script>
     <script src="js/features/backup.js"></script>
     <script src="js/features/blocklist.js"></script>

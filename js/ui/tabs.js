@@ -54,6 +54,9 @@
             if (NS.loadRecursionScopes) NS.loadRecursionScopes();
             if (NS.populateZoneScopeZoneSelect) NS.populateZoneScopeZoneSelect();
         }
+        if (tabName === 'zones') {
+            if (NS.renderZoneList) NS.renderZoneList();
+        }
         if (tabName === 'wizards') {
             if (NS.showWizardGrid) NS.showWizardGrid();
         }

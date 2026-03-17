@@ -817,6 +817,584 @@ function Handle-AddZoneScopeRecord {
     }
 }
 
+# ── Zone Detail & Record Handlers ────────────────────────────────────────────
+
+function Handle-GetZoneDetails {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $zone = Get-DnsServerZone -Name $ZoneName @params -ErrorAction Stop |
+            Select-Object ZoneName, ZoneType, IsDsIntegrated, IsReverseLookupZone,
+                IsSigned, DynamicUpdate, ReplicationScope, DirectoryPartitionName,
+                ZoneFile, Notify, SecureSecondaries, MasterServers, IsAutoCreated
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            zone    = $zone
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-GetZoneRecords {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
+    $typeFilter = Get-QueryParam -Request $Request -Name 'type'
+    $nameFilter = Get-QueryParam -Request $Request -Name 'name'
+
+    try {
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
+        }
+
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $params.Keys) { $splatParams[$key] = $params[$key] }
+
+        if ($typeFilter) {
+            $splatParams['RRType'] = $typeFilter
+        }
+        if ($nameFilter) {
+            $splatParams['Name'] = $nameFilter
+        }
+
+        $rawRecords = @(Get-DnsServerResourceRecord @splatParams -ErrorAction Stop)
+
+        $records = @($rawRecords | ForEach-Object {
+            $rec = $_
+            $data = ''
+            $dataObj = @{}
+            switch ($rec.RecordType) {
+                'A' {
+                    $data = $rec.RecordData.IPv4Address.IPAddressToString
+                    $dataObj = @{ IPv4Address = $data }
+                }
+                'AAAA' {
+                    $data = $rec.RecordData.IPv6Address.IPAddressToString
+                    $dataObj = @{ IPv6Address = $data }
+                }
+                'CNAME' {
+                    $data = $rec.RecordData.HostNameAlias
+                    $dataObj = @{ HostNameAlias = $data }
+                }
+                'MX' {
+                    $data = "$($rec.RecordData.MailExchange) (preference $($rec.RecordData.Preference))"
+                    $dataObj = @{ MailExchange = $rec.RecordData.MailExchange; Preference = $rec.RecordData.Preference }
+                }
+                'SRV' {
+                    $data = "$($rec.RecordData.DomainName) :$($rec.RecordData.Port) p=$($rec.RecordData.Priority) w=$($rec.RecordData.Weight)"
+                    $dataObj = @{
+                        DomainName = $rec.RecordData.DomainName
+                        Port = $rec.RecordData.Port
+                        Priority = $rec.RecordData.Priority
+                        Weight = $rec.RecordData.Weight
+                    }
+                }
+                'TXT' {
+                    $data = ($rec.RecordData.DescriptiveText -join '; ')
+                    $dataObj = @{ DescriptiveText = $rec.RecordData.DescriptiveText }
+                }
+                'NS' {
+                    $data = $rec.RecordData.NameServer
+                    $dataObj = @{ NameServer = $data }
+                }
+                'PTR' {
+                    $data = $rec.RecordData.PtrDomainName
+                    $dataObj = @{ PtrDomainName = $data }
+                }
+                'SOA' {
+                    $data = "Primary=$($rec.RecordData.PrimaryServer) Admin=$($rec.RecordData.ResponsiblePerson) Serial=$($rec.RecordData.SerialNumber)"
+                    $dataObj = @{
+                        PrimaryServer = $rec.RecordData.PrimaryServer
+                        ResponsiblePerson = $rec.RecordData.ResponsiblePerson
+                        SerialNumber = $rec.RecordData.SerialNumber
+                        RefreshInterval = $rec.RecordData.RefreshInterval.TotalSeconds
+                        RetryDelay = $rec.RecordData.RetryDelay.TotalSeconds
+                        ExpireLimit = $rec.RecordData.ExpireLimit.TotalSeconds
+                        MinimumTimeToLive = $rec.RecordData.MinimumTimeToLive.TotalSeconds
+                    }
+                }
+                default {
+                    $data = $rec.RecordData.ToString()
+                    $dataObj = @{}
+                }
+            }
+
+            $ttlSeconds = 0
+            if ($rec.TimeToLive) {
+                $ttlSeconds = [int]$rec.TimeToLive.TotalSeconds
+            }
+
+            @{
+                HostName   = $rec.HostName
+                RecordType = [string]$rec.RecordType
+                TTL        = $ttlSeconds
+                Timestamp  = if ($rec.Timestamp) { $rec.Timestamp.ToString('o') } else { $null }
+                Data       = $data
+                RecordData = $dataObj
+            }
+        })
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            records = $records
+            count   = $records.Count
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-AddZoneRecord {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.zoneName -or -not $Body.recordName -or -not $Body.recordType) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'zoneName, recordName, and recordType are required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{
+            ZoneName = $Body.zoneName
+            Name     = $Body.recordName
+        }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) { $splatParams[$key] = $credParams[$key] }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        $rd = $Body.recordData
+
+        switch ($Body.recordType) {
+            'A' {
+                $splatParams['A'] = $true
+                $splatParams['IPv4Address'] = $rd.ipv4Address
+            }
+            'AAAA' {
+                $splatParams['AAAA'] = $true
+                $splatParams['IPv6Address'] = $rd.ipv6Address
+            }
+            'CNAME' {
+                $splatParams['CName'] = $true
+                $splatParams['HostNameAlias'] = $rd.hostNameAlias
+            }
+            'MX' {
+                $splatParams['MX'] = $true
+                $splatParams['MailExchange'] = $rd.mailExchange
+                $splatParams['Preference'] = [int]$rd.preference
+            }
+            'SRV' {
+                $splatParams['Srv'] = $true
+                $splatParams['DomainName'] = $rd.domainName
+                $splatParams['Priority'] = [int]$rd.priority
+                $splatParams['Weight'] = [int]$rd.weight
+                $splatParams['Port'] = [int]$rd.port
+            }
+            'TXT' {
+                $splatParams['Txt'] = $true
+                $splatParams['DescriptiveText'] = $rd.descriptiveText
+            }
+            'NS' {
+                $splatParams['NS'] = $true
+                $splatParams['NameServer'] = $rd.nameServer
+            }
+            'PTR' {
+                $splatParams['Ptr'] = $true
+                $splatParams['PtrDomainName'] = $rd.ptrDomainName
+            }
+            default {
+                Send-Response -Response $Response -Body @{
+                    success = $false
+                    error   = "Unsupported record type: $($Body.recordType)"
+                } -StatusCode 400
+                return
+            }
+        }
+
+        if ($Body.ttl -and [int]$Body.ttl -gt 0) {
+            $splatParams['TimeToLive'] = [System.TimeSpan]::FromSeconds([int]$Body.ttl)
+        }
+
+        Add-DnsServerResourceRecord @splatParams -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-RemoveZoneRecord {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body,
+        [string]$ZoneName
+    )
+
+    try {
+        if (-not $Body -or -not $Body.recordName -or -not $Body.recordType) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'recordName and recordType are required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $fetchParams = @{ ZoneName = $ZoneName; RRType = $Body.recordType; Name = $Body.recordName }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) { $fetchParams[$key] = $credParams[$key] }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $fetchParams['ComputerName'] = $serverHost
+        }
+
+        $existing = @(Get-DnsServerResourceRecord @fetchParams -ErrorAction Stop)
+
+        # Match the specific record by data
+        $rd = $Body.recordData
+        $target = $null
+        foreach ($rec in $existing) {
+            $match = $false
+            switch ($Body.recordType) {
+                'A'     { $match = ($rec.RecordData.IPv4Address.IPAddressToString -eq $rd.IPv4Address) }
+                'AAAA'  { $match = ($rec.RecordData.IPv6Address.IPAddressToString -eq $rd.IPv6Address) }
+                'CNAME' { $match = ($rec.RecordData.HostNameAlias -eq $rd.HostNameAlias) }
+                'MX'    { $match = ($rec.RecordData.MailExchange -eq $rd.MailExchange -and $rec.RecordData.Preference -eq [int]$rd.Preference) }
+                'SRV'   { $match = ($rec.RecordData.DomainName -eq $rd.DomainName -and $rec.RecordData.Port -eq [int]$rd.Port) }
+                'TXT'   { $match = (($rec.RecordData.DescriptiveText -join '; ') -eq ($rd.DescriptiveText -join '; ')) }
+                'NS'    { $match = ($rec.RecordData.NameServer -eq $rd.NameServer) }
+                'PTR'   { $match = ($rec.RecordData.PtrDomainName -eq $rd.PtrDomainName) }
+            }
+            if ($match) { $target = $rec; break }
+        }
+
+        if (-not $target) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Record not found matching the specified data'
+            } -StatusCode 404
+            return
+        }
+
+        $removeParams = @{ ZoneName = $ZoneName; InputObject = $target; Force = $true }
+        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
+        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+
+        Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-UpdateZoneRecord {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body,
+        [string]$ZoneName
+    )
+
+    try {
+        if (-not $Body -or -not $Body.recordName -or -not $Body.recordType) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'recordName and recordType are required'
+            } -StatusCode 400
+            return
+        }
+
+        # Step 1: Delete old record
+        $deleteBody = @{
+            recordName     = $Body.recordName
+            recordType     = $Body.recordType
+            recordData     = $Body.oldRecordData
+            server         = if ($Body.server) { $Body.server } else { 'localhost' }
+            serverId       = if ($Body.serverId) { $Body.serverId } else { $null }
+            credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        }
+        # Reuse internal logic — build delete params manually
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $fetchParams = @{ ZoneName = $ZoneName; RRType = $Body.recordType; Name = $Body.recordName }
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) { $fetchParams[$key] = $credParams[$key] }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $fetchParams['ComputerName'] = $serverHost
+        }
+
+        $existing = @(Get-DnsServerResourceRecord @fetchParams -ErrorAction Stop)
+
+        $oldRd = $Body.oldRecordData
+        $oldTarget = $null
+        foreach ($rec in $existing) {
+            $match = $false
+            switch ($Body.recordType) {
+                'A'     { $match = ($rec.RecordData.IPv4Address.IPAddressToString -eq $oldRd.IPv4Address) }
+                'AAAA'  { $match = ($rec.RecordData.IPv6Address.IPAddressToString -eq $oldRd.IPv6Address) }
+                'CNAME' { $match = ($rec.RecordData.HostNameAlias -eq $oldRd.HostNameAlias) }
+                'MX'    { $match = ($rec.RecordData.MailExchange -eq $oldRd.MailExchange -and $rec.RecordData.Preference -eq [int]$oldRd.Preference) }
+                'SRV'   { $match = ($rec.RecordData.DomainName -eq $oldRd.DomainName -and $rec.RecordData.Port -eq [int]$oldRd.Port) }
+                'TXT'   { $match = (($rec.RecordData.DescriptiveText -join '; ') -eq ($oldRd.DescriptiveText -join '; ')) }
+                'NS'    { $match = ($rec.RecordData.NameServer -eq $oldRd.NameServer) }
+                'PTR'   { $match = ($rec.RecordData.PtrDomainName -eq $oldRd.PtrDomainName) }
+            }
+            if ($match) { $oldTarget = $rec; break }
+        }
+
+        if (-not $oldTarget) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Original record not found for update'
+            } -StatusCode 404
+            return
+        }
+
+        # Remove old record
+        $removeParams = @{ ZoneName = $ZoneName; InputObject = $oldTarget; Force = $true }
+        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
+        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+
+        Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
+
+        # Step 2: Add new record
+        $addParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
+        if ($fetchParams.ContainsKey('ComputerName')) { $addParams['ComputerName'] = $fetchParams['ComputerName'] }
+        if ($fetchParams.ContainsKey('Credential'))   { $addParams['Credential'] = $fetchParams['Credential'] }
+
+        $newRd = $Body.newRecordData
+
+        try {
+            switch ($Body.recordType) {
+                'A' {
+                    $addParams['A'] = $true
+                    $addParams['IPv4Address'] = $newRd.ipv4Address
+                }
+                'AAAA' {
+                    $addParams['AAAA'] = $true
+                    $addParams['IPv6Address'] = $newRd.ipv6Address
+                }
+                'CNAME' {
+                    $addParams['CName'] = $true
+                    $addParams['HostNameAlias'] = $newRd.hostNameAlias
+                }
+                'MX' {
+                    $addParams['MX'] = $true
+                    $addParams['MailExchange'] = $newRd.mailExchange
+                    $addParams['Preference'] = [int]$newRd.preference
+                }
+                'SRV' {
+                    $addParams['Srv'] = $true
+                    $addParams['DomainName'] = $newRd.domainName
+                    $addParams['Priority'] = [int]$newRd.priority
+                    $addParams['Weight'] = [int]$newRd.weight
+                    $addParams['Port'] = [int]$newRd.port
+                }
+                'TXT' {
+                    $addParams['Txt'] = $true
+                    $addParams['DescriptiveText'] = $newRd.descriptiveText
+                }
+                'NS' {
+                    $addParams['NS'] = $true
+                    $addParams['NameServer'] = $newRd.nameServer
+                }
+                'PTR' {
+                    $addParams['Ptr'] = $true
+                    $addParams['PtrDomainName'] = $newRd.ptrDomainName
+                }
+            }
+
+            if ($Body.newTtl -and [int]$Body.newTtl -gt 0) {
+                $addParams['TimeToLive'] = [System.TimeSpan]::FromSeconds([int]$Body.newTtl)
+            }
+
+            Add-DnsServerResourceRecord @addParams -ErrorAction Stop
+
+            Send-Response -Response $Response -Body @{
+                success = $true
+            }
+        } catch {
+            # Rollback: re-add old record
+            Write-Log "Update failed, rolling back: $($_.Exception.Message)" 'WARN'
+            try {
+                $rollbackParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
+                if ($fetchParams.ContainsKey('ComputerName')) { $rollbackParams['ComputerName'] = $fetchParams['ComputerName'] }
+                if ($fetchParams.ContainsKey('Credential'))   { $rollbackParams['Credential'] = $fetchParams['Credential'] }
+
+                switch ($Body.recordType) {
+                    'A' {
+                        $rollbackParams['A'] = $true
+                        $rollbackParams['IPv4Address'] = $oldRd.IPv4Address
+                    }
+                    'AAAA' {
+                        $rollbackParams['AAAA'] = $true
+                        $rollbackParams['IPv6Address'] = $oldRd.IPv6Address
+                    }
+                    'CNAME' {
+                        $rollbackParams['CName'] = $true
+                        $rollbackParams['HostNameAlias'] = $oldRd.HostNameAlias
+                    }
+                    'MX' {
+                        $rollbackParams['MX'] = $true
+                        $rollbackParams['MailExchange'] = $oldRd.MailExchange
+                        $rollbackParams['Preference'] = [int]$oldRd.Preference
+                    }
+                    'SRV' {
+                        $rollbackParams['Srv'] = $true
+                        $rollbackParams['DomainName'] = $oldRd.DomainName
+                        $rollbackParams['Priority'] = [int]$oldRd.Priority
+                        $rollbackParams['Weight'] = [int]$oldRd.Weight
+                        $rollbackParams['Port'] = [int]$oldRd.Port
+                    }
+                    'TXT' {
+                        $rollbackParams['Txt'] = $true
+                        $rollbackParams['DescriptiveText'] = $oldRd.DescriptiveText
+                    }
+                    'NS' {
+                        $rollbackParams['NS'] = $true
+                        $rollbackParams['NameServer'] = $oldRd.NameServer
+                    }
+                    'PTR' {
+                        $rollbackParams['Ptr'] = $true
+                        $rollbackParams['PtrDomainName'] = $oldRd.PtrDomainName
+                    }
+                }
+
+                if ($oldTarget.TimeToLive) {
+                    $rollbackParams['TimeToLive'] = $oldTarget.TimeToLive
+                }
+
+                Add-DnsServerResourceRecord @rollbackParams -ErrorAction Stop
+                Write-Log "Rollback successful" 'INFO'
+            } catch {
+                Write-Log "Rollback also failed: $($_.Exception.Message)" 'ERROR'
+            }
+
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = "Update failed: $($_.Exception.Message)"
+            } -StatusCode 500
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-SetZoneSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body,
+        [string]$ZoneName
+    )
+
+    try {
+        if (-not $Body) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Request body is required'
+            } -StatusCode 400
+            return
+        }
+
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        $splatParams = @{ Name = $ZoneName }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) { $splatParams[$key] = $credParams[$key] }
+        } elseif ($serverHost -ne 'localhost' -and $serverHost -ne $env:COMPUTERNAME) {
+            $splatParams['ComputerName'] = $serverHost
+        }
+
+        if ($Body.dynamicUpdate) {
+            $splatParams['DynamicUpdate'] = $Body.dynamicUpdate
+        }
+        if ($Body.replicationScope) {
+            $splatParams['ReplicationScope'] = $Body.replicationScope
+        }
+
+        Set-DnsServerPrimaryZone @splatParams -ErrorAction Stop
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
 # ── Recursion Scope Handlers ─────────────────────────────────────────────────
 
 function Handle-GetRecursionScopes {
@@ -1771,6 +2349,47 @@ function Route-Request {
                 if ($method -eq 'POST') {
                     $body = Read-RequestBody -Request $request
                     Handle-Connect -Response $response -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            # ── Zone Records & Settings ─────────────────────
+            '^/api/zones/([^/]+)/records$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                switch ($method) {
+                    'GET' {
+                        Handle-GetZoneRecords -Response $response -Request $request -ZoneName $zn
+                    }
+                    'POST' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-AddZoneRecord -Response $response -Body $body
+                    }
+                    'PUT' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-UpdateZoneRecord -Response $response -Body $body -ZoneName $zn
+                    }
+                    'DELETE' {
+                        $body = Read-RequestBody -Request $request
+                        Handle-RemoveZoneRecord -Response $response -Body $body -ZoneName $zn
+                    }
+                    default {
+                        Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                    }
+                }
+            }
+            '^/api/zones/([^/]+)/settings$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'PUT') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-SetZoneSettings -Response $response -Body $body -ZoneName $zn
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/zones/([^/]+)$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'GET') {
+                    Handle-GetZoneDetails -Response $response -Request $request -ZoneName $zn
                 } else {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
                 }

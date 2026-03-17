@@ -95,8 +95,11 @@
 
         zones.forEach(function (z) {
             var card = document.createElement('div');
-            card.className = 'zone-card';
+            card.className = 'zone-card clickable';
             card.setAttribute('role', 'listitem');
+            card.setAttribute('data-action', 'navigateToZone');
+            card.setAttribute('data-zone', z.ZoneName);
+            card.style.cursor = 'pointer';
 
             var nameEl = document.createElement('div');
             nameEl.className = 'zone-card-name';

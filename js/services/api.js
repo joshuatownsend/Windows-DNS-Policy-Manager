@@ -23,7 +23,7 @@
             headers: { 'Content-Type': 'application/json' }
         };
 
-        if (body && (method === 'POST' || method === 'PUT')) {
+        if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
             opts.body = JSON.stringify(body);
         }
 
@@ -283,6 +283,45 @@
             sourceServerId: sourceServerId || null,
             sourceCredentialMode: sourceCredentialMode || 'currentUser'
         });
+    };
+
+    // ── Zone Details & Records ──────────────────────────────
+
+    api.getZoneDetails = function (zoneName, server, serverId, credentialMode) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/zones/' + encodeURIComponent(zoneName) + qs);
+    };
+
+    api.getZoneRecords = function (zoneName, server, serverId, credentialMode, type, name) {
+        var params = [];
+        if (server) params.push('server=' + encodeURIComponent(server));
+        if (serverId) params.push('serverId=' + encodeURIComponent(serverId));
+        if (credentialMode) params.push('credentialMode=' + encodeURIComponent(credentialMode));
+        if (type) params.push('type=' + encodeURIComponent(type));
+        if (name) params.push('name=' + encodeURIComponent(name));
+        var qs = params.length ? '?' + params.join('&') : '';
+        return request('GET', '/api/zones/' + encodeURIComponent(zoneName) + '/records' + qs);
+    };
+
+    api.addZoneRecord = function (zoneName, data) {
+        data.zoneName = zoneName;
+        return request('POST', '/api/zones/' + encodeURIComponent(zoneName) + '/records', data);
+    };
+
+    api.removeZoneRecord = function (zoneName, data) {
+        return request('DELETE', '/api/zones/' + encodeURIComponent(zoneName) + '/records', data);
+    };
+
+    api.updateZoneRecord = function (zoneName, data) {
+        return request('PUT', '/api/zones/' + encodeURIComponent(zoneName) + '/records', data);
+    };
+
+    api.setZoneSettings = function (zoneName, data) {
+        return request('PUT', '/api/zones/' + encodeURIComponent(zoneName) + '/settings', data);
     };
 
     // ── Health Check Polling ────────────────────────────────
