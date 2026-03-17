@@ -6,6 +6,19 @@
     var state = NS.state;
 
     /**
+     * Resolve a data-server-id from a click target (walks up to 3 levels).
+     */
+    function getServerId(target) {
+        var el = target;
+        for (var i = 0; i < 3 && el; i++) {
+            var id = el.getAttribute('data-server-id');
+            if (id) return id;
+            el = el.parentElement;
+        }
+        return null;
+    }
+
+    /**
      * Wire all event listeners using event delegation.
      */
     function bindEvents() {
@@ -35,9 +48,6 @@
                     break;
                 case 'loadPolicies':
                     NS.loadPolicies();
-                    break;
-                case 'testConnection':
-                    NS.testConnection();
                     break;
                 case 'addCriteria':
                     NS.addCriteria();
@@ -78,6 +88,37 @@
                 case 'triggerFileSelect':
                     document.getElementById('blocklistFile').click();
                     break;
+
+                // ── Server Management ────────────────────────
+                case 'addServerModal':
+                    NS.showAddServerModal();
+                    break;
+                case 'editServer':
+                    NS.showEditServerModal(getServerId(target));
+                    break;
+                case 'removeServer':
+                    e.stopPropagation();
+                    var removeId = getServerId(target);
+                    if (removeId && confirm('Remove this server?')) {
+                        NS.removeServer(removeId);
+                    }
+                    break;
+                case 'testServer':
+                    e.stopPropagation();
+                    NS.testServer(getServerId(target));
+                    break;
+                case 'testAllServers':
+                    NS.testAllServers();
+                    break;
+                case 'saveServerModal':
+                    NS.saveServerFromModal();
+                    break;
+                case 'cancelServerModal':
+                    NS.hideServerModal();
+                    break;
+                case 'selectActiveServer':
+                    NS.setActiveServer(getServerId(target));
+                    break;
                 default:
                     break;
             }
@@ -89,9 +130,6 @@
             var action = target.getAttribute('data-action');
 
             switch (action) {
-                case 'toggleCredentialFields':
-                    NS.toggleCredentialFields();
-                    break;
                 case 'toggleScopeConfig':
                     NS.toggleScopeConfig();
                     break;
@@ -106,6 +144,12 @@
                     break;
                 case 'toggleExecutionMode':
                     NS.toggleExecutionMode(target);
+                    break;
+                case 'toggleModalCredentialFields':
+                    NS.toggleModalCredentialFields();
+                    break;
+                case 'toggleAllTargetServers':
+                    NS.toggleAllTargetServers();
                     break;
                 default:
                     break;
@@ -159,6 +203,16 @@
                 }
             });
         }
+
+        // ── Close modal on backdrop click ────────────────────
+        var modal = document.getElementById('serverModal');
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) {
+                    NS.hideServerModal();
+                }
+            });
+        }
     }
 
     /**
@@ -193,16 +247,46 @@
      * Initialize the application.
      */
     function init() {
+        // Load server registry from localStorage first
+        if (NS.loadServers) {
+            NS.loadServers();
+        }
+
         bindEvents();
+
+        // Render server list from localStorage (works offline)
+        if (NS.renderServerList) {
+            NS.renderServerList();
+        }
+
+        // Populate target server checkboxes
+        if (NS.populateTargetServers) {
+            NS.populateTargetServers();
+        }
+
+        // Populate backup server select
+        if (NS.populateBackupServerSelect) {
+            NS.populateBackupServerSelect();
+        }
 
         // Check bridge availability, then set up accordingly
         if (NS.api) {
             NS.api.checkBridge().then(function (result) {
                 if (result.success && result.status === 'ok') {
-                    // Bridge is available - start health monitoring, skip samples
+                    // Bridge is available - start health monitoring
                     NS.api.startHealthCheck();
+
+                    // Re-render server list (status indicators may update)
+                    if (NS.renderServerList) {
+                        NS.renderServerList();
+                    }
+
+                    // Verify stored credentials
+                    if (NS.verifyServerCredentials) {
+                        NS.verifyServerCredentials();
+                    }
                 } else {
-                    // Bridge offline - load samples as usual
+                    // Bridge offline - load samples
                     NS.loadSamplePolicies();
                     NS.updatePoliciesEmptyState();
                 }
@@ -222,6 +306,7 @@
             '# This tool helps you create Windows DNS Query Resolution Policies\n' +
             '# \n' +
             '# Features:\n' +
+            '# - Multi-server management with secure credentials\n' +
             '# - Visual policy builder with form validation\n' +
             '# - Support for all DNS policy criteria types\n' +
             '# - PowerShell command generation\n' +
@@ -229,7 +314,7 @@
             '# - Policy backup and restore capabilities\n' +
             '# - Blocklist import from TXT/CSV files\n' +
             '# \n' +
-            '# Use the Server tab to configure your DNS server connection.\n' +
+            '# Use the Server tab to manage your DNS servers.\n' +
             '# Use the Create Policy tab to build DNS policies.\n' +
             '# Use Backup & Import to backup existing policies or import blocklists.';
         output.textContent = '';

@@ -5,17 +5,6 @@
     var NS = window.DNSPolicyManager = window.DNSPolicyManager || {};
     var state = NS.state;
 
-    NS.toggleCredentialFields = function toggleCredentialFields() {
-        var connectionType = document.getElementById('connectionType').value;
-        var credentialFields = document.getElementById('credentialFields');
-
-        if (connectionType === 'remote') {
-            credentialFields.style.display = 'block';
-        } else {
-            credentialFields.style.display = 'none';
-        }
-    };
-
     /**
      * Populate the zone name datalist for autocomplete.
      */
@@ -35,7 +24,7 @@
     /**
      * Render server info cards in the Server tab.
      */
-    function renderServerInfo(serverName, result) {
+    NS.renderServerInfo = function renderServerInfo(serverName, result, serverObj) {
         var panel = document.getElementById('serverInfoPanel');
         var grid = document.getElementById('serverInfoGrid');
         if (!panel || !grid) return;
@@ -44,15 +33,21 @@
             grid.removeChild(grid.firstChild);
         }
 
+        var credModeLabels = {
+            currentUser: 'Current User (Kerberos/NTLM)',
+            savedCredential: 'Saved Credential (DPAPI)',
+            session: 'Session Only'
+        };
+
         var items = [
             { label: 'Server', value: serverName },
-            { label: 'Hostname', value: result.hostname || serverName },
-            { label: 'Zones', value: (result.zoneCount || 0) + ' zones found' },
-            { label: 'Connection', value: state.connection.type === 'remote' ? 'Remote (Credentials)' : 'Local (Current User)' },
+            { label: 'Hostname', value: (result && result.hostname) || (serverObj && serverObj.hostname) || serverName },
+            { label: 'Zones', value: ((result && result.zoneCount) || (serverObj && serverObj.zoneCount) || 0) + ' zones found' },
+            { label: 'Authentication', value: serverObj ? (credModeLabels[serverObj.credentialMode] || serverObj.credentialMode) : 'Current User' },
             { label: 'Status', value: 'Connected' }
         ];
 
-        if (result.dnsModuleAvailable !== undefined) {
+        if (result && result.dnsModuleAvailable !== undefined) {
             items.push({ label: 'DNS Module', value: result.dnsModuleAvailable ? 'Available' : 'Not Found' });
         }
 
@@ -74,7 +69,7 @@
         });
 
         panel.style.display = 'block';
-    }
+    };
 
     /**
      * Render DNS zones as cards in the Server tab.
@@ -135,10 +130,13 @@
         });
 
         panel.style.display = 'block';
+
+        // Also update zone datalist
+        populateZoneDatalist(zones);
     };
 
     /**
-     * Refresh zones from the server.
+     * Refresh zones from the active server.
      */
     NS.refreshZones = function refreshZones() {
         if (!state.bridgeConnected || !NS.api) {
@@ -146,12 +144,17 @@
             return;
         }
 
-        var server = document.getElementById('dnsServer').value || 'localhost';
-        NS.api.listZones(server).then(function (result) {
+        var server = NS.getActiveServer ? NS.getActiveServer() : null;
+        if (!server) {
+            NS.toast.info('No active server selected.');
+            return;
+        }
+
+        NS.api.connectServer(server).then(function (result) {
             if (result.success && result.zones) {
                 state.serverZones = result.zones;
+                server.zoneCount = result.zoneCount || result.zones.length;
                 NS.renderZones(result.zones);
-                populateZoneDatalist(result.zones);
                 NS.toast.success('Zones refreshed.');
             } else {
                 NS.toast.error('Failed to load zones: ' + (result.error || 'Unknown error'));
@@ -160,101 +163,29 @@
     };
 
     /**
-     * Load zones from the DNS server and populate the datalist.
+     * Load zones from a specific server.
      */
-    NS.loadZones = function loadZones(server) {
+    NS.loadZones = function loadZones(serverId) {
         if (!state.bridgeConnected || !NS.api) return;
 
-        NS.api.listZones(server).then(function (result) {
+        var server;
+        if (serverId && NS.getActiveServer) {
+            for (var i = 0; i < state.servers.length; i++) {
+                if (state.servers[i].id === serverId) {
+                    server = state.servers[i];
+                    break;
+                }
+            }
+        }
+
+        if (!server) return;
+
+        NS.api.connectServer(server).then(function (result) {
             if (result.success && result.zones) {
                 state.serverZones = result.zones;
                 populateZoneDatalist(result.zones);
                 NS.renderZones(result.zones);
             }
         });
-    };
-
-    NS.testConnection = function testConnection() {
-        var dnsServer = document.getElementById('dnsServer').value;
-        var statusElement = document.getElementById('connectionStatus');
-
-        if (!dnsServer) {
-            statusElement.textContent = 'Please enter a DNS server';
-            statusElement.className = 'connection-status error';
-            return;
-        }
-
-        statusElement.textContent = 'Testing connection...';
-        statusElement.className = 'connection-status testing';
-
-        // If bridge is connected, use real connection test
-        if (state.bridgeConnected && NS.api) {
-            var connectionType = document.getElementById('connectionType').value;
-            var btn = document.querySelector('[data-action="testConnection"]');
-            if (btn) btn.classList.add('loading');
-
-            NS.api.connect(dnsServer, connectionType).then(function (result) {
-                if (btn) btn.classList.remove('loading');
-
-                if (result.success) {
-                    state.connection.server = dnsServer;
-                    state.connection.type = connectionType;
-                    state.connection.status = 'connected';
-
-                    statusElement.textContent = 'Connected to ' + result.serverName + ' (' + result.zoneCount + ' zones)';
-                    statusElement.className = 'connection-status success';
-
-                    // Store zones and populate UI
-                    if (result.zones) {
-                        state.serverZones = result.zones;
-                        populateZoneDatalist(result.zones);
-                        NS.renderZones(result.zones);
-                    }
-
-                    // Show server info panel
-                    renderServerInfo(dnsServer, result);
-
-                    NS.toast.success('Connected to DNS server: ' + result.serverName);
-                } else {
-                    state.connection.status = 'error';
-                    statusElement.textContent = result.error || 'Connection failed';
-                    statusElement.className = 'connection-status error';
-
-                    // Hide info panels on failure
-                    var infoPanel = document.getElementById('serverInfoPanel');
-                    var zonesPanel = document.getElementById('serverZonesPanel');
-                    if (infoPanel) infoPanel.style.display = 'none';
-                    if (zonesPanel) zonesPanel.style.display = 'none';
-
-                    NS.toast.error(result.error || 'Connection failed');
-                }
-            });
-            return;
-        }
-
-        // Fallback: generate test commands (original behavior)
-        setTimeout(function () {
-            statusElement.textContent = 'Connection test commands generated \u2014 check PowerShell tab';
-            statusElement.className = 'connection-status success';
-
-            var output = document.getElementById('powershellOutput');
-            var serverParam = dnsServer !== 'localhost' ? ' -ComputerName "' + dnsServer + '"' : '';
-
-            var pre = document.createElement('pre');
-            pre.textContent =
-                '# DNS Server Connection Test\n' +
-                '# Target Server: ' + dnsServer + '\n\n' +
-                '# Run this command to test the connection:\n' +
-                'Test-NetConnection -ComputerName "' + dnsServer + '" -Port 53\n\n' +
-                '# To check DNS Server service:\n' +
-                'Get-Service DNS' + serverParam + '\n\n' +
-                '# To verify DNS cmdlets are available:\n' +
-                'Get-Command *DnsServer* | Select-Object Name, ModuleName';
-            output.textContent = '';
-            output.appendChild(pre);
-
-            NS.showTab('powershell');
-            NS.toast.success('Connection test commands generated.');
-        }, 1500);
     };
 })();

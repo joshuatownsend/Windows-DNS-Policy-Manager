@@ -103,6 +103,262 @@ function Test-DnsModule {
     }
 }
 
+# ── Credential Infrastructure ────────────────────────────────────────────────
+
+$script:SessionCredentials = @{}
+$script:CredStorePath = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\credentials'
+
+function Resolve-ServerCredential {
+    param(
+        [string]$ServerId,
+        [string]$CredentialMode,
+        [string]$Hostname
+    )
+
+    $params = @{}
+    if ($Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME) {
+        $params['ComputerName'] = $Hostname
+    }
+
+    switch ($CredentialMode) {
+        'savedCredential' {
+            $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
+            if (-not (Test-Path $credFile)) {
+                throw "No saved credential found for server '$ServerId'"
+            }
+            $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+            $securePass = $credData.Password | ConvertTo-SecureString
+            $cred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
+            $params['Credential'] = $cred
+        }
+        'session' {
+            if ($script:SessionCredentials.ContainsKey($ServerId)) {
+                $params['Credential'] = $script:SessionCredentials[$ServerId]
+            }
+        }
+        # 'currentUser' — no credential needed, Kerberos/NTLM handles auth
+    }
+
+    return $params
+}
+
+function Handle-StoreCredential {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.serverId -or -not $Body.username -or -not $Body.password) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'serverId, username, and password are required'
+            } -StatusCode 400
+            return
+        }
+
+        # Ensure credential store directory exists
+        if (-not (Test-Path $script:CredStorePath)) {
+            $null = New-Item -Path $script:CredStorePath -ItemType Directory -Force
+        }
+
+        # Encrypt password via DPAPI
+        $secureString = ConvertTo-SecureString $Body.password -AsPlainText -Force
+        $encrypted = $secureString | ConvertFrom-SecureString
+
+        $credData = @{
+            Username = $Body.username
+            Password = $encrypted
+        }
+
+        $credFile = Join-Path $script:CredStorePath "$($Body.serverId).cred"
+        $credData | ConvertTo-Json | Set-Content -Path $credFile -Encoding UTF8 -Force
+
+        Write-Log "Credential stored for server '$($Body.serverId)'"
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-CheckCredential {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+
+    if (-not $serverId) {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = 'serverId query parameter is required'
+        } -StatusCode 400
+        return
+    }
+
+    $credFile = Join-Path $script:CredStorePath "$serverId.cred"
+    $exists = Test-Path $credFile
+
+    Send-Response -Response $Response -Body @{
+        success = $true
+        exists  = $exists
+    }
+}
+
+function Handle-DeleteCredential {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [string]$ServerId
+    )
+
+    $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
+    if (Test-Path $credFile) {
+        Remove-Item $credFile -Force
+        Write-Log "Credential deleted for server '$ServerId'"
+    }
+
+    # Also remove from session cache
+    if ($script:SessionCredentials.ContainsKey($ServerId)) {
+        $script:SessionCredentials.Remove($ServerId)
+    }
+
+    Send-Response -Response $Response -Body @{
+        success = $true
+    }
+}
+
+function Handle-SessionCredential {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.serverId -or -not $Body.username -or -not $Body.password) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'serverId, username, and password are required'
+            } -StatusCode 400
+            return
+        }
+
+        $securePass = ConvertTo-SecureString $Body.password -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential($Body.username, $securePass)
+        $script:SessionCredentials[$Body.serverId] = $cred
+
+        Write-Log "Session credential cached for server '$($Body.serverId)'"
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Handle-PolicyMulti {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+
+    try {
+        if (-not $Body -or -not $Body.policy -or -not $Body.servers) {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'policy and servers are required'
+            } -StatusCode 400
+            return
+        }
+
+        $policy = $Body.policy
+        $results = @()
+
+        foreach ($srv in $Body.servers) {
+            $serverResult = @{
+                serverId = $srv.id
+                hostname = $srv.hostname
+                name     = $srv.name
+            }
+
+            try {
+                $credParams = Resolve-ServerCredential -ServerId $srv.id -CredentialMode $srv.credentialMode -Hostname $srv.hostname
+
+                $splatParams = @{
+                    Name     = $policy.name
+                    Action   = if ($policy.action) { $policy.action } else { 'IGNORE' }
+                    PassThru = $true
+                }
+
+                # Merge credential/ComputerName params
+                foreach ($key in $credParams.Keys) {
+                    $splatParams[$key] = $credParams[$key]
+                }
+
+                if ($policy.zoneName) {
+                    $splatParams['ZoneName'] = $policy.zoneName
+                }
+
+                if ($policy.processingOrder) {
+                    $splatParams['ProcessingOrder'] = [int]$policy.processingOrder
+                }
+
+                if ($policy.criteria) {
+                    foreach ($c in $policy.criteria) {
+                        $paramName = $c.type
+                        $value = "$($c.operator),$($c.values -join ',')"
+                        $splatParams[$paramName] = $value
+                    }
+                }
+
+                if ($policy.criteria -and $policy.criteria.Count -gt 1 -and $policy.condition) {
+                    $splatParams['Condition'] = $policy.condition
+                }
+
+                if ($policy.action -eq 'ALLOW' -and $policy.scopes) {
+                    $scopeStr = ($policy.scopes | ForEach-Object { "$($_.name),$($_.weight)" }) -join ';'
+                    $splatParams['ZoneScope'] = $scopeStr
+                }
+
+                $result = Add-DnsServerQueryResolutionPolicy @splatParams -ErrorAction Stop
+
+                $serverResult['success'] = $true
+                $serverResult['policy'] = @{
+                    Name            = $result.Name
+                    Action          = $result.Action
+                    ProcessingOrder = $result.ProcessingOrder
+                }
+            } catch {
+                $serverResult['success'] = $false
+                $serverResult['error'] = $_.Exception.Message
+            }
+
+            $results += $serverResult
+        }
+
+        $allSuccess = ($results | Where-Object { -not $_.success }).Count -eq 0
+
+        Send-Response -Response $Response -Body @{
+            success = $allSuccess
+            results = $results
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{
+            success = $false
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
 # ── Route Handlers ───────────────────────────────────────────────────────────
 
 function Handle-Health {
@@ -124,12 +380,18 @@ function Handle-Connect {
         [psobject]$Body
     )
     $server = if ($Body -and $Body.server) { $Body.server } else { 'localhost' }
+    $serverId = if ($Body -and $Body.serverId) { $Body.serverId } else { $null }
+    $credentialMode = if ($Body -and $Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
 
     try {
-        # Test DNS server reachability by querying zones
-        $params = @{}
-        if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
-            $params['ComputerName'] = $server
+        # Resolve credentials if serverId provided
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
         }
 
         $zones = @(Get-DnsServerZone @params -ErrorAction Stop |
@@ -157,11 +419,17 @@ function Handle-GetZones {
         [System.Net.HttpListenerRequest]$Request
     )
     $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
 
     try {
-        $params = @{}
-        if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
-            $params['ComputerName'] = $server
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
         }
 
         $zones = @(Get-DnsServerZone @params -ErrorAction Stop |
@@ -187,11 +455,17 @@ function Handle-GetPolicies {
     )
     $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
     $zone   = Get-QueryParam -Request $Request -Name 'zone'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
 
     try {
-        $params = @{}
-        if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
-            $params['ComputerName'] = $server
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
         }
 
         $policies = @()
@@ -254,7 +528,17 @@ function Handle-CreatePolicy {
             $splatParams['ZoneName'] = $Body.zoneName
         }
 
-        if ($Body.server -and $Body.server -ne 'localhost' -and $Body.server -ne $env:COMPUTERNAME) {
+        # Resolve credentials if serverId provided
+        $serverId = if ($Body.serverId) { $Body.serverId } else { $null }
+        $credentialMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+        $serverHost = if ($Body.server) { $Body.server } else { 'localhost' }
+
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $serverHost
+            foreach ($key in $credParams.Keys) {
+                $splatParams[$key] = $credParams[$key]
+            }
+        } elseif ($Body.server -and $Body.server -ne 'localhost' -and $Body.server -ne $env:COMPUTERNAME) {
             $splatParams['ComputerName'] = $Body.server
         }
 
@@ -308,6 +592,8 @@ function Handle-DeletePolicy {
     )
     $server = Get-QueryParam -Request $Request -Name 'server' -Default 'localhost'
     $zone   = Get-QueryParam -Request $Request -Name 'zone'
+    $serverId = Get-QueryParam -Request $Request -Name 'serverId'
+    $credentialMode = Get-QueryParam -Request $Request -Name 'credentialMode' -Default 'currentUser'
 
     try {
         $params = @{
@@ -319,7 +605,12 @@ function Handle-DeletePolicy {
             $params['ZoneName'] = $zone
         }
 
-        if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+        if ($serverId) {
+            $credParams = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+            foreach ($key in $credParams.Keys) {
+                $params[$key] = $credParams[$key]
+            }
+        } elseif ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
             $params['ComputerName'] = $server
         }
 
@@ -345,11 +636,17 @@ function Handle-Backup {
     $server       = if ($Body -and $Body.server) { $Body.server } else { 'localhost' }
     $includeZone  = if ($Body -and $null -ne $Body.includeZone) { $Body.includeZone } else { $true }
     $includeServer = if ($Body -and $null -ne $Body.includeServer) { $Body.includeServer } else { $true }
+    $serverId = if ($Body -and $Body.serverId) { $Body.serverId } else { $null }
+    $credentialMode = if ($Body -and $Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
 
     try {
-        $params = @{}
-        if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
-            $params['ComputerName'] = $server
+        if ($serverId) {
+            $params = Resolve-ServerCredential -ServerId $serverId -CredentialMode $credentialMode -Hostname $server
+        } else {
+            $params = @{}
+            if ($server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+                $params['ComputerName'] = $server
+            }
         }
 
         $allPolicies = @()
@@ -491,6 +788,41 @@ function Route-Request {
             }
             '^/api/zones$' {
                 Handle-GetZones -Response $response -Request $request
+            }
+            '^/api/credentials/store$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-StoreCredential -Response $response -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/credentials/check$' {
+                Handle-CheckCredential -Response $response -Request $request
+            }
+            '^/api/credentials/session$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-SessionCredential -Response $response -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/credentials/([^/]+)$' {
+                if ($method -eq 'DELETE') {
+                    $serverId = [System.Uri]::UnescapeDataString($Matches[1])
+                    Handle-DeleteCredential -Response $response -ServerId $serverId
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            '^/api/policies/multi$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-PolicyMulti -Response $response -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
             }
             '^/api/policies$' {
                 switch ($method) {

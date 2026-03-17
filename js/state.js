@@ -13,13 +13,11 @@
 
         // Bridge state
         bridgeConnected: false,
-        connection: {
-            server: 'localhost',
-            type: 'local',
-            status: 'disconnected',
-            lastChecked: null,
-            serverInfo: null
-        },
+
+        // Multi-server registry
+        servers: [],            // [{ id, name, hostname, credentialMode, hasCredential, status, lastChecked, serverInfo, zoneCount }]
+        activeServerId: null,   // Currently selected server in Server tab
+
         serverZones: [],
         executionMode: 'generate'   // 'generate' | 'execute'
     };

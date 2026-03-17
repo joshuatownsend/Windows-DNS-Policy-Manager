@@ -170,7 +170,8 @@
             var policyName = document.getElementById('blocklistPolicyName').value || 'ImportedBlocklist';
             var action = document.getElementById('blocklistAction').value;
             var maxDomains = parseInt(document.getElementById('maxDomains').value, 10) || 100;
-            var dnsServer = document.getElementById('dnsServer').value || 'localhost';
+            var activeServer = NS.getActiveServer ? NS.getActiveServer() : null;
+            var dnsServer = activeServer ? activeServer.hostname : 'localhost';
 
             var chunks = [];
             for (var i = 0; i < domains.length; i += maxDomains) {

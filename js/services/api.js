@@ -111,16 +111,54 @@
         return request('POST', '/api/execute', { command: command });
     };
 
+    // ── Credential Management ────────────────────────────────
+
+    api.storeCredential = function (serverId, username, password) {
+        return request('POST', '/api/credentials/store', {
+            serverId: serverId,
+            username: username,
+            password: password
+        });
+    };
+
+    api.checkCredential = function (serverId) {
+        return request('GET', '/api/credentials/check?serverId=' + encodeURIComponent(serverId));
+    };
+
+    api.deleteCredential = function (serverId) {
+        return request('DELETE', '/api/credentials/' + encodeURIComponent(serverId));
+    };
+
+    api.storeSessionCredential = function (serverId, username, password) {
+        return request('POST', '/api/credentials/session', {
+            serverId: serverId,
+            username: username,
+            password: password
+        });
+    };
+
+    // ── Multi-Server ─────────────────────────────────────────
+
+    api.connectServer = function (serverObj) {
+        return request('POST', '/api/connect', {
+            server: serverObj.hostname,
+            serverId: serverObj.id,
+            credentialMode: serverObj.credentialMode
+        });
+    };
+
+    api.addPolicyMulti = function (policy, servers) {
+        return request('POST', '/api/policies/multi', {
+            policy: policy,
+            servers: servers
+        });
+    };
+
     // ── Health Check Polling ────────────────────────────────
 
     function updateBridgeStatus(connected, info) {
         var wasConnected = state.bridgeConnected;
         state.bridgeConnected = connected;
-
-        if (info) {
-            state.connection.serverInfo = info;
-        }
-        state.connection.lastChecked = new Date().toISOString();
 
         // Update UI indicator
         var dot = document.getElementById('bridgeStatusDot');

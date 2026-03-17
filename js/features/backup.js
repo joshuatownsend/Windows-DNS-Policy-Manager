@@ -5,8 +5,28 @@
     var NS = window.DNSPolicyManager = window.DNSPolicyManager || {};
     var state = NS.state;
 
+    /**
+     * Resolve server info from the backup server select.
+     * Returns { hostname, id, credentialMode }.
+     */
+    function getBackupServer() {
+        var select = document.getElementById('backupServer');
+        if (!select) return { hostname: 'localhost', id: null, credentialMode: 'currentUser' };
+
+        var serverId = select.value;
+        for (var i = 0; i < state.servers.length; i++) {
+            if (state.servers[i].id === serverId) {
+                return state.servers[i];
+            }
+        }
+
+        // Fallback
+        return { hostname: 'localhost', id: null, credentialMode: 'currentUser' };
+    }
+
     NS.generateBackupScript = function generateBackupScript() {
-        var backupServer = document.getElementById('backupServer').value || 'localhost';
+        var server = getBackupServer();
+        var backupServer = server.hostname;
         var backupFormat = document.getElementById('backupFormat').value;
         var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         var serverParam = backupServer !== 'localhost' ? ' -ComputerName "' + backupServer + '"' : '';
@@ -52,14 +72,14 @@
             return;
         }
 
-        var backupServer = document.getElementById('backupServer').value || 'localhost';
+        var server = getBackupServer();
         var includeZone = document.getElementById('includeZonePolicies').checked;
         var includeServer = document.getElementById('includeServerPolicies').checked;
 
         var btn = document.querySelector('[data-action="backupFromServer"]');
         if (btn) btn.classList.add('loading');
 
-        NS.api.backup(backupServer, includeZone, includeServer).then(function (result) {
+        NS.api.backup(server.hostname, includeZone, includeServer).then(function (result) {
             if (btn) btn.classList.remove('loading');
 
             if (result.success && result.backup) {
