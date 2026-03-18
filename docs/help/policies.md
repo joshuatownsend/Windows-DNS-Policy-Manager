@@ -19,6 +19,12 @@ Enter a zone name in the filter input and click **Refresh** to show only policie
 
 Each policy has a toggle switch. Flip it to enable or disable the policy on the server. Disabled policies remain on the server but are not evaluated.
 
+### Reordering Policies
+
+Click **Reorder** to open the processing order editor. Policies are evaluated in order (lowest number first). Use the **up/down arrows** to move policies, then click **Save Order**.
+
+Changed policies show their old and new order numbers (e.g., "2→1"). Only policies that actually changed are updated on the server.
+
 ### Deleting a Policy
 
 Click the **trash icon** on a policy card. A confirmation dialog appears before the policy is removed from the server.

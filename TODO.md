@@ -1,6 +1,8 @@
 # TODO
 
+No high or medium priority items remain. The following are ideas for future consideration:
+
 ## Low Priority
 
-### Wizard Processing Order Editor
-Several wizards generate multiple policies with specific processing orders. Add a visual processing order editor that shows the policy evaluation chain and lets users reorder policies via drag-and-drop.
+### OpenAPI Spec Generation
+Auto-generate an OpenAPI spec from bridge.ps1's route definitions for documentation and client generation.

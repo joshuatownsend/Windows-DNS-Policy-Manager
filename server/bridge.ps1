@@ -1786,6 +1786,10 @@ function Handle-SetPolicyState {
             $params['IsEnabled'] = [string]$Body.isEnabled
         }
 
+        if ($null -ne $Body -and $null -ne $Body.processingOrder) {
+            $params['ProcessingOrder'] = [int]$Body.processingOrder
+        }
+
         if ($zone) {
             $params['ZoneName'] = $zone
         }

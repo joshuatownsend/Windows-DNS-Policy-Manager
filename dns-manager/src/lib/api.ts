@@ -163,12 +163,13 @@ export const api = {
     isEnabled: boolean,
     server?: string,
     zone?: string,
-    policyType?: string
+    policyType?: string,
+    processingOrder?: number
   ) =>
     request(
       "PUT",
       `/api/policies/${encodeURIComponent(name)}/state${qs({ server, zone, type: policyType })}`,
-      { isEnabled }
+      { isEnabled, ...(processingOrder != null ? { processingOrder } : {}) }
     ),
 
   addPolicyMulti: (

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Policy processing order editor** — Reorder dialog on the Policies tab with up/down arrows to rearrange policy evaluation order. Shows before/after order numbers, saves only changed policies. Uses extended `PUT /api/policies/{name}/state` endpoint that now accepts `processingOrder`.
 - **DNS Best Practices Analyzer** — Run the Windows BPA model for the DNS Server role from the Server tab. Results categorized by severity (Error/Warning/Information) with expandable findings showing problem, impact, and resolution. Handles BPA unavailability gracefully.
 - **DNS over HTTPS/TLS (DoH/DoT) panel** — View and configure encryption protocol settings on Windows Server 2025+. Graceful fallback on older server versions with "not available" message.
 - **Record pagination** — Zones with more than 50 records now paginate with Previous/Next controls. Page resets on filter or zone change.
