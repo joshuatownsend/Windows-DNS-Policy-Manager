@@ -1,0 +1,479 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
+  Plus,
+  Settings,
+  ArrowUpDown,
+  Database,
+  Shield,
+  BarChart3,
+  Activity,
+} from "lucide-react";
+
+function getServerParams() {
+  const server = useStore.getState().getActiveServer();
+  if (!server) return {};
+  return { server: server.hostname, serverId: server.id, credentialMode: server.credentialMode };
+}
+
+// ── Section wrapper ──────────────────────────────────────
+
+function ConfigSection({
+  title,
+  icon: Icon,
+  badge,
+  children,
+  onRefresh,
+  loading,
+}: {
+  title: string;
+  icon: React.ElementType;
+  badge?: string;
+  children: React.ReactNode;
+  onRefresh?: () => void;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card className="border-border/50">
+        <CollapsibleTrigger>
+          <CardHeader className="cursor-pointer hover:bg-secondary/30 transition-colors py-3 px-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <Icon className="h-4 w-4 text-cyan" />
+                <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                {badge && <Badge variant="secondary" className="text-xs">{badge}</Badge>}
+              </div>
+              {onRefresh && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 px-4 pb-4">
+            {children}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────
+
+export function ServerConfig() {
+  const bridgeConnected = useStore((s) => s.bridgeConnected);
+  const serverConfig = useStore((s) => s.serverConfig);
+  const setServerConfig = useStore((s) => s.setServerConfig);
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+
+  const setL = (key: string, v: boolean) => setLoading((p) => ({ ...p, [key]: v }));
+
+  const sp = useCallback(() => {
+    const s = useStore.getState().getActiveServer();
+    if (!s) return {};
+    return { server: s.hostname, serverId: s.id, credentialMode: s.credentialMode };
+  }, []);
+
+  // ── Loaders ────────────────────────────────────────────
+
+  const loadSettings = useCallback(async () => {
+    setL("settings", true);
+    const p = sp();
+    const r = await api.getServerSettings(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("settings", (r as Record<string, unknown>).settings);
+    else toast.error("Failed to load settings: " + r.error);
+    setL("settings", false);
+  }, [sp, setServerConfig]);
+
+  const loadForwarders = useCallback(async () => {
+    setL("forwarders", true);
+    const p = sp();
+    const r = await api.getForwarders(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("forwarders", (r as Record<string, unknown>).forwarders);
+    else toast.error("Failed to load forwarders: " + r.error);
+    setL("forwarders", false);
+  }, [sp, setServerConfig]);
+
+  const loadRecursion = useCallback(async () => {
+    setL("recursion", true);
+    const p = sp();
+    const r = await api.getRecursionSettings(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("recursion", (r as Record<string, unknown>).recursion);
+    else toast.error("Failed to load recursion settings: " + r.error);
+    setL("recursion", false);
+  }, [sp, setServerConfig]);
+
+  const loadCache = useCallback(async () => {
+    setL("cache", true);
+    const p = sp();
+    const r = await api.getCache(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("cache", (r as Record<string, unknown>).cache);
+    else toast.error("Failed to load cache: " + r.error);
+    setL("cache", false);
+  }, [sp, setServerConfig]);
+
+  const loadBlocklist = useCallback(async () => {
+    setL("blocklist", true);
+    const p = sp();
+    const r = await api.getBlockList(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("blocklist", (r as Record<string, unknown>).blocklist);
+    else toast.error("Failed to load block list: " + r.error);
+    setL("blocklist", false);
+  }, [sp, setServerConfig]);
+
+  const loadDiagnostics = useCallback(async () => {
+    setL("diagnostics", true);
+    const p = sp();
+    const r = await api.getDiagnostics(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("diagnostics", (r as Record<string, unknown>).diagnostics);
+    else toast.error("Failed to load diagnostics: " + r.error);
+    setL("diagnostics", false);
+  }, [sp, setServerConfig]);
+
+  const loadStatistics = useCallback(async () => {
+    setL("statistics", true);
+    const p = sp();
+    const r = await api.getStatistics(p.server, p.serverId, p.credentialMode);
+    if (r.success) setServerConfig("statistics", (r as Record<string, unknown>).statistics);
+    else toast.error("Failed to load statistics: " + r.error);
+    setL("statistics", false);
+  }, [sp, setServerConfig]);
+
+  if (!bridgeConnected) return null;
+
+  // ── Helpers ────────────────────────────────────────────
+
+  const settings = serverConfig.settings as Record<string, unknown> | null;
+  const forwarders = serverConfig.forwarders as Record<string, unknown> | null;
+  const recursion = serverConfig.recursion as Record<string, unknown> | null;
+  const cache = serverConfig.cache as Record<string, unknown> | null;
+  const blocklist = serverConfig.blocklist as Record<string, unknown> | null;
+  const diagnostics = serverConfig.diagnostics as Record<string, unknown> | null;
+  const statistics = serverConfig.statistics as Record<string, unknown> | null;
+
+  return (
+    <div className="space-y-3">
+      <Separator />
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+        Server Configuration
+      </h3>
+
+      {/* ── General Settings ───────────────────────────── */}
+      <ConfigSection title="General Settings" icon={Settings} onRefresh={loadSettings} loading={loading.settings}>
+        {settings ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {["RoundRobin", "BindSecondaries", "StrictFileParsing", "LocalNetPriority", "WriteAuthorityNS", "NameCheckFlag"].map((key) =>
+              settings[key] !== undefined ? (
+                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                  <span className="text-xs text-muted-foreground">{key}</span>
+                  <Badge variant={settings[key] ? "default" : "secondary"} className="text-xs">
+                    {String(settings[key])}
+                  </Badge>
+                </div>
+              ) : null
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load server settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Forwarders ─────────────────────────────────── */}
+      <ConfigSection
+        title="Forwarders"
+        icon={ArrowUpDown}
+        badge={forwarders?.IPAddress ? String((forwarders.IPAddress as string[]).length) : undefined}
+        onRefresh={loadForwarders}
+        loading={loading.forwarders}
+      >
+        {forwarders ? (
+          <ForwardersPanel forwarders={forwarders} onRefresh={loadForwarders} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load forwarders.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Recursion ──────────────────────────────────── */}
+      <ConfigSection title="Recursion" icon={RefreshCw} onRefresh={loadRecursion} loading={loading.recursion}>
+        {recursion ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {["Enable", "SecureResponse"].map((key) =>
+                recursion[key] !== undefined ? (
+                  <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                    <span className="text-xs text-muted-foreground">{key}</span>
+                    <Badge variant={recursion[key] ? "default" : "secondary"} className="text-xs">
+                      {String(recursion[key])}
+                    </Badge>
+                  </div>
+                ) : null
+              )}
+            </div>
+            {["Timeout", "AdditionalTimeout", "Retries"].map((key) =>
+              recursion[key] !== undefined ? (
+                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                  <span className="text-xs text-muted-foreground">{key}</span>
+                  <span className="text-sm font-mono">{String(recursion[key])}</span>
+                </div>
+              ) : null
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load recursion settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Cache ──────────────────────────────────────── */}
+      <ConfigSection title="Cache" icon={Database} onRefresh={loadCache} loading={loading.cache}>
+        {cache ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(cache).map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                  <span className="text-xs text-muted-foreground">{key}</span>
+                  <span className="text-sm font-mono">{String(val)}</span>
+                </div>
+              ))}
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={async () => {
+                const p = getServerParams();
+                const r = await api.clearCache(p.server, p.serverId, p.credentialMode);
+                if (r.success) toast.success("Cache cleared.");
+                else toast.error("Failed: " + r.error);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Clear Cache
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load cache info.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Global Query Block List ────────────────────── */}
+      <ConfigSection title="Global Query Block List" icon={Shield} onRefresh={loadBlocklist} loading={loading.blocklist}>
+        {blocklist ? (
+          <BlocklistPanel blocklist={blocklist} onRefresh={loadBlocklist} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load block list.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Diagnostics ────────────────────────────────── */}
+      <ConfigSection title="Diagnostics" icon={Activity} onRefresh={loadDiagnostics} loading={loading.diagnostics}>
+        {diagnostics ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {Object.entries(diagnostics)
+              .filter(([, v]) => typeof v === "boolean")
+              .map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                  <span className="text-xs text-muted-foreground truncate mr-2">{key}</span>
+                  <Badge variant={val ? "default" : "secondary"} className="text-xs shrink-0">
+                    {val ? "On" : "Off"}
+                  </Badge>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load diagnostics.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Statistics ─────────────────────────────────── */}
+      <ConfigSection title="Statistics" icon={BarChart3} onRefresh={loadStatistics} loading={loading.statistics}>
+        {statistics ? (
+          <div className="space-y-3">
+            <pre className="text-xs font-mono p-3 bg-background rounded-lg border border-border max-h-64 overflow-auto whitespace-pre-wrap">
+              {JSON.stringify(statistics, null, 2)}
+            </pre>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const p = getServerParams();
+                const r = await api.clearStatistics(p.server, p.serverId, p.credentialMode);
+                if (r.success) { toast.success("Statistics cleared."); loadStatistics(); }
+                else toast.error("Failed: " + r.error);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Clear Statistics
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load statistics.</p>
+        )}
+      </ConfigSection>
+    </div>
+  );
+}
+
+// ── Forwarders Sub-panel ─────────────────────────────────
+
+function ForwardersPanel({
+  forwarders,
+  onRefresh,
+}: {
+  forwarders: Record<string, unknown>;
+  onRefresh: () => void;
+}) {
+  const [newIp, setNewIp] = useState("");
+  const ips = (forwarders.IPAddress as string[]) || [];
+
+  const addForwarder = async () => {
+    if (!newIp.trim()) return;
+    const p = getServerParams();
+    const r = await api.addForwarder(newIp.trim(), p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success("Forwarder added."); setNewIp(""); onRefresh(); }
+    else toast.error("Failed: " + r.error);
+  };
+
+  const removeForwarder = async (ip: string) => {
+    const p = getServerParams();
+    const r = await api.removeForwarder(ip, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success("Forwarder removed."); onRefresh(); }
+    else toast.error("Failed: " + r.error);
+  };
+
+  return (
+    <div className="space-y-3">
+      {ips.length > 0 ? (
+        <div className="space-y-1.5">
+          {ips.map((ip) => (
+            <div key={ip} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+              <span className="font-mono text-sm">{ip}</span>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeForwarder(ip)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No forwarders configured.</p>
+      )}
+      <div className="flex gap-2">
+        <Input
+          placeholder="IP address (e.g., 8.8.8.8)"
+          value={newIp}
+          onChange={(e) => setNewIp(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addForwarder()}
+          className="flex-1"
+        />
+        <Button size="sm" onClick={addForwarder}>
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add
+        </Button>
+      </div>
+      {forwarders.UseRootHint !== undefined && (
+        <div className="flex items-center justify-between p-2 rounded bg-secondary/30">
+          <span className="text-xs text-muted-foreground">Use Root Hints</span>
+          <Badge variant={forwarders.UseRootHint ? "default" : "secondary"} className="text-xs">
+            {String(forwarders.UseRootHint)}
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Block List Sub-panel ─────────────────────────────────
+
+function BlocklistPanel({
+  blocklist,
+  onRefresh,
+}: {
+  blocklist: Record<string, unknown>;
+  onRefresh: () => void;
+}) {
+  const [newDomain, setNewDomain] = useState("");
+  const domains = (blocklist.List as string[]) || [];
+  const enabled = blocklist.Enable as boolean;
+
+  const updateList = async (newList: string[]) => {
+    const p = getServerParams();
+    const r = await api.setBlockList({ list: newList }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success("Block list updated."); onRefresh(); }
+    else toast.error("Failed: " + r.error);
+  };
+
+  const addDomain = () => {
+    if (!newDomain.trim()) return;
+    updateList([...domains, newDomain.trim()]);
+    setNewDomain("");
+  };
+
+  const removeDomain = (domain: string) => {
+    updateList(domains.filter((d) => d !== domain));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between p-2 rounded bg-secondary/30">
+        <span className="text-xs text-muted-foreground">Enabled</span>
+        <Badge variant={enabled ? "default" : "secondary"} className="text-xs">
+          {String(enabled)}
+        </Badge>
+      </div>
+      {domains.length > 0 ? (
+        <div className="space-y-1.5">
+          {domains.map((d) => (
+            <div key={d} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+              <span className="font-mono text-sm">{d}</span>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeDomain(d)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No domains in block list.</p>
+      )}
+      <div className="flex gap-2">
+        <Input
+          placeholder="Domain (e.g., wpad)"
+          value={newDomain}
+          onChange={(e) => setNewDomain(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addDomain()}
+          className="flex-1"
+        />
+        <Button size="sm" onClick={addDomain}>
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}

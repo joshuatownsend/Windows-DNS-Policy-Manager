@@ -1809,6 +1809,318 @@ function Handle-SetPolicyState {
 
 # ── Route Handlers ───────────────────────────────────────────────────────────
 
+# ── Server Configuration Handlers ─────────────────────────────────────────
+
+function Resolve-ServerConfigParams {
+    param([System.Net.HttpListenerRequest]$Request)
+    $qs = $Request.QueryString
+    $server = $qs['server']
+    $serverId = $qs['serverId']
+    $credentialMode = $qs['credentialMode']
+    if ($serverId) {
+        return Resolve-ServerCredential -ServerId $serverId -CredentialMode ($credentialMode ?? 'currentUser') -Hostname $server
+    }
+    $params = @{}
+    if ($server -and $server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
+        $params['ComputerName'] = $server
+    }
+    return $params
+}
+
+function Handle-GetServerSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $settings = Get-DnsServerSetting @p -ErrorAction Stop -All
+        Send-Response -Response $Response -Body @{
+            success  = $true
+            settings = $settings
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetServerSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.RoundRobin) { $splatParams['RoundRobin'] = [bool]$Body.RoundRobin }
+        if ($null -ne $Body.BindSecondaries) { $splatParams['BindSecondaries'] = [bool]$Body.BindSecondaries }
+        if ($null -ne $Body.StrictFileParsing) { $splatParams['StrictFileParsing'] = [bool]$Body.StrictFileParsing }
+        if ($null -ne $Body.LocalNetPriority) { $splatParams['LocalNetPriority'] = [bool]$Body.LocalNetPriority }
+        if ($Body.ListeningIPAddress) { $splatParams['ListeningIPAddress'] = $Body.ListeningIPAddress }
+        Set-DnsServerSetting @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetForwarders {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $forwarders = Get-DnsServerForwarder @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success    = $true
+            forwarders = $forwarders
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-AddForwarder {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ IPAddress = $Body.ipAddress }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Add-DnsServerForwarder @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-RemoveForwarder {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ IPAddress = $Body.ipAddress }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Remove-DnsServerForwarder @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetForwarders {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.ipAddresses) { $splatParams['IPAddress'] = $Body.ipAddresses }
+        if ($null -ne $Body.useRootHint) { $splatParams['UseRootHint'] = [bool]$Body.useRootHint }
+        if ($Body.timeout) { $splatParams['Timeout'] = [int]$Body.timeout }
+        Set-DnsServerForwarder @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetCache {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $cache = Get-DnsServerCache @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success = $true
+            cache   = $cache
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ClearCache {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        Clear-DnsServerCache @p -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetRecursionSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $recursion = Get-DnsServerRecursion @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success   = $true
+            recursion = $recursion
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetRecursionSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.enable) { $splatParams['Enable'] = [bool]$Body.enable }
+        if ($Body.timeout) { $splatParams['Timeout'] = $Body.timeout }
+        if ($null -ne $Body.additionalTimeout) { $splatParams['AdditionalTimeout'] = [int]$Body.additionalTimeout }
+        if ($null -ne $Body.retries) { $splatParams['Retries'] = [int]$Body.retries }
+        if ($null -ne $Body.secureResponse) { $splatParams['SecureResponse'] = [bool]$Body.secureResponse }
+        Set-DnsServerRecursion @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetBlockList {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $blocklist = Get-DnsServerGlobalQueryBlockList @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success   = $true
+            blocklist = $blocklist
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetBlockList {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.list) { $splatParams['List'] = [string[]]$Body.list }
+        if ($null -ne $Body.enable) { $splatParams['Enable'] = [bool]$Body.enable }
+        Set-DnsServerGlobalQueryBlockList @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetDiagnostics {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $diag = Get-DnsServerDiagnostics @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success     = $true
+            diagnostics = $diag
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetDiagnostics {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        # Map common diagnostic toggles
+        $toggles = @('Answers','EventLogLevel','FullPackets','Notifications',
+                      'Queries','QuestionTransactions','ReceivePackets','SendPackets',
+                      'TcpPackets','UdpPackets','UnmatchedResponse','Update','WriteThrough',
+                      'EnableLogFileRollover','UseSystemEventLog','EnableLoggingToFile')
+        foreach ($t in $toggles) {
+            $camel = $t.Substring(0,1).ToLower() + $t.Substring(1)
+            if ($null -ne $Body.$camel) { $splatParams[$t] = [bool]$Body.$camel }
+        }
+        if ($Body.logFilePath) { $splatParams['LogFilePath'] = $Body.logFilePath }
+        if ($Body.maxMBFileSize) { $splatParams['MaxMBFileSize'] = [int]$Body.maxMBFileSize }
+        Set-DnsServerDiagnostics @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetStatistics {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $stats = Get-DnsServerStatistics @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success    = $true
+            statistics = $stats
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ClearStatistics {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        Clear-DnsServerStatistics @p -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+# ── Core Handlers ─────────────────────────────────────────────────────────
+
 function Handle-Health {
     param([System.Net.HttpListenerResponse]$Response)
     $dnsAvailable = Test-DnsModule
@@ -2483,6 +2795,58 @@ function Route-Request {
                     Handle-Execute -Response $response -Body $body
                 } else {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
+            # ── Server Configuration ──────────────────────
+            '^/api/server/settings$' {
+                switch ($method) {
+                    'GET'  { Handle-GetServerSettings -Response $response -Request $request }
+                    'PUT'  { $body = Read-RequestBody -Request $request; Handle-SetServerSettings -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/forwarders$' {
+                switch ($method) {
+                    'GET'    { Handle-GetForwarders -Response $response -Request $request }
+                    'POST'   { $body = Read-RequestBody -Request $request; Handle-AddForwarder -Response $response -Request $request -Body $body }
+                    'PUT'    { $body = Read-RequestBody -Request $request; Handle-SetForwarders -Response $response -Request $request -Body $body }
+                    'DELETE' { $body = Read-RequestBody -Request $request; Handle-RemoveForwarder -Response $response -Request $request -Body $body }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/cache$' {
+                switch ($method) {
+                    'GET'    { Handle-GetCache -Response $response -Request $request }
+                    'DELETE' { Handle-ClearCache -Response $response -Request $request }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/recursion$' {
+                switch ($method) {
+                    'GET' { Handle-GetRecursionSettings -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetRecursionSettings -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/blocklist$' {
+                switch ($method) {
+                    'GET' { Handle-GetBlockList -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetBlockList -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/diagnostics$' {
+                switch ($method) {
+                    'GET' { Handle-GetDiagnostics -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetDiagnostics -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/statistics$' {
+                switch ($method) {
+                    'GET'    { Handle-GetStatistics -Response $response -Request $request }
+                    'DELETE' { Handle-ClearStatistics -Response $response -Request $request }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }
             default {

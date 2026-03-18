@@ -11,6 +11,13 @@ import type {
   WizardState,
   ScenarioId,
   BlocklistEntry,
+  ServerSettings,
+  ForwarderConfig,
+  RecursionConfig,
+  CacheInfo,
+  BlockListConfig,
+  DiagnosticsConfig,
+  ServerStatistics,
 } from "./types";
 
 interface DnsStore {
@@ -35,6 +42,19 @@ interface DnsStore {
   // Server zones (shown on server tab)
   serverZones: Zone[];
   setServerZones: (z: Zone[]) => void;
+
+  // Server configuration
+  serverConfig: {
+    settings: ServerSettings | null;
+    forwarders: ForwarderConfig | null;
+    recursion: RecursionConfig | null;
+    cache: CacheInfo | null;
+    blocklist: BlockListConfig | null;
+    diagnostics: DiagnosticsConfig | null;
+    statistics: ServerStatistics | null;
+  };
+  setServerConfig: (key: string, value: unknown) => void;
+  clearServerConfig: () => void;
 
   // Policies
   policies: Policy[];
@@ -126,6 +146,33 @@ export const useStore = create<DnsStore>()(
       // Server zones
       serverZones: [],
       setServerZones: (z) => set({ serverZones: z }),
+
+      // Server configuration
+      serverConfig: {
+        settings: null,
+        forwarders: null,
+        recursion: null,
+        cache: null,
+        blocklist: null,
+        diagnostics: null,
+        statistics: null,
+      },
+      setServerConfig: (key, value) =>
+        set((st) => ({
+          serverConfig: { ...st.serverConfig, [key]: value },
+        })),
+      clearServerConfig: () =>
+        set({
+          serverConfig: {
+            settings: null,
+            forwarders: null,
+            recursion: null,
+            cache: null,
+            blocklist: null,
+            diagnostics: null,
+            statistics: null,
+          },
+        }),
 
       // Policies
       policies: [],

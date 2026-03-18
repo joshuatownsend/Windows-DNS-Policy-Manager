@@ -167,6 +167,77 @@ export interface WizardState {
   data: Record<string, unknown>;
 }
 
+// ── Server Configuration Types ────────────────────────────
+
+export interface ServerSettings {
+  RoundRobin?: boolean;
+  BindSecondaries?: boolean;
+  StrictFileParsing?: boolean;
+  LocalNetPriority?: boolean;
+  ListeningIPAddress?: string[];
+  AllIPAddress?: string[];
+  Version?: string;
+  [key: string]: unknown;
+}
+
+export interface ForwarderConfig {
+  IPAddress?: string[];
+  UseRootHint?: boolean;
+  Timeout?: number;
+  [key: string]: unknown;
+}
+
+export interface RecursionConfig {
+  Enable?: boolean;
+  Timeout?: string;
+  AdditionalTimeout?: number;
+  Retries?: number;
+  SecureResponse?: boolean;
+  [key: string]: unknown;
+}
+
+export interface CacheInfo {
+  MaxTTL?: string;
+  MaxNegativeTTL?: string;
+  MaxKBSize?: number;
+  EnablePollutionProtection?: boolean;
+  LockingPercent?: number;
+  StoreEmptyAuthenticationResponse?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BlockListConfig {
+  Enable?: boolean;
+  List?: string[];
+  [key: string]: unknown;
+}
+
+export interface DiagnosticsConfig {
+  Queries?: boolean;
+  Answers?: boolean;
+  Notifications?: boolean;
+  Update?: boolean;
+  QuestionTransactions?: boolean;
+  UnmatchedResponse?: boolean;
+  SendPackets?: boolean;
+  ReceivePackets?: boolean;
+  TcpPackets?: boolean;
+  UdpPackets?: boolean;
+  FullPackets?: boolean;
+  WriteThrough?: boolean;
+  EnableLoggingToFile?: boolean;
+  EnableLogFileRollover?: boolean;
+  UseSystemEventLog?: boolean;
+  LogFilePath?: string;
+  MaxMBFileSize?: number;
+  EventLogLevel?: number;
+  [key: string]: unknown;
+}
+
+export interface ServerStatistics {
+  [key: string]: unknown;
+}
+
 // ── API Response Types ────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {

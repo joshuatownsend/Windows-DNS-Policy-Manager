@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Server Configuration Dashboard** — New collapsible panels on the Server tab for viewing and managing server-wide DNS settings:
+  - **General Settings**: Round Robin, Bind Secondaries, Strict File Parsing, Local Net Priority
+  - **Forwarders**: Add/remove upstream DNS forwarders with inline IP entry
+  - **Recursion**: View recursion enable state, timeout, retries, secure response
+  - **Cache**: View cache config, Clear Cache action
+  - **Global Query Block List**: Add/remove blocked domains (wpad, isatap, etc.)
+  - **Diagnostics**: View debug logging toggle states
+  - **Statistics**: View raw server counters, Clear Statistics action
+- 15 new DnsServer cmdlets wrapped (Get/Set-DnsServerSetting, Get/Set/Add/Remove-DnsServerForwarder, Get-DnsServerCache, Clear-DnsServerCache, Get/Set-DnsServerRecursion, Get/Set-DnsServerGlobalQueryBlockList, Get/Set-DnsServerDiagnostics, Get/Clear-DnsServerStatistics)
+- 16 new bridge endpoints under `/api/server/*`
+
 ### Changed
 
 - **BREAKING: Migrated frontend to Next.js + TypeScript + shadcn/ui** — Complete rewrite of the vanilla JS/HTML/CSS frontend (7.3K lines JS, 2.4K CSS, 825 HTML) to a modern React-based architecture. The PowerShell bridge (`server/bridge.ps1`) is unchanged — it remains the REST API contract boundary.

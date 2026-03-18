@@ -333,6 +333,55 @@ export const api = {
       `/api/recursionscopes/${encodeURIComponent(name)}${serverParams(server, serverId, credentialMode)}`
     ),
 
+  // Server Configuration
+  getServerSettings: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/settings" + serverParams(server, serverId, credentialMode)),
+
+  setServerSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
+
+  getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
+
+  addForwarder: (ipAddress: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), { ipAddress }),
+
+  removeForwarder: (ipAddress: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), { ipAddress }),
+
+  setForwarders: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), data),
+
+  getCache: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/cache" + serverParams(server, serverId, credentialMode)),
+
+  clearCache: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", "/api/server/cache" + serverParams(server, serverId, credentialMode)),
+
+  getRecursionSettings: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/recursion" + serverParams(server, serverId, credentialMode)),
+
+  setRecursionSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/recursion" + serverParams(server, serverId, credentialMode), data),
+
+  getBlockList: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/blocklist" + serverParams(server, serverId, credentialMode)),
+
+  setBlockList: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/blocklist" + serverParams(server, serverId, credentialMode), data),
+
+  getDiagnostics: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/diagnostics" + serverParams(server, serverId, credentialMode)),
+
+  setDiagnostics: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/diagnostics" + serverParams(server, serverId, credentialMode), data),
+
+  getStatistics: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/statistics" + serverParams(server, serverId, credentialMode)),
+
+  clearStatistics: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", "/api/server/statistics" + serverParams(server, serverId, credentialMode)),
+
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {

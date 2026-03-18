@@ -49,6 +49,42 @@ When the active server is online, an info panel appears showing:
 - Last connection check time
 - A grid of **zone cards** with badges for zone type (Primary, Secondary), AD integration, DNSSEC signing, and reverse lookup zones
 
+## Server Configuration
+
+Below the server list and zone cards, a **Server Configuration** section provides collapsible panels for viewing and managing server-wide settings. Click the section header to expand it, and click the refresh icon to load data from the server.
+
+### General Settings
+
+Displays server-wide DNS settings such as Round Robin, Bind Secondaries, Strict File Parsing, and Local Net Priority. These are read-only — use the PowerShell tab to modify them.
+
+### Forwarders
+
+Manages upstream DNS forwarders. Queries that the server cannot resolve locally are forwarded to these servers.
+
+- View the current forwarder list with IP addresses
+- **Add** a forwarder by entering an IP and clicking Add
+- **Remove** a forwarder by clicking the trash icon
+
+### Recursion
+
+Shows server recursion settings: whether recursion is enabled, timeout values, retry count, and secure response mode.
+
+### Cache
+
+Displays DNS cache configuration (max TTL, max size, pollution protection). Click **Clear Cache** to flush all cached records from the server.
+
+### Global Query Block List
+
+The block list prevents the DNS server from resolving certain names (by default, `wpad` and `isatap`). You can add or remove domains from this list.
+
+### Diagnostics
+
+Shows DNS debug logging toggles — queries, answers, notifications, send/receive packets, etc. These are read-only in the UI.
+
+### Statistics
+
+Displays raw server performance counters in JSON format. Click **Clear Statistics** to reset counters.
+
 ## Editing a Server
 
 Click the **pencil icon** on a server card to open the edit dialog. You can change the name, hostname, or credential mode.

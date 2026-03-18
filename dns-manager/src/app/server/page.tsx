@@ -42,6 +42,7 @@ import {
   Key,
   User,
 } from "lucide-react";
+import { ServerConfig } from "@/components/server/server-config";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -682,6 +683,9 @@ export default function ServerPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Server Configuration */}
+      <ServerConfig />
 
       {/* Add/Edit Server Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
