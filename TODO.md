@@ -5,16 +5,10 @@
 ### E2E Tests with Playwright
 Add end-to-end tests covering all 9 tabs. Test against a mock bridge or a real DNS server in a CI environment. Priority flows: server connection, zone browsing, record CRUD, policy create/toggle/delete, wizard completion, backup export/import.
 
-### Inline Editing for Server Configuration Panels
-The server config panels (General Settings, Recursion, Diagnostics, EDNS) currently display values as read-only badges. Add inline edit support — click a value to toggle/edit it and save back to the server via the corresponding `Set-*` endpoint.
-
 ### Wizard Execution: Use Typed API Endpoints
 Currently `wizardExecute()` sends each command line to `/api/execute` sequentially. Refactor to call typed API endpoints directly (e.g., `api.createSubnet()`, `api.createZoneScope()`, `api.addPolicy()`). This would provide structured error handling per object type and make rollback on partial failure feasible.
 
 ## Medium Priority
-
-### Policy Copy: Support Zone Transfer and Recursion Policies
-`Handle-CopyPolicies` only copies query resolution policies. Should also support zone transfer policies (`Get-DnsServerZoneTransferPolicy`) with an option to select which types to copy.
 
 ### Wizard Processing Order Editor
 Several wizards generate multiple policies with specific processing orders. Add a visual processing order editor that shows the policy evaluation chain and lets users reorder policies via drag-and-drop.
@@ -25,13 +19,7 @@ Zones with >1000 records may be slow. Add server-side paging or virtual scroll t
 ### Bulk Record Import/Export
 Support importing records from CSV or zone file format, and exporting the current zone's records.
 
-### DNSSEC Help Documentation
-Add a `docs/help/dnssec.md` help document for the new DNSSEC tab and wire it into the help mapping.
-
 ## Low Priority
-
-### CI/CD Pipeline
-GitHub Actions workflow for: TypeScript build check, ESLint, and optionally Playwright E2E tests.
 
 ### OpenAPI Spec Generation
 Auto-generate an OpenAPI spec from bridge.ps1's route definitions for documentation and client generation.
