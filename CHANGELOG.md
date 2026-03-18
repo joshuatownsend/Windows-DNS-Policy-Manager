@@ -6,7 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Added
+### Changed
+
+- **BREAKING: Migrated frontend to Next.js + TypeScript + shadcn/ui** — Complete rewrite of the vanilla JS/HTML/CSS frontend (7.3K lines JS, 2.4K CSS, 825 HTML) to a modern React-based architecture. The PowerShell bridge (`server/bridge.ps1`) is unchanged — it remains the REST API contract boundary.
+  - All 19 JS files replaced with ~25 TypeScript/React components + hooks + typed API client
+  - All 6 CSS files replaced with Tailwind CSS utilities + shadcn/ui component library (dark theme with cyan accent preserved)
+  - Global `window.DNSPolicyManager` namespace + IIFE pattern replaced with ES modules + Zustand store
+  - 90-case event delegation switch in `app.js` replaced with per-component React event handlers
+  - `wizards.js` (2,331 lines) decomposed into scenario definitions, command generator, and React components
+  - 379 `createElement` calls replaced with declarative JSX
+  - Full TypeScript type coverage across all 80+ functions and state properties
+  - File-based routing via Next.js App Router (8 tab routes)
+  - API client proxied through Next.js rewrites (no more direct localhost calls from browser)
+  - Server registry persisted via Zustand `persist` middleware (replaces manual localStorage)
+  - `file://` mode no longer supported — bridge serves frontend via Next.js dev server
+  - Launcher script updated to start both bridge and Next.js dev server
+
+### Added (prior)
+
+
 
 - **Zones tab** — New dedicated tab (8th, between DNS Objects and Policies) with two-panel layout: zone list sidebar + zone detail panel. Browse all zones, view zone settings, and manage DNS resource records.
 - **Zone record management (CRUD)** — Full create, read, update, delete for A, AAAA, CNAME, MX, SRV, TXT, NS, and PTR records. SOA records are read-only. Type-sensitive modal form with validation.

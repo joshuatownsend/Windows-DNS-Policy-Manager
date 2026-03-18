@@ -3,7 +3,7 @@
 .SYNOPSIS
     Launches the DNS Policy Manager bridge and opens the web UI.
 .DESCRIPTION
-    Starts bridge.ps1 in background, waits for health check, then opens index.html.
+    Starts bridge.ps1 in background, waits for health check, then starts the Next.js frontend.
 #>
 
 param(
@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
-$indexFile = Join-Path $scriptDir 'index.html'
+$frontendDir = Join-Path $scriptDir 'dns-manager'
 
 Write-Host ''
 Write-Host '  DNS Policy Manager Launcher' -ForegroundColor Cyan
@@ -26,7 +26,7 @@ try {
     if ($health.status -eq 'ok') {
         Write-Host "  Bridge already running on port $Port" -ForegroundColor Green
         if (-not $NoBrowser) {
-            Start-Process $indexFile
+            Start-Process 'http://localhost:10010'
             Write-Host '  Browser opened.' -ForegroundColor Green
         }
         return
@@ -116,8 +116,18 @@ if ($ready) {
     Write-Host "  Bridge started (PID: $($bridgeJob.Id))" -ForegroundColor Green
     Write-Host "  DNS Module: $(if ($health.dnsModuleAvailable) { 'Available' } else { 'Not Found' })" -ForegroundColor $(if ($health.dnsModuleAvailable) { 'Green' } else { 'Yellow' })
 
+    # Start Next.js frontend
+    if (Test-Path (Join-Path $frontendDir 'node_modules')) {
+        Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
+        $devCmd = "cd '$frontendDir'; npm run dev"
+        Start-Process powershell -ArgumentList "-NoProfile -Command `"$devCmd`"" -WindowStyle Normal
+        Start-Sleep -Milliseconds 2000
+    } else {
+        Write-Host '  Frontend not installed. Run: cd dns-manager && npm install' -ForegroundColor Yellow
+    }
+
     if (-not $NoBrowser) {
-        Start-Process $indexFile
+        Start-Process 'http://localhost:10010'
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
 } else {
