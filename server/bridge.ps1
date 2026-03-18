@@ -2273,6 +2273,236 @@ function Handle-TestDnsServer {
     }
 }
 
+# ── DNSSEC Handlers ───────────────────────────────────────────────────────
+
+function Handle-GetDnssecSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $settings = Get-DnsServerDnsSecZoneSetting @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; settings = $settings }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetDnssecSettings {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.nsecMode) { $splatParams['NSec3OptOut'] = ($Body.nsecMode -eq 'NSec3OptOut') }
+        if ($null -ne $Body.isKeyMasterServer) { $splatParams['IsKeyMasterServer'] = [bool]$Body.isKeyMasterServer }
+        if ($Body.distributeTrustAnchor) { $splatParams['DistributeTrustAnchor'] = $Body.distributeTrustAnchor }
+        Set-DnsServerDnsSecZoneSetting @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetSigningKeys {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $keys = @(Get-DnsServerSigningKey @splatParams -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; keys = $keys }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-AddSigningKey {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.keyType) { $splatParams['Type'] = $Body.keyType }  # KeySigningKey or ZoneSigningKey
+        if ($Body.cryptoAlgorithm) { $splatParams['CryptoAlgorithm'] = $Body.cryptoAlgorithm }
+        if ($Body.keyLength) { $splatParams['KeyLength'] = [int]$Body.keyLength }
+        Add-DnsServerSigningKey @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-RemoveSigningKey {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [string]$KeyId
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName; KeyId = [guid]$KeyId }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Remove-DnsServerSigningKey @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SignZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Invoke-DnsServerZoneSign @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-UnsignZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Invoke-DnsServerZoneUnsign @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ExportDnssecKey {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ ZoneName = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $result = Export-DnsServerDnsSecPublicKey @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; publicKey = $result }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetTrustAnchors {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $anchors = @(Get-DnsServerTrustAnchor @p -Name '.' -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; anchors = $anchors }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-AddTrustAnchor {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $Body.name }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.keyTag) { $splatParams['KeyTag'] = [int]$Body.keyTag }
+        if ($Body.cryptoAlgorithm) { $splatParams['CryptoAlgorithm'] = $Body.cryptoAlgorithm }
+        if ($Body.digestType) { $splatParams['DigestType'] = $Body.digestType }
+        if ($Body.digest) { $splatParams['Digest'] = $Body.digest }
+        Add-DnsServerTrustAnchor @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-RemoveTrustAnchor {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$Name
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $Name }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Remove-DnsServerTrustAnchor @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetTrustPoints {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $points = @(Get-DnsServerTrustPoint @p -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; points = $points }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-UpdateTrustPoint {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$Name
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $Name }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Update-DnsServerTrustPoint @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 # ── Core Handlers ─────────────────────────────────────────────────────────
 
 function Handle-Health {
@@ -3315,6 +3545,66 @@ function Route-Request {
                 if ($method -eq 'POST') {
                     Handle-TestDnsServer -Response $response -Request $request
                 } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            # ── DNSSEC ────────────────────────────────────────
+            '^/api/dnssec/([^/]+)/keys/([^/]+)$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                $kid = [System.Uri]::UnescapeDataString($Matches[2])
+                if ($method -eq 'DELETE') {
+                    Handle-RemoveSigningKey -Response $response -Request $request -ZoneName $zn -KeyId $kid
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/dnssec/([^/]+)/keys$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                switch ($method) {
+                    'GET'  { Handle-GetSigningKeys -Response $response -Request $request -ZoneName $zn }
+                    'POST' { $body = Read-RequestBody -Request $request; Handle-AddSigningKey -Response $response -Request $request -ZoneName $zn -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/dnssec/([^/]+)/sign$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') { Handle-SignZone -Response $response -Request $request -ZoneName $zn }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/dnssec/([^/]+)/unsign$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') { Handle-UnsignZone -Response $response -Request $request -ZoneName $zn }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/dnssec/([^/]+)/export-key$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') { Handle-ExportDnssecKey -Response $response -Request $request -ZoneName $zn }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/dnssec/([^/]+)$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                switch ($method) {
+                    'GET' { Handle-GetDnssecSettings -Response $response -Request $request -ZoneName $zn }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetDnssecSettings -Response $response -Request $request -ZoneName $zn -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/trustanchors/([^/]+)$' {
+                $name = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'DELETE') { Handle-RemoveTrustAnchor -Response $response -Request $request -Name $name }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/trustanchors$' {
+                switch ($method) {
+                    'GET'  { Handle-GetTrustAnchors -Response $response -Request $request }
+                    'POST' { $body = Read-RequestBody -Request $request; Handle-AddTrustAnchor -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/trustpoints/([^/]+)/update$' {
+                $name = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') { Handle-UpdateTrustPoint -Response $response -Request $request -Name $name }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/trustpoints$' {
+                if ($method -eq 'GET') { Handle-GetTrustPoints -Response $response -Request $request }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
             default {
                 Send-Response -Response $response -Body @{ success = $false; error = "Not found: $path" } -StatusCode 404

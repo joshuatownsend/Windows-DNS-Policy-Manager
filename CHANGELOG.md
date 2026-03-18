@@ -30,6 +30,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Server Test** — Run `Test-DnsServer` diagnostic from the UI with JSON result display
 - 9 new DnsServer cmdlets wrapped (Get/Set-DnsServerResponseRateLimiting, Add/Remove/Get-DnsServerResponseRateLimitingExceptionlist, Get/Set-DnsServerScavenging, Start-DnsServerScavenging, Test-DnsServer)
 - 9 new bridge endpoints for RRL, scavenging, and server test
+- **DNSSEC Management tab** — New dedicated tab (position 07) for managing DNS Security Extensions:
+  - Zone signing status table showing all zones with signed/unsigned badges
+  - Zone DNSSEC detail panel with settings display, sign/unsign actions, and public key export
+  - Signing key management: view KSK/ZSK keys, add new keys (RSA/ECDSA algorithms), remove keys
+  - Trust anchors: view, add, remove trust anchors
+  - Trust points: view status with update action
+  - Unsign zone requires typed confirmation
+- 15 new DnsServer cmdlets wrapped (Get/Set-DnsServerDnsSecZoneSetting, Add/Get/Remove-DnsServerSigningKey, Invoke-DnsServerZoneSign, Invoke-DnsServerZoneUnsign, Export-DnsServerDnsSecPublicKey, Get/Add/Remove-DnsServerTrustAnchor, Get/Update-DnsServerTrustPoint, Enable/Disable-DnsServerSigningKeyRollover)
+- 13 new bridge endpoints under /api/dnssec/*, /api/trustanchors/*, /api/trustpoints/*
 
 ### Changed
 

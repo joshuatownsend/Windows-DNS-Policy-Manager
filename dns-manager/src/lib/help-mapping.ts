@@ -6,6 +6,7 @@ const routeToSlug: Record<string, string> = {
   "/policies": "policies",
   "/create": "policies",
   "/wizards": "wizards",
+  "/dnssec": "getting-started",
   "/backup": "backup-and-import",
   "/powershell": "powershell-output",
 };

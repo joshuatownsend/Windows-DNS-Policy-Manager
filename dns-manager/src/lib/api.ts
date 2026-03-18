@@ -440,6 +440,46 @@ export const api = {
   testDnsServer: (server?: string, serverId?: string, credentialMode?: string) =>
     request("POST", "/api/server/test" + serverParams(server, serverId, credentialMode)),
 
+  // DNSSEC
+  getDnssecSettings: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", `/api/dnssec/${encodeURIComponent(zoneName)}${serverParams(server, serverId, credentialMode)}`),
+
+  setDnssecSettings: (zoneName: string, data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", `/api/dnssec/${encodeURIComponent(zoneName)}${serverParams(server, serverId, credentialMode)}`, data),
+
+  getSigningKeys: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", `/api/dnssec/${encodeURIComponent(zoneName)}/keys${serverParams(server, serverId, credentialMode)}`),
+
+  addSigningKey: (zoneName: string, data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/dnssec/${encodeURIComponent(zoneName)}/keys${serverParams(server, serverId, credentialMode)}`, data),
+
+  removeSigningKey: (zoneName: string, keyId: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", `/api/dnssec/${encodeURIComponent(zoneName)}/keys/${encodeURIComponent(keyId)}${serverParams(server, serverId, credentialMode)}`),
+
+  signZone: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/dnssec/${encodeURIComponent(zoneName)}/sign${serverParams(server, serverId, credentialMode)}`),
+
+  unsignZone: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/dnssec/${encodeURIComponent(zoneName)}/unsign${serverParams(server, serverId, credentialMode)}`),
+
+  exportDnssecKey: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/dnssec/${encodeURIComponent(zoneName)}/export-key${serverParams(server, serverId, credentialMode)}`),
+
+  getTrustAnchors: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/trustanchors" + serverParams(server, serverId, credentialMode)),
+
+  addTrustAnchor: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/trustanchors" + serverParams(server, serverId, credentialMode), data),
+
+  removeTrustAnchor: (name: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", `/api/trustanchors/${encodeURIComponent(name)}${serverParams(server, serverId, credentialMode)}`),
+
+  getTrustPoints: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/trustpoints" + serverParams(server, serverId, credentialMode)),
+
+  updateTrustPoint: (name: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/trustpoints/${encodeURIComponent(name)}/update${serverParams(server, serverId, credentialMode)}`),
+
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {

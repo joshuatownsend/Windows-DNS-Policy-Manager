@@ -263,6 +263,46 @@ export interface ServerStatistics {
   [key: string]: unknown;
 }
 
+// ── DNSSEC Types ──────────────────────────────────────────
+
+export interface DnssecZoneSettings {
+  DenialOfExistence?: string;
+  IsKeyMasterServer?: boolean;
+  DistributeTrustAnchor?: string[];
+  NSec3HashAlgorithm?: string;
+  NSec3Iterations?: number;
+  NSec3OptOut?: boolean;
+  SignatureInceptionOffset?: string;
+  [key: string]: unknown;
+}
+
+export interface SigningKey {
+  KeyId?: string;
+  KeyType?: string;
+  CryptoAlgorithm?: string;
+  KeyLength?: number;
+  StoreKeysInAD?: boolean;
+  CurrentState?: string;
+  NextRolloverAction?: string;
+  [key: string]: unknown;
+}
+
+export interface TrustAnchor {
+  Name?: string;
+  TrustAnchorType?: string;
+  TrustAnchorState?: string;
+  KeyTag?: number;
+  [key: string]: unknown;
+}
+
+export interface TrustPoint {
+  TrustPointName?: string;
+  TrustPointState?: string;
+  LastActiveRefreshTime?: string;
+  NextActiveRefreshTime?: string;
+  [key: string]: unknown;
+}
+
 // ── RRL & Scavenging Types ────────────────────────────────
 
 export interface RRLConfig {
