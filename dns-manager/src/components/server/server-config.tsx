@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { EditableField } from "./editable-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -252,6 +253,47 @@ export function ServerConfig() {
     setL("gnz", false);
   }, [sp]);
 
+  // ── Save helpers for inline editing ──────────────────────
+
+  const saveServerSetting = useCallback(async (field: string, value: unknown) => {
+    const p = sp();
+    const r = await api.setServerSettings({ [field]: value }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success(`${field} updated.`); loadSettings(); return true; }
+    toast.error("Failed: " + r.error); return false;
+  }, [sp, loadSettings]);
+
+  const saveRecursionSetting = useCallback(async (field: string, value: unknown) => {
+    const p = sp();
+    const camel = field.substring(0, 1).toLowerCase() + field.substring(1);
+    const r = await api.setRecursionSettings({ [camel]: value }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success(`${field} updated.`); loadRecursion(); return true; }
+    toast.error("Failed: " + r.error); return false;
+  }, [sp, loadRecursion]);
+
+  const saveDiagnosticSetting = useCallback(async (field: string, value: unknown) => {
+    const p = sp();
+    const camel = field.substring(0, 1).toLowerCase() + field.substring(1);
+    const r = await api.setDiagnostics({ [camel]: value }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success(`${field} updated.`); loadDiagnostics(); return true; }
+    toast.error("Failed: " + r.error); return false;
+  }, [sp, loadDiagnostics]);
+
+  const saveRRLSetting = useCallback(async (field: string, value: unknown) => {
+    const p = sp();
+    const camel = field.substring(0, 1).toLowerCase() + field.substring(1);
+    const r = await api.setRRL({ [camel]: value }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success(`${field} updated.`); loadRRL(); return true; }
+    toast.error("Failed: " + r.error); return false;
+  }, [sp, loadRRL]);
+
+  const saveScavengingSetting = useCallback(async (field: string, value: unknown) => {
+    const p = sp();
+    const camel = field.substring(0, 1).toLowerCase() + field.substring(1);
+    const r = await api.setScavenging({ [camel]: value }, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success(`${field} updated.`); loadScavenging(); return true; }
+    toast.error("Failed: " + r.error); return false;
+  }, [sp, loadScavenging]);
+
   if (!bridgeConnected) return null;
 
   // ── Helpers ────────────────────────────────────────────
@@ -274,15 +316,15 @@ export function ServerConfig() {
       {/* ── General Settings ───────────────────────────── */}
       <ConfigSection title="General Settings" icon={Settings} onRefresh={loadSettings} loading={loading.settings}>
         {settings ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {["RoundRobin", "BindSecondaries", "StrictFileParsing", "LocalNetPriority", "WriteAuthorityNS", "NameCheckFlag"].map((key) =>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {["RoundRobin", "BindSecondaries", "StrictFileParsing", "LocalNetPriority"].map((key) =>
               settings[key] !== undefined ? (
-                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                  <span className="text-xs text-muted-foreground">{key}</span>
-                  <Badge variant={settings[key] ? "default" : "secondary"} className="text-xs">
-                    {String(settings[key])}
-                  </Badge>
-                </div>
+                <EditableField key={key} label={key} value={settings[key]} type="boolean" onSave={(v) => saveServerSetting(key, v)} />
+              ) : null
+            )}
+            {["WriteAuthorityNS", "NameCheckFlag"].map((key) =>
+              settings[key] !== undefined ? (
+                <EditableField key={key} label={key} value={settings[key]} type="readonly" />
               ) : null
             )}
           </div>
@@ -309,25 +351,20 @@ export function ServerConfig() {
       {/* ── Recursion ──────────────────────────────────── */}
       <ConfigSection title="Recursion" icon={RefreshCw} onRefresh={loadRecursion} loading={loading.recursion}>
         {recursion ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {["Enable", "SecureResponse"].map((key) =>
-                recursion[key] !== undefined ? (
-                  <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                    <span className="text-xs text-muted-foreground">{key}</span>
-                    <Badge variant={recursion[key] ? "default" : "secondary"} className="text-xs">
-                      {String(recursion[key])}
-                    </Badge>
-                  </div>
-                ) : null
-              )}
-            </div>
-            {["Timeout", "AdditionalTimeout", "Retries"].map((key) =>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {["Enable", "SecureResponse"].map((key) =>
               recursion[key] !== undefined ? (
-                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                  <span className="text-xs text-muted-foreground">{key}</span>
-                  <span className="text-sm font-mono">{String(recursion[key])}</span>
-                </div>
+                <EditableField key={key} label={key} value={recursion[key]} type="boolean" onSave={(v) => saveRecursionSetting(key, v)} />
+              ) : null
+            )}
+            {["Timeout"].map((key) =>
+              recursion[key] !== undefined ? (
+                <EditableField key={key} label={key} value={recursion[key]} type="string" onSave={(v) => saveRecursionSetting(key, v)} />
+              ) : null
+            )}
+            {["AdditionalTimeout", "Retries"].map((key) =>
+              recursion[key] !== undefined ? (
+                <EditableField key={key} label={key} value={recursion[key]} type="number" onSave={(v) => saveRecursionSetting(key, v)} />
               ) : null
             )}
           </div>
@@ -382,12 +419,12 @@ export function ServerConfig() {
             {Object.entries(diagnostics)
               .filter(([, v]) => typeof v === "boolean")
               .map(([key, val]) => (
-                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                  <span className="text-xs text-muted-foreground truncate mr-2">{key}</span>
-                  <Badge variant={val ? "default" : "secondary"} className="text-xs shrink-0">
-                    {val ? "On" : "Off"}
-                  </Badge>
-                </div>
+                <EditableField key={key} label={key} value={val} type="boolean" onSave={(v) => saveDiagnosticSetting(key, v)} />
+              ))}
+            {Object.entries(diagnostics)
+              .filter(([k, v]) => (typeof v === "number" || typeof v === "string") && k !== "PSComputerName")
+              .map(([key, val]) => (
+                <EditableField key={key} label={key} value={val} type={typeof val === "number" ? "number" : "string"} onSave={(v) => saveDiagnosticSetting(key, v)} />
               ))}
           </div>
         ) : (
@@ -425,12 +462,12 @@ export function ServerConfig() {
         {rrl ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {["Mode", "ResponsesPerSec", "ErrorsPerSec", "WindowInSec", "LeakRate", "TruncateRate", "TCRate", "IPv4PrefixLength", "IPv6PrefixLength"].map((key) =>
+              {rrl.Mode !== undefined && (
+                <EditableField label="Mode" value={rrl.Mode} type="string" onSave={(v) => saveRRLSetting("Mode", v)} />
+              )}
+              {["ResponsesPerSec", "ErrorsPerSec", "WindowInSec", "LeakRate", "TruncateRate", "TCRate", "IPv4PrefixLength", "IPv6PrefixLength"].map((key) =>
                 rrl[key] !== undefined ? (
-                  <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                    <span className="text-xs text-muted-foreground">{key}</span>
-                    <span className="text-sm font-mono">{String(rrl[key])}</span>
-                  </div>
+                  <EditableField key={key} label={key} value={rrl[key]} type="number" onSave={(v) => saveRRLSetting(key, v)} />
                 ) : null
               )}
             </div>
@@ -474,13 +511,18 @@ export function ServerConfig() {
       <ConfigSection title="Scavenging" icon={Timer} onRefresh={loadScavenging} loading={loading.scavenging}>
         {scavenging ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(scavenging).map(([key, val]) => (
-                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                  <span className="text-xs text-muted-foreground">{key}</span>
-                  <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Enabled" : "Disabled") : String(val ?? "")}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              {scavenging.ScavengingState !== undefined && (
+                <EditableField label="ScavengingState" value={scavenging.ScavengingState} type="boolean" onSave={(v) => saveScavengingSetting("ScavengingState", v)} />
+              )}
+              {["ScavengingInterval", "RefreshInterval", "NoRefreshInterval"].map((key) =>
+                scavenging[key] !== undefined ? (
+                  <EditableField key={key} label={key} value={scavenging[key]} type="string" onSave={(v) => saveScavengingSetting(key, v)} />
+                ) : null
+              )}
+              {scavenging.LastScavengeTime !== undefined && (
+                <EditableField label="LastScavengeTime" value={scavenging.LastScavengeTime} type="readonly" />
+              )}
             </div>
             <Button
               variant="outline"
@@ -552,10 +594,19 @@ export function ServerConfig() {
         {edns ? (
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(edns).filter(([, v]) => v !== null).map(([key, val]) => (
-              <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                <span className="text-xs text-muted-foreground">{key}</span>
-                <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Yes" : "No") : String(val)}</span>
-              </div>
+              <EditableField
+                key={key}
+                label={key}
+                value={val}
+                type={typeof val === "boolean" ? "boolean" : typeof val === "number" ? "number" : "string"}
+                onSave={async (v) => {
+                  const p = sp();
+                  const camel = key.substring(0, 1).toLowerCase() + key.substring(1);
+                  const r = await api.setEDns({ [camel]: v }, p.server, p.serverId, p.credentialMode);
+                  if (r.success) { toast.success(`${key} updated.`); loadEDns(); return true; }
+                  toast.error("Failed: " + r.error); return false;
+                }}
+              />
             ))}
           </div>
         ) : (
@@ -584,10 +635,19 @@ export function ServerConfig() {
         {globalNameZone ? (
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(globalNameZone).filter(([, v]) => v !== null).map(([key, val]) => (
-              <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
-                <span className="text-xs text-muted-foreground">{key}</span>
-                <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Enabled" : "Disabled") : String(val)}</span>
-              </div>
+              <EditableField
+                key={key}
+                label={key}
+                value={val}
+                type={typeof val === "boolean" ? "boolean" : typeof val === "number" ? "number" : "string"}
+                onSave={async (v) => {
+                  const p = sp();
+                  const camel = key.substring(0, 1).toLowerCase() + key.substring(1);
+                  const r = await api.setGlobalNameZone({ [camel]: v }, p.server, p.serverId, p.credentialMode);
+                  if (r.success) { toast.success(`${key} updated.`); loadGlobalNameZone(); return true; }
+                  toast.error("Failed: " + r.error); return false;
+                }}
+              />
             ))}
           </div>
         ) : (
@@ -654,12 +714,17 @@ function ForwardersPanel({
         </Button>
       </div>
       {forwarders.UseRootHint !== undefined && (
-        <div className="flex items-center justify-between p-2 rounded bg-secondary/30">
-          <span className="text-xs text-muted-foreground">Use Root Hints</span>
-          <Badge variant={forwarders.UseRootHint ? "default" : "secondary"} className="text-xs">
-            {String(forwarders.UseRootHint)}
-          </Badge>
-        </div>
+        <EditableField
+          label="Use Root Hints"
+          value={forwarders.UseRootHint}
+          type="boolean"
+          onSave={async (v) => {
+            const p = getServerParams();
+            const r = await api.setForwarders({ useRootHint: v }, p.server, p.serverId, p.credentialMode);
+            if (r.success) { toast.success("Updated."); onRefresh(); return true; }
+            toast.error("Failed: " + r.error); return false;
+          }}
+        />
       )}
     </div>
   );
@@ -697,12 +762,17 @@ function BlocklistPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between p-2 rounded bg-secondary/30">
-        <span className="text-xs text-muted-foreground">Enabled</span>
-        <Badge variant={enabled ? "default" : "secondary"} className="text-xs">
-          {String(enabled)}
-        </Badge>
-      </div>
+      <EditableField
+        label="Enabled"
+        value={enabled}
+        type="boolean"
+        onSave={async (v) => {
+          const p = getServerParams();
+          const r = await api.setBlockList({ enable: v }, p.server, p.serverId, p.credentialMode);
+          if (r.success) { toast.success("Updated."); onRefresh(); return true; }
+          toast.error("Failed: " + r.error); return false;
+        }}
+      />
       {domains.length > 0 ? (
         <div className="space-y-1.5">
           {domains.map((d) => (

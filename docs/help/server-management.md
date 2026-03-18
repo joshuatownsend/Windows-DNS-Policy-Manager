@@ -55,7 +55,7 @@ Below the server list and zone cards, a **Server Configuration** section provide
 
 ### General Settings
 
-Displays server-wide DNS settings such as Round Robin, Bind Secondaries, Strict File Parsing, and Local Net Priority. These are read-only — use the PowerShell tab to modify them.
+Displays and edits server-wide DNS settings. Toggle **Round Robin**, **Bind Secondaries**, **Strict File Parsing**, and **Local Net Priority** directly with switches — changes apply immediately.
 
 ### Forwarders
 
@@ -67,7 +67,7 @@ Manages upstream DNS forwarders. Queries that the server cannot resolve locally 
 
 ### Recursion
 
-Shows server recursion settings: whether recursion is enabled, timeout values, retry count, and secure response mode.
+Edit server recursion settings inline. Toggle **Enable** and **Secure Response**, or change **Timeout**, **Additional Timeout**, and **Retries** values (press Enter or click away to save).
 
 ### Cache
 
@@ -79,7 +79,7 @@ The block list prevents the DNS server from resolving certain names (by default,
 
 ### Diagnostics
 
-Shows DNS debug logging toggles — queries, answers, notifications, send/receive packets, etc. These are read-only in the UI.
+Toggle DNS debug logging options inline — queries, answers, notifications, send/receive packets, and more. Changes apply immediately.
 
 ### Statistics
 

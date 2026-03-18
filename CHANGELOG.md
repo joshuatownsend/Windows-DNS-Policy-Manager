@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Server Configuration panels now support inline editing** — boolean settings toggle immediately via Switch, numeric and string values edit in-place and save on Enter or blur. Covers General Settings, Recursion, Diagnostics, RRL, Scavenging, Forwarders (UseRootHint), Block List (Enable), EDNS, and Global Name Zone. Cache, Statistics, Root Hints, and AD Settings remain read-only (no setter API).
 - **BREAKING: Migrated frontend to Next.js + TypeScript + shadcn/ui** — Complete rewrite of the vanilla JS/HTML/CSS frontend (7.3K lines JS, 2.4K CSS, 825 HTML) to a modern React-based architecture. The PowerShell bridge (`server/bridge.ps1`) is unchanged — it remains the REST API contract boundary.
   - All 19 JS files replaced with ~25 TypeScript/React components + hooks + typed API client
   - All 6 CSS files replaced with Tailwind CSS utilities + shadcn/ui component library (dark theme with cyan accent preserved)
