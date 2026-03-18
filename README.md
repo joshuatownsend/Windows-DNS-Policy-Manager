@@ -4,16 +4,21 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 ## Features
 
-- **8-tab interface**: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, Backup & Import, PowerShell
+- **9-tab interface**: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, DNSSEC, Backup & Import, PowerShell
 - **Multi-server management** with Kerberos, DPAPI-saved, or session-based credentials
-- **Zone browser** with two-panel layout, settings editor, and full record CRUD (A, AAAA, CNAME, MX, SRV, TXT, NS, PTR)
-- **10 scenario wizards** aligned to Microsoft DNS Policy documentation (geo-location, split-brain, time-of-day, load balancing, query filters, blocklist, and more)
-- **Policy CRUD** with enable/disable toggle and cross-server copy
+- **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone, DoH/DoT)
+- **DNS Best Practices Analyzer** — run Windows BPA from the UI with severity-coded findings
+- **Zone browser** with two-panel layout, settings editor, full record CRUD, CSV import/export, and pagination
+- **8 scenario wizards** with typed execution (geo-location, split-brain, time-of-day, load balancing, query filters, blocklist, geo+LB combo, primary-secondary)
+- **DNSSEC management** — zone signing, signing key CRUD, trust anchors, trust points
+- **Policy CRUD** with enable/disable toggle, processing order editor, and cross-server copy
 - **DNS object management** for client subnets, zone scopes, and recursion scopes
+- **Zone lifecycle** — create, delete, convert, suspend, resume, export zones
 - **PowerShell command generation** with copy-to-clipboard — works offline as a command generator
 - **Blocklist import** from TXT files with batch policy creation
 - **Backup & export** of policies as JSON with restore support
 - **Context-sensitive help** with slide-over panel and full-page popout
+- **20 Playwright E2E tests** with mock bridge, integrated into CI
 - **Docker-ready** with multi-stage Alpine image (221 MB)
 - Keyboard-accessible tab navigation and ARIA attributes
 
@@ -198,7 +203,7 @@ dns-manager/                      Next.js frontend
       zones/page.tsx              Zone browser + record CRUD + lifecycle
       policies/page.tsx           Policy list
       create/page.tsx             Create Policy form
-      wizards/page.tsx            Scenario wizards (10 scenarios)
+      wizards/page.tsx            Scenario wizards (8 scenarios)
       dnssec/page.tsx             DNSSEC management
       backup/page.tsx             Backup & Import
       powershell/page.tsx         PowerShell output

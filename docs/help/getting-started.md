@@ -67,16 +67,17 @@ When the bridge is connected, a toggle appears in the header:
 
 ## Interface Overview
 
-The app has 8 tabs:
+The app has 9 tabs:
 
 | Tab | Purpose |
 |-----|---------|
-| **Server** | Add, test, and manage DNS server connections |
+| **Server** | Add, test, and manage DNS server connections. Includes server configuration dashboard and Best Practices Analyzer. |
 | **DNS Objects** | Create client subnets, zone scopes, and recursion scopes |
-| **Zones** | Browse zones, edit settings, manage DNS records |
-| **Policies** | View, enable/disable, and delete existing policies |
+| **Zones** | Browse zones, edit settings, manage DNS records. Supports CSV import/export and pagination. |
+| **Policies** | View, enable/disable, reorder, and delete existing policies |
 | **Create Policy** | Build new policies with the visual form |
-| **Wizards** | Step-by-step guided setup for common DNS scenarios |
+| **Wizards** | Step-by-step guided setup for 8 common DNS scenarios |
+| **DNSSEC** | Manage zone signing, signing keys, trust anchors, and trust points |
 | **Backup & Import** | Export policies to JSON, import backups, bulk-import blocklists |
 | **PowerShell** | View all generated commands with copy-to-clipboard |
 

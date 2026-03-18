@@ -54,7 +54,7 @@ All DNS cmdlet calls use **splatted parameters** (`@splatParams`) to prevent com
 
 ## Tabs and Features
 
-The UI has 8 tabs: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, Backup & Import, PowerShell. The root `/` redirects to `/server`.
+The UI has 9 tabs: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, DNSSEC, Backup & Import, PowerShell. The root `/` redirects to `/server`.
 
 ## TODO
 - If I give you a TODO, save it to TODO.md in our repo.

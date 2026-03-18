@@ -85,6 +85,38 @@ Toggle DNS debug logging options inline — queries, answers, notifications, sen
 
 Displays raw server performance counters in JSON format. Click **Clear Statistics** to reset counters.
 
+### Response Rate Limiting (RRL)
+
+View and edit RRL settings that protect against DNS amplification attacks. Editable fields include Mode, Responses/Errors per second, Window, Leak/Truncate rates, and IP prefix lengths. Changes apply immediately.
+
+Below the settings, an **Exception Lists** section lets you add or remove domains exempt from rate limiting.
+
+### Scavenging
+
+View and edit server-wide scavenging settings. Toggle **Scavenging State**, and set **Scavenging Interval**, **Refresh Interval**, and **NoRefresh Interval**. Click **Scavenge Now** to trigger immediate scavenging of stale records.
+
+**Last Scavenge Time** is displayed as read-only.
+
+### Server Test
+
+Click **Run Test** to execute `Test-DnsServer` and view diagnostic results in JSON format. Useful for verifying basic server functionality.
+
+### Root Hints
+
+View the list of configured root hint name servers and their IP addresses. This panel is read-only.
+
+### EDNS
+
+View and edit Extension Mechanisms for DNS (EDNS) settings, including reception, probes, and cache timeout. Changes apply immediately.
+
+### Active Directory Settings
+
+View AD DS replication settings for the DNS server. This panel is read-only and only shows data when the server is AD-integrated.
+
+### Global Name Zone
+
+View and toggle the GlobalNames zone feature. This provides single-label name resolution as an alternative to WINS.
+
 ### Encryption (DoH/DoT)
 
 View and configure DNS over HTTPS (DoH) and DNS over TLS (DoT) settings. This panel is only available on Windows Server 2025 and later — on older versions, it shows a "not available" message.
