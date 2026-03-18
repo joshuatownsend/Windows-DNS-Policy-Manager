@@ -31,6 +31,10 @@ import {
   ShieldAlert,
   Timer,
   FlaskConical,
+  Globe,
+  Radio,
+  Server,
+  ToggleLeft,
 } from "lucide-react";
 
 function getServerParams() {
@@ -176,6 +180,10 @@ export function ServerConfig() {
   }, [sp, setServerConfig]);
 
   // RRL, Scavenging, Test — local state (not in global store)
+  const [rootHints, setRootHints] = useState<Record<string, unknown>[] | null>(null);
+  const [edns, setEdns] = useState<Record<string, unknown> | null>(null);
+  const [dsSetting, setDsSetting] = useState<Record<string, unknown> | null>(null);
+  const [globalNameZone, setGlobalNameZone] = useState<Record<string, unknown> | null>(null);
   const [rrl, setRrl] = useState<Record<string, unknown> | null>(null);
   const [rrlExceptions, setRrlExceptions] = useState<Record<string, unknown>[] | null>(null);
   const [scavenging, setScavenging] = useState<Record<string, unknown> | null>(null);
@@ -206,6 +214,42 @@ export function ServerConfig() {
     if (r.success) setScavenging((r as Record<string, unknown>).scavenging as Record<string, unknown>);
     else toast.error("Failed to load scavenging: " + r.error);
     setL("scavenging", false);
+  }, [sp]);
+
+  const loadRootHints = useCallback(async () => {
+    setL("rootHints", true);
+    const p = sp();
+    const r = await api.getRootHints(p.server, p.serverId, p.credentialMode);
+    if (r.success) setRootHints((r as Record<string, unknown>).rootHints as Record<string, unknown>[]);
+    else toast.error("Failed to load root hints: " + r.error);
+    setL("rootHints", false);
+  }, [sp]);
+
+  const loadEDns = useCallback(async () => {
+    setL("edns", true);
+    const p = sp();
+    const r = await api.getEDns(p.server, p.serverId, p.credentialMode);
+    if (r.success) setEdns((r as Record<string, unknown>).edns as Record<string, unknown>);
+    else toast.error("Failed to load EDNS: " + r.error);
+    setL("edns", false);
+  }, [sp]);
+
+  const loadDsSetting = useCallback(async () => {
+    setL("dsSetting", true);
+    const p = sp();
+    const r = await api.getDsSetting(p.server, p.serverId, p.credentialMode);
+    if (r.success) setDsSetting((r as Record<string, unknown>).dsSetting as Record<string, unknown>);
+    else toast.error("Failed to load AD settings: " + r.error);
+    setL("dsSetting", false);
+  }, [sp]);
+
+  const loadGlobalNameZone = useCallback(async () => {
+    setL("gnz", true);
+    const p = sp();
+    const r = await api.getGlobalNameZone(p.server, p.serverId, p.credentialMode);
+    if (r.success) setGlobalNameZone((r as Record<string, unknown>).globalNameZone as Record<string, unknown>);
+    else toast.error("Failed to load GlobalNameZone: " + r.error);
+    setL("gnz", false);
   }, [sp]);
 
   if (!bridgeConnected) return null;
@@ -484,6 +528,71 @@ export function ServerConfig() {
             </pre>
           )}
         </div>
+      </ConfigSection>
+
+      {/* ── Root Hints ─────────────────────────────────── */}
+      <ConfigSection title="Root Hints" icon={Globe} onRefresh={loadRootHints} loading={loading.rootHints}>
+        {rootHints ? (
+          <div className="space-y-1.5 max-h-48 overflow-auto">
+            {rootHints.map((h, i) => (
+              <div key={i} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                <span className="font-mono text-sm">{String(h.NameServer || h.Name || "")}</span>
+                <span className="text-xs text-muted-foreground">{String(h.IPAddress || "")}</span>
+              </div>
+            ))}
+            {rootHints.length === 0 && <p className="text-sm text-muted-foreground">No root hints configured.</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load root hints.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── EDNS ───────────────────────────────────────── */}
+      <ConfigSection title="EDNS" icon={Radio} onRefresh={loadEDns} loading={loading.edns}>
+        {edns ? (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(edns).filter(([, v]) => v !== null).map(([key, val]) => (
+              <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                <span className="text-xs text-muted-foreground">{key}</span>
+                <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Yes" : "No") : String(val)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load EDNS settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── AD DS Settings ─────────────────────────────── */}
+      <ConfigSection title="Active Directory Settings" icon={Server} onRefresh={loadDsSetting} loading={loading.dsSetting}>
+        {dsSetting ? (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(dsSetting).filter(([, v]) => v !== null).map(([key, val]) => (
+              <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                <span className="text-xs text-muted-foreground truncate mr-2">{key}</span>
+                <span className="text-sm font-mono shrink-0">{String(val)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load AD settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Global Name Zone ───────────────────────────── */}
+      <ConfigSection title="Global Name Zone" icon={ToggleLeft} onRefresh={loadGlobalNameZone} loading={loading.gnz}>
+        {globalNameZone ? (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(globalNameZone).filter(([, v]) => v !== null).map(([key, val]) => (
+              <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                <span className="text-xs text-muted-foreground">{key}</span>
+                <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Enabled" : "Disabled") : String(val)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load Global Name Zone settings.</p>
+        )}
       </ConfigSection>
     </div>
   );

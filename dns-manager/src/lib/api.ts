@@ -480,6 +480,28 @@ export const api = {
   updateTrustPoint: (name: string, server?: string, serverId?: string, credentialMode?: string) =>
     request("POST", `/api/trustpoints/${encodeURIComponent(name)}/update${serverParams(server, serverId, credentialMode)}`),
 
+  // Niche: Root Hints, EDNS, DS Settings, Global Name Zone, Zone Delegations
+  getRootHints: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/roothints" + serverParams(server, serverId, credentialMode)),
+
+  getEDns: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/edns" + serverParams(server, serverId, credentialMode)),
+
+  setEDns: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/edns" + serverParams(server, serverId, credentialMode), data),
+
+  getDsSetting: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/dssetting" + serverParams(server, serverId, credentialMode)),
+
+  getGlobalNameZone: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/globalnamezone" + serverParams(server, serverId, credentialMode)),
+
+  setGlobalNameZone: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/globalnamezone" + serverParams(server, serverId, credentialMode), data),
+
+  getZoneDelegations: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", `/api/zones/${encodeURIComponent(zoneName)}/delegations${serverParams(server, serverId, credentialMode)}`),
+
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {

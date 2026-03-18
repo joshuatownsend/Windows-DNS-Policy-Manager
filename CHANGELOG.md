@@ -39,6 +39,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - Unsign zone requires typed confirmation
 - 15 new DnsServer cmdlets wrapped (Get/Set-DnsServerDnsSecZoneSetting, Add/Get/Remove-DnsServerSigningKey, Invoke-DnsServerZoneSign, Invoke-DnsServerZoneUnsign, Export-DnsServerDnsSecPublicKey, Get/Add/Remove-DnsServerTrustAnchor, Get/Update-DnsServerTrustPoint, Enable/Disable-DnsServerSigningKeyRollover)
 - 13 new bridge endpoints under /api/dnssec/*, /api/trustanchors/*, /api/trustpoints/*
+- **Root Hints panel** — View configured root hint servers
+- **EDNS panel** — View EDNS reception, probes, and cache timeout settings
+- **Active Directory Settings panel** — View AD DS replication settings
+- **Global Name Zone panel** — View and toggle GlobalNames zone
+- **Zone Delegations endpoint** — GET /api/zones/{name}/delegations
+- **Execute endpoint expansion** — Allowlist now covers all DnsServer module verbs (ConvertTo, Export, Import, Invoke, Start, Restore, Resume, Suspend, Sync, Step, Reset, Register, Unregister, Update, Enable, Disable, Clear, Show)
+- 12 new DnsServer cmdlets wrapped (Get-DnsServerRootHint, Get/Set-DnsServerEDns, Get-DnsServerDsSetting, Get/Set-DnsServerGlobalNameZone, Get-DnsServerZoneDelegation, plus all verb prefixes for execute endpoint)
 
 ### Changed
 

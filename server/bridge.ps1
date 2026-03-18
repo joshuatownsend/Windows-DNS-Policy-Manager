@@ -2503,6 +2503,95 @@ function Handle-UpdateTrustPoint {
     }
 }
 
+# ── Niche Feature Handlers ─────────────────────────────────────────────────
+
+function Handle-GetRootHints {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $hints = @(Get-DnsServerRootHint @p -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; rootHints = $hints }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetEDns {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $edns = Get-DnsServerEDns @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; edns = $edns }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetEDns {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request, [psobject]$Body)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.enableReception) { $splatParams['EnableReception'] = [bool]$Body.enableReception }
+        if ($null -ne $Body.enableProbes) { $splatParams['EnableProbes'] = [bool]$Body.enableProbes }
+        if ($Body.cacheTimeout) { $splatParams['CacheTimeout'] = $Body.cacheTimeout }
+        Set-DnsServerEDns @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetDsSetting {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $ds = Get-DnsServerDsSetting @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; dsSetting = $ds }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetGlobalNameZone {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $gnz = Get-DnsServerGlobalNameZone @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; globalNameZone = $gnz }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetGlobalNameZone {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request, [psobject]$Body)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.enable) { $splatParams['Enable'] = [bool]$Body.enable }
+        Set-DnsServerGlobalNameZone @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetZoneDelegation {
+    param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request, [string]$ZoneName)
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $delegations = @(Get-DnsServerZoneDelegation @splatParams -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; delegations = $delegations }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 # ── Core Handlers ─────────────────────────────────────────────────────────
 
 function Handle-Health {
@@ -3102,7 +3191,13 @@ function Handle-Execute {
     $command = $Body.command
     $allowedVerbs = @(
         'Get-DnsServer', 'Add-DnsServer', 'Remove-DnsServer', 'Set-DnsServer',
-        'Get-DnsClientServerAddress', 'Test-NetConnection', 'Test-DnsServer',
+        'Clear-DnsServer', 'Show-DnsServer', 'Enable-DnsServer', 'Disable-DnsServer',
+        'ConvertTo-DnsServer', 'Export-DnsServer', 'Import-DnsServer',
+        'Invoke-DnsServer', 'Start-DnsServer', 'Restore-DnsServer',
+        'Resume-DnsServer', 'Suspend-DnsServer', 'Sync-DnsServer',
+        'Step-DnsServer', 'Reset-DnsServer', 'Register-DnsServer', 'Unregister-DnsServer',
+        'Update-DnsServer', 'Test-DnsServer',
+        'Get-DnsClientServerAddress', 'Test-NetConnection',
         'Resolve-DnsName', 'Get-Service'
     )
 
@@ -3604,6 +3699,34 @@ function Route-Request {
             }
             '^/api/trustpoints$' {
                 if ($method -eq 'GET') { Handle-GetTrustPoints -Response $response -Request $request }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            # ── Niche: Root Hints, EDNS, DS, GNZ, Delegations ─
+            '^/api/server/roothints$' {
+                if ($method -eq 'GET') { Handle-GetRootHints -Response $response -Request $request }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/edns$' {
+                switch ($method) {
+                    'GET' { Handle-GetEDns -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetEDns -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/dssetting$' {
+                if ($method -eq 'GET') { Handle-GetDsSetting -Response $response -Request $request }
+                else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/globalnamezone$' {
+                switch ($method) {
+                    'GET' { Handle-GetGlobalNameZone -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetGlobalNameZone -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/zones/([^/]+)/delegations$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'GET') { Handle-GetZoneDelegation -Response $response -Request $request -ZoneName $zn }
                 else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
             default {
