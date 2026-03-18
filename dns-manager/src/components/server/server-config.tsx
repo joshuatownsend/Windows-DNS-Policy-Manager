@@ -36,6 +36,7 @@ import {
   Radio,
   Server,
   ToggleLeft,
+  Lock,
 } from "lucide-react";
 
 function getServerParams() {
@@ -185,6 +186,8 @@ export function ServerConfig() {
   const [edns, setEdns] = useState<Record<string, unknown> | null>(null);
   const [dsSetting, setDsSetting] = useState<Record<string, unknown> | null>(null);
   const [globalNameZone, setGlobalNameZone] = useState<Record<string, unknown> | null>(null);
+  const [encryption, setEncryption] = useState<Record<string, unknown> | null>(null);
+  const [encryptionUnsupported, setEncryptionUnsupported] = useState(false);
   const [rrl, setRrl] = useState<Record<string, unknown> | null>(null);
   const [rrlExceptions, setRrlExceptions] = useState<Record<string, unknown>[] | null>(null);
   const [scavenging, setScavenging] = useState<Record<string, unknown> | null>(null);
@@ -293,6 +296,21 @@ export function ServerConfig() {
     if (r.success) { toast.success(`${field} updated.`); loadScavenging(); return true; }
     toast.error("Failed: " + r.error); return false;
   }, [sp, loadScavenging]);
+
+  const loadEncryption = useCallback(async () => {
+    setL("encryption", true);
+    const p = sp();
+    const r = await api.getEncryptionProtocol(p.server, p.serverId, p.credentialMode);
+    if (r.success) {
+      setEncryption((r as Record<string, unknown>).protocol as Record<string, unknown>);
+      setEncryptionUnsupported(false);
+    } else if ((r as Record<string, unknown>).unsupported) {
+      setEncryptionUnsupported(true);
+    } else {
+      toast.error("Failed to load encryption settings: " + r.error);
+    }
+    setL("encryption", false);
+  }, [sp]);
 
   if (!bridgeConnected) return null;
 
@@ -652,6 +670,33 @@ export function ServerConfig() {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Click refresh to load Global Name Zone settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── DNS over HTTPS / DNS over TLS ──────────────── */}
+      <ConfigSection title="Encryption (DoH/DoT)" icon={Lock} onRefresh={loadEncryption} loading={loading.encryption}>
+        {encryptionUnsupported ? (
+          <p className="text-sm text-muted-foreground">Not available on this server version (requires Windows Server 2025+).</p>
+        ) : encryption ? (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(encryption).filter(([, v]) => v !== null).map(([key, val]) => (
+              <EditableField
+                key={key}
+                label={key}
+                value={val}
+                type={typeof val === "boolean" ? "boolean" : typeof val === "number" ? "number" : "string"}
+                onSave={async (v) => {
+                  const p = sp();
+                  const camel = key.substring(0, 1).toLowerCase() + key.substring(1);
+                  const r = await api.setEncryptionProtocol({ [camel]: v }, p.server, p.serverId, p.credentialMode);
+                  if (r.success) { toast.success(`${key} updated.`); loadEncryption(); return true; }
+                  toast.error("Failed: " + r.error); return false;
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load encryption settings.</p>
         )}
       </ConfigSection>
     </div>

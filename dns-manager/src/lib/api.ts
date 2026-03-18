@@ -504,6 +504,17 @@ export const api = {
   getZoneDelegations: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", `/api/zones/${encodeURIComponent(zoneName)}/delegations${serverParams(server, serverId, credentialMode)}`),
 
+  // BPA
+  runBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
+
+  // Encryption Protocol (DoH/DoT — Server 2025+)
+  getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/encryption" + serverParams(server, serverId, credentialMode)),
+
+  setEncryptionProtocol: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/encryption" + serverParams(server, serverId, credentialMode), data),
+
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {

@@ -85,6 +85,23 @@ Toggle DNS debug logging options inline — queries, answers, notifications, sen
 
 Displays raw server performance counters in JSON format. Click **Clear Statistics** to reset counters.
 
+### Encryption (DoH/DoT)
+
+View and configure DNS over HTTPS (DoH) and DNS over TLS (DoT) settings. This panel is only available on Windows Server 2025 and later — on older versions, it shows a "not available" message.
+
+## DNS Best Practices Analyzer
+
+Above the Server Configuration section, the **DNS Best Practices Analyzer** panel runs the Windows BPA model for the DNS Server role. Click **Run Analysis** to scan the active server.
+
+Results are categorized by severity:
+- **Errors** (red) — Critical configuration issues that should be fixed immediately
+- **Warnings** (amber) — Potential problems that may affect performance or security
+- **Information** (blue) — Recommendations for optimization
+
+Each finding is expandable — click to see the full problem description, impact, and resolution steps. If all checks pass, the panel shows "All clear."
+
+The BPA requires the DNS Server role to be installed on the target server. If the BPA model is not available, an error message explains what's needed.
+
 ## Editing a Server
 
 Click the **pencil icon** on a server card to open the edit dialog. You can change the name, hostname, or credential mode.
