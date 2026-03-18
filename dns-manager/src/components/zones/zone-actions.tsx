@@ -29,7 +29,6 @@ import {
   Play,
   RefreshCw,
   Download,
-  ArrowRightLeft,
 } from "lucide-react";
 
 function getServerParams() {

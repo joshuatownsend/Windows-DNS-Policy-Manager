@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import type { Policy } from "@/lib/types";
 import { toast } from "sonner";
 import { PolicyReorderDialog } from "@/components/policy-reorder-dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,13 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// Select components removed (unused after refactor)
 import {
   RefreshCwIcon,
   Trash2Icon,
@@ -45,19 +39,6 @@ function getServerParams() {
     serverId: server.id,
     credentialMode: server.credentialMode,
   };
-}
-
-function actionVariant(action?: string) {
-  switch (action?.toUpperCase()) {
-    case "ALLOW":
-      return "default" as const;
-    case "DENY":
-      return "destructive" as const;
-    case "IGNORE":
-      return "secondary" as const;
-    default:
-      return "outline" as const;
-  }
 }
 
 function actionColor(action?: string) {

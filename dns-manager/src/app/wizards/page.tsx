@@ -254,17 +254,10 @@ export default function WizardsPage() {
   );
 }
 
-// ── Step Content Router ──────────────────────────────────
+// ── Shared sub-components (must be outside StepContent) ──
 
-function StepContent({
-  scenarioId, stepId, data, upd, serverZones,
-}: {
-  scenarioId: string; stepId: string; data: any; upd: (p: any) => void; serverZones: any[];
-}) {
-  const key = `${scenarioId}_${stepId}`;
-
-  // Shared zone selector
-  const ZoneSelect = () => (
+function ZoneSelect({ data, upd, serverZones }: { data: any; upd: (p: any) => void; serverZones: any[] }) {
+  return (
     <div className="space-y-2">
       <Label>Zone Name</Label>
       <Select value={data.zone || ""} onValueChange={(v) => upd({ zone: v })}>
@@ -278,15 +271,16 @@ function StepContent({
       </Select>
     </div>
   );
+}
 
-  // Dynamic list helper
-  const DynList = ({
-    items, setItems, fields, addLabel,
-  }: {
-    items: any[]; setItems: (v: any[]) => void;
-    fields: { key: string; placeholder: string; type?: string }[];
-    addLabel: string;
-  }) => (
+function DynList({
+  items, setItems, fields, addLabel,
+}: {
+  items: any[]; setItems: (v: any[]) => void;
+  fields: { key: string; placeholder: string; type?: string }[];
+  addLabel: string;
+}) {
+  return (
     <div className="space-y-2">
       {items.map((item: any, i: number) => (
         <div key={i} className="flex gap-2">
@@ -316,11 +310,21 @@ function StepContent({
       </Button>
     </div>
   );
+}
+
+// ── Step Content Router ──────────────────────────────────
+
+function StepContent({
+  scenarioId, stepId, data, upd, serverZones,
+}: {
+  scenarioId: string; stepId: string; data: any; upd: (p: any) => void; serverZones: any[];
+}) {
+  const key = `${scenarioId}_${stepId}`;
 
   switch (key) {
     // ── Geo-Location ──
     case "geolocation_zone":
-      return <ZoneSelect />;
+      return <ZoneSelect data={data} upd={upd} serverZones={serverZones} />;
     case "geolocation_regions":
       return (
         <div className="space-y-4">
@@ -390,7 +394,7 @@ function StepContent({
     case "splitbrain_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           {data.splitMethod === "interface" ? (
             <div className="space-y-2">
               <Label>Internal Interface IP</Label>
@@ -490,7 +494,7 @@ function StepContent({
     case "timeofday_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.todRecordName || ""} onChange={(e) => upd({ todRecordName: e.target.value })} placeholder="www" />
@@ -545,7 +549,7 @@ function StepContent({
     case "loadbalancing_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.lbRecordName || ""} onChange={(e) => upd({ lbRecordName: e.target.value })} placeholder="www" />
@@ -578,7 +582,7 @@ function StepContent({
     case "geolb_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.geolbRecordName || ""} onChange={(e) => upd({ geolbRecordName: e.target.value })} placeholder="www" />
@@ -654,7 +658,7 @@ function StepContent({
       return (
         <div className="space-y-4">
           <h3 className="font-semibold">Primary Server Geo-Location Setup</h3>
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.psRecordName || ""} onChange={(e) => upd({ psRecordName: e.target.value })} placeholder="www" />

@@ -2,8 +2,6 @@ import type {
   ApiResponse,
   HealthResponse,
   CredentialMode,
-  Policy,
-  BlocklistEntry,
 } from "./types";
 
 const REQUEST_TIMEOUT = 15000;

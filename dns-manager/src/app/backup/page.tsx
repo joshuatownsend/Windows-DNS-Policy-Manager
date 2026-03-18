@@ -24,11 +24,9 @@ import {
   FileText,
   ShieldAlert,
   Loader2,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 
-import type { BackupData, BlocklistEntry, PolicyAction } from "@/lib/types";
+import type { BackupData, PolicyAction } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
