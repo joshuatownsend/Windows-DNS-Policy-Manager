@@ -2,8 +2,6 @@ import type {
   ApiResponse,
   HealthResponse,
   CredentialMode,
-  Policy,
-  BlocklistEntry,
 } from "./types";
 
 const REQUEST_TIMEOUT = 15000;
@@ -163,12 +161,13 @@ export const api = {
     isEnabled: boolean,
     server?: string,
     zone?: string,
-    policyType?: string
+    policyType?: string,
+    processingOrder?: number
   ) =>
     request(
       "PUT",
       `/api/policies/${encodeURIComponent(name)}/state${qs({ server, zone, type: policyType })}`,
-      { isEnabled }
+      { isEnabled, ...(processingOrder != null ? { processingOrder } : {}) }
     ),
 
   addPolicyMulti: (
@@ -185,7 +184,8 @@ export const api = {
     }>,
     zone?: string,
     sourceServerId?: string,
-    sourceCredentialMode?: CredentialMode
+    sourceCredentialMode?: CredentialMode,
+    policyType?: "QueryResolution" | "ZoneTransfer"
   ) =>
     request("POST", "/api/policies/copy", {
       sourceServer,
@@ -193,6 +193,7 @@ export const api = {
       zone: zone || null,
       sourceServerId: sourceServerId || null,
       sourceCredentialMode: sourceCredentialMode || "currentUser",
+      policyType: policyType || "QueryResolution",
     }),
 
   // Zone Transfer Policies
@@ -501,6 +502,17 @@ export const api = {
 
   getZoneDelegations: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", `/api/zones/${encodeURIComponent(zoneName)}/delegations${serverParams(server, serverId, credentialMode)}`),
+
+  // BPA
+  runBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
+
+  // Encryption Protocol (DoH/DoT — Server 2025+)
+  getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/encryption" + serverParams(server, serverId, credentialMode)),
+
+  setEncryptionProtocol: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/encryption" + serverParams(server, serverId, credentialMode), data),
 
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>

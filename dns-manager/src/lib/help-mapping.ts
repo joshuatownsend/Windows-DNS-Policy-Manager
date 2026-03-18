@@ -6,7 +6,7 @@ const routeToSlug: Record<string, string> = {
   "/policies": "policies",
   "/create": "policies",
   "/wizards": "wizards",
-  "/dnssec": "getting-started",
+  "/dnssec": "dnssec",
   "/backup": "backup-and-import",
   "/powershell": "powershell-output",
 };
@@ -20,6 +20,7 @@ const allDocs = [
   { slug: "zones", title: "Zone Management" },
   { slug: "policies", title: "Policies" },
   { slug: "wizards", title: "Scenario Wizards" },
+  { slug: "dnssec", title: "DNSSEC Management" },
   { slug: "backup-and-import", title: "Backup & Import" },
   { slug: "powershell-output", title: "PowerShell Commands" },
   { slug: "troubleshooting", title: "Troubleshooting" },

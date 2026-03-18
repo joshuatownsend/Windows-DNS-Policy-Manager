@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Policy processing order editor** — Reorder dialog on the Policies tab with up/down arrows to rearrange policy evaluation order. Shows before/after order numbers, saves only changed policies. Uses extended `PUT /api/policies/{name}/state` endpoint that now accepts `processingOrder`.
+- **DNS Best Practices Analyzer** — Run the Windows BPA model for the DNS Server role from the Server tab. Results categorized by severity (Error/Warning/Information) with expandable findings showing problem, impact, and resolution. Handles BPA unavailability gracefully.
+- **DNS over HTTPS/TLS (DoH/DoT) panel** — View and configure encryption protocol settings on Windows Server 2025+. Graceful fallback on older server versions with "not available" message.
+- **Record pagination** — Zones with more than 50 records now paginate with Previous/Next controls. Page resets on filter or zone change.
+- **Bulk record export** — Export current zone records (or filtered subset) as CSV with one click.
+- **Bulk record import** — Import records from CSV files with drag-and-drop, preview table with validation, per-record progress bar, and error reporting. Supports A, AAAA, CNAME, MX, NS, PTR, SRV, TXT records.
+- **E2E tests with Playwright** — 20 tests across all 9 tabs using a mock HTTP bridge on port 8650. Tests run against the production build (no dev server needed). Covers navigation, help panel, bridge status, server CRUD, zone browsing/records/creation, policy list/create/generate, wizard scenarios, backup/powershell empty states, and DNSSEC status. CI workflow updated to run tests automatically.
+- **Typed wizard execution** — "Execute on Server" now uses structured API calls instead of raw PowerShell command strings. Each wizard step calls the appropriate typed endpoint (createSubnet, createZoneScope, addPolicy, etc.) with per-step progress display, structured error messages, and proper credential handling. "Generate Commands" still produces PowerShell strings for manual use.
 - **Server Configuration Dashboard** — New collapsible panels on the Server tab for viewing and managing server-wide DNS settings:
   - **General Settings**: Round Robin, Bind Secondaries, Strict File Parsing, Local Net Priority
   - **Forwarders**: Add/remove upstream DNS forwarders with inline IP entry

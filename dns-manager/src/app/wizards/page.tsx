@@ -2,9 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { useStore } from "@/lib/store";
-import { api } from "@/lib/api";
 import { scenarios } from "@/wizards/scenarios";
 import { generateCommands } from "@/wizards/command-generator";
+import { buildExecutionSteps } from "@/wizards/executor";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,12 @@ export default function WizardsPage() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, any>>({});
   const [executing, setExecuting] = useState(false);
+  const [execProgress, setExecProgress] = useState<{
+    current: number;
+    total: number;
+    label: string;
+    results: { label: string; ok: boolean; error?: string }[];
+  } | null>(null);
 
   const scenario = activeScenario ? scenarios[activeScenario] : null;
   const totalSteps = scenario?.steps.length ?? 0;
@@ -77,32 +83,46 @@ export default function WizardsPage() {
 
   const handleExecute = async () => {
     if (!bridgeConnected) { toast.warning("Bridge is offline."); return; }
-    const cmds = generateCommands(activeScenario!, data, getServerHostname());
-    const lines = cmds.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
-    if (!lines.length) { toast.warning("No commands to execute."); return; }
+
+    const server = getActiveServer();
+    const sp = server
+      ? { server: server.hostname, serverId: server.id, credentialMode: server.credentialMode }
+      : {};
+
+    const steps = buildExecutionSteps(activeScenario!, data, sp);
+    if (!steps.length) { toast.warning("No steps to execute."); return; }
 
     setExecuting(true);
-    let ok = 0, fail = 0;
-    const results: string[] = ["# Wizard Execution Results", ""];
+    setExecProgress({ current: 0, total: steps.length, label: steps[0].label, results: [] });
 
-    for (const line of lines) {
-      const result = await api.execute(line);
+    let ok = 0, fail = 0;
+    const stepResults: { label: string; ok: boolean; error?: string }[] = [];
+    const psLines: string[] = [`# Wizard Execution Results (${activeScenario})`, ""];
+
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      setExecProgress((p) => p ? { ...p, current: i, label: s.label } : p);
+
+      const result = await s.execute();
       if (result.success) {
         ok++;
-        results.push(`[OK] ${line}`);
+        stepResults.push({ label: s.label, ok: true });
+        psLines.push(`[OK] ${s.label}`);
       } else {
         fail++;
-        results.push(`[FAIL] ${line}`);
-        if (result.error) results.push(`  Error: ${result.error}`);
+        stepResults.push({ label: s.label, ok: false, error: result.error });
+        psLines.push(`[FAIL] ${s.label}`);
+        if (result.error) psLines.push(`  Error: ${result.error}`);
       }
+      setExecProgress((p) => p ? { ...p, results: [...stepResults] } : p);
     }
 
-    results.unshift(`# ${ok} succeeded, ${fail} failed`);
-    addPsOutput(results.join("\n"));
+    psLines.unshift(`# ${ok} succeeded, ${fail} failed`);
+    addPsOutput(psLines.join("\n"));
     setExecuting(false);
 
-    if (fail === 0) toast.success(`All ${ok} commands executed successfully!`);
-    else toast.warning(`${ok} succeeded, ${fail} failed. Check PowerShell tab.`);
+    if (fail === 0) toast.success(`All ${ok} steps completed successfully!`);
+    else toast.warning(`${ok} succeeded, ${fail} failed. Check results below.`);
   };
 
   // ── Scenario Grid ──────────────────────────────────────
@@ -169,11 +189,37 @@ export default function WizardsPage() {
       {/* Step Content */}
       <Card className="p-6">
         {isReview ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <h3 className="font-semibold">Review Generated Commands</h3>
-            <pre className="font-mono text-xs p-4 bg-background rounded-lg border border-border whitespace-pre-wrap max-h-96 overflow-auto">
+            <pre className="font-mono text-xs p-4 bg-background rounded-lg border border-border whitespace-pre-wrap max-h-72 overflow-auto">
               {commands}
             </pre>
+
+            {/* Execution progress */}
+            {execProgress && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{execProgress.label}</span>
+                  <span>{execProgress.current + 1} / {execProgress.total}</span>
+                </div>
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${((execProgress.current + 1) / execProgress.total) * 100}%` }}
+                  />
+                </div>
+                {execProgress.results.length > 0 && (
+                  <div className="space-y-1 max-h-48 overflow-auto">
+                    {execProgress.results.map((r, i) => (
+                      <div key={i} className={`text-xs px-2 py-1 rounded ${r.ok ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+                        {r.ok ? "\u2713" : "\u2717"} {r.label}
+                        {r.error ? <span className="block text-[11px] text-red-300 ml-4">{r.error}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <StepContent
@@ -208,17 +254,10 @@ export default function WizardsPage() {
   );
 }
 
-// ── Step Content Router ──────────────────────────────────
+// ── Shared sub-components (must be outside StepContent) ──
 
-function StepContent({
-  scenarioId, stepId, data, upd, serverZones,
-}: {
-  scenarioId: string; stepId: string; data: any; upd: (p: any) => void; serverZones: any[];
-}) {
-  const key = `${scenarioId}_${stepId}`;
-
-  // Shared zone selector
-  const ZoneSelect = () => (
+function ZoneSelect({ data, upd, serverZones }: { data: any; upd: (p: any) => void; serverZones: any[] }) {
+  return (
     <div className="space-y-2">
       <Label>Zone Name</Label>
       <Select value={data.zone || ""} onValueChange={(v) => upd({ zone: v })}>
@@ -232,15 +271,16 @@ function StepContent({
       </Select>
     </div>
   );
+}
 
-  // Dynamic list helper
-  const DynList = ({
-    items, setItems, fields, addLabel,
-  }: {
-    items: any[]; setItems: (v: any[]) => void;
-    fields: { key: string; placeholder: string; type?: string }[];
-    addLabel: string;
-  }) => (
+function DynList({
+  items, setItems, fields, addLabel,
+}: {
+  items: any[]; setItems: (v: any[]) => void;
+  fields: { key: string; placeholder: string; type?: string }[];
+  addLabel: string;
+}) {
+  return (
     <div className="space-y-2">
       {items.map((item: any, i: number) => (
         <div key={i} className="flex gap-2">
@@ -270,11 +310,21 @@ function StepContent({
       </Button>
     </div>
   );
+}
+
+// ── Step Content Router ──────────────────────────────────
+
+function StepContent({
+  scenarioId, stepId, data, upd, serverZones,
+}: {
+  scenarioId: string; stepId: string; data: any; upd: (p: any) => void; serverZones: any[];
+}) {
+  const key = `${scenarioId}_${stepId}`;
 
   switch (key) {
     // ── Geo-Location ──
     case "geolocation_zone":
-      return <ZoneSelect />;
+      return <ZoneSelect data={data} upd={upd} serverZones={serverZones} />;
     case "geolocation_regions":
       return (
         <div className="space-y-4">
@@ -344,7 +394,7 @@ function StepContent({
     case "splitbrain_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           {data.splitMethod === "interface" ? (
             <div className="space-y-2">
               <Label>Internal Interface IP</Label>
@@ -444,7 +494,7 @@ function StepContent({
     case "timeofday_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.todRecordName || ""} onChange={(e) => upd({ todRecordName: e.target.value })} placeholder="www" />
@@ -499,7 +549,7 @@ function StepContent({
     case "loadbalancing_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.lbRecordName || ""} onChange={(e) => upd({ lbRecordName: e.target.value })} placeholder="www" />
@@ -532,7 +582,7 @@ function StepContent({
     case "geolb_zone":
       return (
         <div className="space-y-4">
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.geolbRecordName || ""} onChange={(e) => upd({ geolbRecordName: e.target.value })} placeholder="www" />
@@ -608,7 +658,7 @@ function StepContent({
       return (
         <div className="space-y-4">
           <h3 className="font-semibold">Primary Server Geo-Location Setup</h3>
-          <ZoneSelect />
+          <ZoneSelect data={data} upd={upd} serverZones={serverZones} />
           <div className="space-y-2">
             <Label>Record Name</Label>
             <Input value={data.psRecordName || ""} onChange={(e) => upd({ psRecordName: e.target.value })} placeholder="www" />

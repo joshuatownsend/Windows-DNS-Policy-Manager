@@ -37,7 +37,6 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldOff,
-  Key,
   Plus,
   Trash2,
   Download,
@@ -162,8 +161,7 @@ export default function DnssecPage() {
     return <div className="text-center py-12 text-muted-foreground">Connect to a server to manage DNSSEC.</div>;
   }
 
-  const signedZones = zones.filter((z: any) => z.IsSigned);
-  const unsignedZones = zones.filter((z: any) => !z.IsSigned && z.ZoneType === "Primary");
+  // Zone counts used in summary (not rendered directly)
 
   return (
     <div className="space-y-6">

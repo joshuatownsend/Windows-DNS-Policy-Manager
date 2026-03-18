@@ -14,8 +14,6 @@ export function useBridgeHealth() {
   const wasConnected = useRef(false);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
-
     async function check() {
       const result = await api.health();
       const connected = result.success && (result as Record<string, unknown>).status === "ok";
@@ -31,7 +29,7 @@ export function useBridgeHealth() {
     }
 
     check();
-    timer = setInterval(check, HEALTH_INTERVAL);
+    const timer = setInterval(check, HEALTH_INTERVAL);
     return () => clearInterval(timer);
   }, [setBridgeConnected, setExecutionMode]);
 

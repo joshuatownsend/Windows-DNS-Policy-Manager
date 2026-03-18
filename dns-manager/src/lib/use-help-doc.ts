@@ -36,7 +36,8 @@ export function useHelpDoc(slug: string) {
   }, []);
 
   useEffect(() => {
-    load(slug);
+    // Schedule via microtask to avoid synchronous setState in effect body
+    queueMicrotask(() => load(slug));
     return () => controllerRef.current?.abort();
   }, [slug, load]);
 

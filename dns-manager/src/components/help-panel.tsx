@@ -22,12 +22,14 @@ export function HelpPanel({ open, onClose }: HelpPanelProps) {
 
   // Load doc for current route when panel opens
   useEffect(() => {
-    if (open) {
-      const routeSlug = slugForRoute(pathname);
+    if (!open) return;
+    const routeSlug = slugForRoute(pathname);
+    // Schedule state updates for next microtask to avoid synchronous setState in effect
+    queueMicrotask(() => {
       setSlug(routeSlug);
       reload(routeSlug);
       setShowNav(false);
-    }
+    });
   }, [open, pathname, reload]);
 
   // Scroll to top on content change

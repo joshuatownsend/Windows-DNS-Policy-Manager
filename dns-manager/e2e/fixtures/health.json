@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "status": "ok",
+  "version": "1.0.0",
+  "dnsModuleAvailable": true,
+  "hostname": "TEST-SERVER",
+  "timestamp": "2026-03-18T00:00:00.000Z"
+}

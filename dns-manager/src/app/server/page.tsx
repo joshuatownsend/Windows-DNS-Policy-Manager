@@ -43,6 +43,7 @@ import {
   User,
 } from "lucide-react";
 import { ServerConfig } from "@/components/server/server-config";
+import { BpaPanel } from "@/components/server/bpa-panel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -683,6 +684,9 @@ export default function ServerPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* DNS Best Practices Analyzer */}
+      <BpaPanel />
 
       {/* Server Configuration */}
       <ServerConfig />

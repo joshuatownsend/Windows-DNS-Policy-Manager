@@ -283,6 +283,7 @@ function Handle-CopyPolicies {
         }
 
         $zone = if ($Body.zone) { $Body.zone } else { $null }
+        $policyType = if ($Body.policyType) { $Body.policyType } else { 'QueryResolution' }
         $sourceServerId = if ($Body.sourceServerId) { $Body.sourceServerId } else { $null }
         $sourceCredMode = if ($Body.sourceCredentialMode) { $Body.sourceCredentialMode } else { 'currentUser' }
 
@@ -297,7 +298,11 @@ function Handle-CopyPolicies {
         if ($zone) { $getSplatParams['ZoneName'] = $zone }
 
         # Get policies from source (returns empty array if none exist)
-        $policies = @(Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        if ($policyType -eq 'ZoneTransfer') {
+            $policies = @(Get-DnsServerZoneTransferPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        } else {
+            $policies = @(Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        }
 
         $results = @()
         foreach ($targetObj in $Body.targetServers) {
@@ -341,7 +346,11 @@ function Handle-CopyPolicies {
                     # Copy zone scopes if present
                     if ($policy.ZoneScope) { $addSplatParams['ZoneScope'] = $policy.ZoneScope }
 
-                    Add-DnsServerQueryResolutionPolicy @addSplatParams -ErrorAction Stop
+                    if ($policyType -eq 'ZoneTransfer') {
+                        Add-DnsServerZoneTransferPolicy @addSplatParams -ErrorAction Stop
+                    } else {
+                        Add-DnsServerQueryResolutionPolicy @addSplatParams -ErrorAction Stop
+                    }
                     $copiedCount++
                 }
 
@@ -1777,6 +1786,10 @@ function Handle-SetPolicyState {
             $params['IsEnabled'] = [string]$Body.isEnabled
         }
 
+        if ($null -ne $Body -and $null -ne $Body.processingOrder) {
+            $params['ProcessingOrder'] = [int]$Body.processingOrder
+        }
+
         if ($zone) {
             $params['ZoneName'] = $zone
         }
@@ -2268,6 +2281,107 @@ function Handle-TestDnsServer {
         $p = Resolve-ServerConfigParams -Request $Request
         $result = Test-DnsServer @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{ success = $true; result = $result }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+# ── BPA & DoH Handlers ────────────────────────────────────────────────────
+
+function Handle-RunBpa {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $modelId = 'Microsoft/Windows/DNSServer'
+
+        # Invoke the BPA model
+        try {
+            Invoke-BpaModel -ModelId $modelId @p -ErrorAction Stop | Out-Null
+        } catch {
+            # BPA model may not be available on all systems
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = "BPA model not available: $($_.Exception.Message). Ensure the DNS Server role is installed."
+            } -StatusCode 500
+            return
+        }
+
+        # Get results
+        $results = @(Get-BpaResult -ModelId $modelId @p -ErrorAction Stop)
+
+        # Categorize
+        $findings = $results | ForEach-Object {
+            @{
+                Severity    = $_.Severity.ToString()
+                Category    = $_.Category.ToString()
+                Title       = $_.Title
+                Problem     = $_.Problem
+                Impact      = $_.Impact
+                Resolution  = $_.Resolution
+                Compliance  = $_.Compliance.ToString()
+                Source      = $_.Source
+                ResultId    = $_.ResultId
+            }
+        }
+
+        $summary = @{
+            errors      = @($findings | Where-Object { $_.Severity -eq 'Error' }).Count
+            warnings    = @($findings | Where-Object { $_.Severity -eq 'Warning' }).Count
+            information = @($findings | Where-Object { $_.Severity -eq 'Information' }).Count
+        }
+
+        Send-Response -Response $Response -Body @{
+            success  = $true
+            findings = $findings
+            summary  = $summary
+            scannedAt = (Get-Date -Format 'o')
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetEncryptionProtocol {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $proto = Get-DnsServerEncryptionProtocol @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; protocol = $proto }
+    } catch {
+        # Server 2025+ only — graceful fallback
+        if ($_.Exception.Message -match 'not recognized|CommandNotFoundException') {
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'Get-DnsServerEncryptionProtocol is not available on this server version (requires Server 2025+).'
+                unsupported = $true
+            }
+        } else {
+            Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+        }
+    }
+}
+
+function Handle-SetEncryptionProtocol {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.dohEnabled) { $splatParams['DohEnabled'] = [bool]$Body.dohEnabled }
+        if ($null -ne $Body.dotEnabled) { $splatParams['DotEnabled'] = [bool]$Body.dotEnabled }
+        if ($Body.certificateSubjectName) { $splatParams['CertificateSubjectName'] = $Body.certificateSubjectName }
+        Set-DnsServerEncryptionProtocol @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -3640,6 +3754,18 @@ function Route-Request {
                 if ($method -eq 'POST') {
                     Handle-TestDnsServer -Response $response -Request $request
                 } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/bpa$' {
+                if ($method -eq 'POST') {
+                    Handle-RunBpa -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/encryption$' {
+                switch ($method) {
+                    'GET' { Handle-GetEncryptionProtocol -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetEncryptionProtocol -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
             }
             # ── DNSSEC ────────────────────────────────────────
             '^/api/dnssec/([^/]+)/keys/([^/]+)$' {

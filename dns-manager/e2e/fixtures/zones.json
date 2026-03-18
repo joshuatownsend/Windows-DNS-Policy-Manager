@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "zones": [
+    {
+      "ZoneName": "contoso.com",
+      "ZoneType": "Primary",
+      "IsAutoCreated": false,
+      "IsDsIntegrated": true,
+      "IsReverseLookupZone": false,
+      "IsSigned": false
+    },
+    {
+      "ZoneName": "fabrikam.com",
+      "ZoneType": "Primary",
+      "IsAutoCreated": false,
+      "IsDsIntegrated": false,
+      "IsReverseLookupZone": false,
+      "IsSigned": true
+    },
+    {
+      "ZoneName": "10.in-addr.arpa",
+      "ZoneType": "Primary",
+      "IsAutoCreated": false,
+      "IsDsIntegrated": true,
+      "IsReverseLookupZone": true,
+      "IsSigned": false
+    }
+  ]
+}

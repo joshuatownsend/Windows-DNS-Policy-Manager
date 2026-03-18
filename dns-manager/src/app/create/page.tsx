@@ -333,7 +333,7 @@ export default function CreatePolicyPage() {
               </div>
             ))}
             {criteria.length === 0 && (
-              <p className="text-sm text-muted-foreground">No criteria. Click "Add Criterion" to filter by client subnet, FQDN, etc.</p>
+              <p className="text-sm text-muted-foreground">No criteria. Click &ldquo;Add Criterion&rdquo; to filter by client subnet, FQDN, etc.</p>
             )}
           </div>
         </>

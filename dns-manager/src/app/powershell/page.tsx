@@ -3,10 +3,9 @@
 import { useCallback } from "react";
 import { useStore } from "@/lib/store";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Copy, Trash2, Terminal } from "lucide-react";
 
 // ---------------------------------------------------------------------------

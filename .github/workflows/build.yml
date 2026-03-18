@@ -1,0 +1,42 @@
+name: Build Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dns-manager/package-lock.json
+
+      - name: Install dependencies
+        working-directory: dns-manager
+        run: npm ci
+
+      - name: TypeScript build
+        working-directory: dns-manager
+        run: npm run build
+
+      - name: Lint
+        working-directory: dns-manager
+        run: npm run lint
+
+      - name: Install Playwright browsers
+        working-directory: dns-manager
+        run: npx playwright install chromium --with-deps
+
+      - name: E2E tests
+        working-directory: dns-manager
+        run: npm run test:e2e
