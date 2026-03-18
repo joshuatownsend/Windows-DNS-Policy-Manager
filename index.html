@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows DNS Policy Manager</title>
+<meta name="description" content="Visual DNS policy management for Windows Server. 98 cmdlets, 8 wizard scenarios, zero-trust local architecture.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ──────────────────────────────────────── */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080c14;--bg-card:#0d1320;--bg-elevated:#131b2e;
+  --fg:#e8ecf4;--fg-muted:#7b8ba8;--fg-ghost:#4a5672;
+  --cyan:#22d3ee;--cyan-dim:#0891b2;--cyan-muted:rgba(34,211,238,0.08);
+  --emerald:#34d399;--amber:#fbbf24;--rose:#f87171;
+  --border:rgba(136,180,255,0.08);--border-strong:rgba(136,180,255,0.14);
+  --font-display:'Oxanium',sans-serif;
+  --font-body:'Manrope',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+html{scroll-behavior:smooth;background:var(--bg);color:var(--fg)}
+body{font-family:var(--font-body);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--cyan);text-decoration:none}
+a:hover{color:#67e8f9}
+img{max-width:100%;display:block}
+
+/* ── Grid texture ──────────────────────────────────────── */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(circle at 1px 1px,rgba(136,180,255,0.03) 1px,transparent 0);
+  background-size:24px 24px;
+}
+
+/* ── Noise ─────────────────────────────────────────────── */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:0.012;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat:repeat;background-size:256px;
+}
+
+/* ── Layout ────────────────────────────────────────────── */
+.container{max-width:1120px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+section{padding:96px 0}
+section:first-of-type{padding-top:0}
+
+/* ── Section numbering ─────────────────────────────────── */
+.section-label{
+  display:flex;align-items:center;gap:12px;margin-bottom:40px;
+}
+.section-num{
+  font-family:var(--font-mono);font-size:11px;color:var(--cyan);opacity:0.5;
+  letter-spacing:0.1em;
+}
+.section-line{flex:1;height:1px;background:var(--border)}
+.section-title{
+  font-family:var(--font-display);font-size:13px;font-weight:600;
+  letter-spacing:0.15em;text-transform:uppercase;color:var(--fg-muted);
+}
+
+/* ── Hero ──────────────────────────────────────────────── */
+.hero{padding:80px 0 64px;text-align:center;position:relative}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 16px;border-radius:100px;
+  background:var(--cyan-muted);border:1px solid rgba(34,211,238,0.15);
+  font-family:var(--font-mono);font-size:11px;color:var(--cyan);
+  letter-spacing:0.05em;margin-bottom:32px;
+}
+.hero-dot{width:6px;height:6px;border-radius:50%;background:var(--emerald);
+  box-shadow:0 0 6px rgba(52,211,153,0.5);animation:beacon 2s ease-in-out infinite}
+@keyframes beacon{0%,100%{opacity:1;box-shadow:0 0 4px rgba(52,211,153,0.6)}50%{opacity:0.7;box-shadow:0 0 12px rgba(52,211,153,0.4)}}
+.hero h1{
+  font-family:var(--font-display);font-size:clamp(32px,5vw,56px);font-weight:700;
+  letter-spacing:-0.02em;line-height:1.1;margin-bottom:20px;
+  background:linear-gradient(135deg,#e8ecf4 0%,#22d3ee 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero-sub{
+  font-size:18px;color:var(--fg-muted);max-width:640px;margin:0 auto 40px;line-height:1.6;
+}
+.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:12px 24px;border-radius:6px;font-weight:600;font-size:14px;
+  transition:all 0.2s;cursor:pointer;border:none;font-family:var(--font-body);
+}
+.btn-primary{background:var(--cyan);color:var(--bg)}
+.btn-primary:hover{background:#67e8f9;transform:translateY(-1px);box-shadow:0 4px 20px rgba(34,211,238,0.3)}
+.btn-secondary{background:var(--bg-elevated);color:var(--fg);border:1px solid var(--border-strong)}
+.btn-secondary:hover{background:#1a2340;border-color:rgba(136,180,255,0.25)}
+
+/* ── Stats bar ─────────────────────────────────────────── */
+.stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--border);border-radius:8px;overflow:hidden;margin:64px 0;
+}
+.stat{
+  background:var(--bg-card);padding:28px 24px;text-align:center;
+}
+.stat-value{
+  font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--cyan);
+  line-height:1;margin-bottom:6px;
+}
+.stat-label{font-size:12px;color:var(--fg-muted);letter-spacing:0.05em;text-transform:uppercase}
+
+/* ── Feature grid ──────────────────────────────────────── */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+  padding:28px 24px;transition:all 0.25s;position:relative;overflow:hidden;
+}
+.feature:hover{border-color:rgba(34,211,238,0.2);transform:translateY(-2px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.feature-icon{
+  width:36px;height:36px;border-radius:8px;
+  background:var(--cyan-muted);border:1px solid rgba(34,211,238,0.15);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:16px;font-size:18px;
+}
+.feature h3{font-size:15px;font-weight:700;margin-bottom:8px;color:var(--fg)}
+.feature p{font-size:13px;color:var(--fg-muted);line-height:1.6}
+.feature-tag{
+  display:inline-block;font-family:var(--font-mono);font-size:10px;
+  color:var(--cyan);background:var(--cyan-muted);
+  padding:2px 8px;border-radius:4px;margin-top:12px;letter-spacing:0.03em;
+}
+
+/* ── Architecture diagram ──────────────────────────────── */
+.arch{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+  padding:40px;position:relative;overflow:hidden;
+}
+.arch::before{
+  content:"";position:absolute;inset:0;
+  background-image:radial-gradient(circle at 1px 1px,rgba(136,180,255,0.025) 1px,transparent 0);
+  background-size:16px 16px;pointer-events:none;
+}
+.arch-flow{
+  display:flex;align-items:center;justify-content:center;gap:20px;
+  flex-wrap:wrap;position:relative;z-index:1;
+}
+.arch-node{
+  background:var(--bg-elevated);border:1px solid var(--border-strong);
+  border-radius:8px;padding:20px 28px;text-align:center;min-width:200px;
+}
+.arch-node-label{font-family:var(--font-display);font-size:13px;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;color:var(--fg);margin-bottom:4px}
+.arch-node-sub{font-size:12px;color:var(--fg-muted);font-family:var(--font-mono)}
+.arch-arrow{color:var(--cyan);font-size:20px;opacity:0.4}
+.arch-note{
+  text-align:center;margin-top:24px;position:relative;z-index:1;
+}
+.arch-note p{font-size:13px;color:var(--fg-muted)}
+.arch-note strong{color:var(--emerald)}
+
+/* ── Wizard scenarios ──────────────────────────────────── */
+.scenarios{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.scenario{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+  padding:20px;transition:all 0.2s;
+}
+.scenario:hover{border-color:rgba(34,211,238,0.15)}
+.scenario-icon{font-size:24px;margin-bottom:10px}
+.scenario h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.scenario p{font-size:11px;color:var(--fg-muted);line-height:1.5}
+
+/* ── Getting started ───────────────────────────────────── */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.step{position:relative;padding-left:48px}
+.step-num{
+  position:absolute;left:0;top:0;
+  width:32px;height:32px;border-radius:50%;
+  background:var(--cyan-muted);border:1px solid rgba(34,211,238,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:13px;color:var(--cyan);font-weight:600;
+}
+.step h4{font-size:14px;font-weight:700;margin-bottom:6px}
+.step p{font-size:13px;color:var(--fg-muted);line-height:1.6}
+.step code{
+  display:inline-block;margin-top:8px;font-family:var(--font-mono);font-size:12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:4px 10px;color:var(--cyan);
+}
+
+/* ── Security callout ──────────────────────────────────── */
+.callout{
+  display:flex;gap:20px;align-items:flex-start;
+  background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+  padding:28px 32px;margin-top:40px;
+}
+.callout-icon{
+  width:40px;height:40px;border-radius:8px;
+  background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.15);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:20px;
+}
+.callout h4{font-size:14px;font-weight:700;margin-bottom:4px;color:var(--emerald)}
+.callout p{font-size:13px;color:var(--fg-muted);line-height:1.6}
+
+/* ── Footer ────────────────────────────────────────────── */
+footer{
+  border-top:1px solid var(--border);padding:40px 0;text-align:center;
+}
+footer p{font-size:12px;color:var(--fg-ghost)}
+footer a{color:var(--fg-muted)}
+
+/* ── Cmdlet coverage bar ───────────────────────────────── */
+.coverage-bar{margin:24px 0}
+.coverage-track{height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden}
+.coverage-fill{height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));
+  border-radius:3px;width:82%;transition:width 1s ease-out}
+.coverage-label{display:flex;justify-content:space-between;margin-top:8px;
+  font-family:var(--font-mono);font-size:11px;color:var(--fg-muted)}
+
+/* ── Glow line ─────────────────────────────────────────── */
+.glow-line{
+  height:1px;margin:64px 0;
+  background:linear-gradient(90deg,transparent,rgba(34,211,238,0.3) 30%,rgba(34,211,238,0.5) 50%,rgba(34,211,238,0.3) 70%,transparent);
+}
+
+/* ── Animations ────────────────────────────────────────── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp 0.5s ease-out both}
+.d1{animation-delay:0.1s}.d2{animation-delay:0.2s}.d3{animation-delay:0.3s}.d4{animation-delay:0.4s}
+
+/* ── Responsive ────────────────────────────────────────── */
+@media(max-width:900px){
+  .features{grid-template-columns:repeat(2,1fr)}
+  .scenarios{grid-template-columns:repeat(2,1fr)}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:1fr}
+  .arch-flow{flex-direction:column}
+}
+@media(max-width:600px){
+  .features{grid-template-columns:1fr}
+  .scenarios{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  section{padding:64px 0}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Hero ───────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge fade-up">
+      <span class="hero-dot"></span>
+      OPEN SOURCE &middot; RUNS LOCALLY &middot; ZERO CLOUD DEPENDENCIES
+    </div>
+    <h1 class="fade-up d1">DNS Policy Manager<br>for Windows Server</h1>
+    <p class="hero-sub fade-up d2">
+      The visual operations console for Windows DNS policies. Build geo-location routing, split-brain DNS, load balancing, and blocklists through guided wizards &mdash; or manage every setting through a modern, type-safe interface.
+    </p>
+    <div class="hero-actions fade-up d3">
+      <a href="https://github.com/joshuatownsend/Windows-DNS-Policy-Manager" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+      <a href="#get-started" class="btn btn-secondary">Get Started</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats ──────────────────────────────────────────── -->
+<div class="container">
+  <div class="stats fade-up d4">
+    <div class="stat">
+      <div class="stat-value">98</div>
+      <div class="stat-label">DnsServer Cmdlets</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">9</div>
+      <div class="stat-label">Management Tabs</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">8</div>
+      <div class="stat-label">Wizard Scenarios</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">0</div>
+      <div class="stat-label">Cloud Dependencies</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Why ────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">
+      <span class="section-num">01</span>
+      <span class="section-title">The Problem</span>
+      <span class="section-line"></span>
+    </div>
+    <div style="max-width:720px">
+      <h2 style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-bottom:16px;line-height:1.25">
+        DNS policies are powerful.<br>Managing them shouldn't require memorizing cmdlet syntax.
+      </h2>
+      <p style="color:var(--fg-muted);font-size:15px;line-height:1.7;margin-bottom:16px">
+        Windows Server DNS policies enable geo-location routing, split-brain resolution, query filtering, load balancing, and more. But they're configured entirely through PowerShell &mdash; with complex parameter combinations, strict processing order dependencies, and zero visual feedback.
+      </p>
+      <p style="color:var(--fg-muted);font-size:15px;line-height:1.7">
+        DNS Policy Manager gives you a visual operations console that wraps 98 DnsServer cmdlets with a modern, type-safe interface. Build policies through guided wizards, manage zone records, configure server settings, run best practices analysis &mdash; all without touching the command line.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="container"><div class="glow-line"></div></div>
+
+<!-- ── Features ───────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">
+      <span class="section-num">02</span>
+      <span class="section-title">Capabilities</span>
+      <span class="section-line"></span>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">&#127760;</div>
+        <h3>Zone Browser</h3>
+        <p>Two-panel layout with zone list, settings editor, and full record CRUD. Type-sensitive forms for A, AAAA, CNAME, MX, SRV, TXT, NS, PTR. CSV import and export with pagination.</p>
+        <span class="feature-tag">50+ record types</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#9881;</div>
+        <h3>Server Configuration</h3>
+        <p>13 inline-editable config panels: forwarders, recursion, cache, RRL, scavenging, diagnostics, statistics, root hints, EDNS, AD settings, global name zone, and DoH/DoT.</p>
+        <span class="feature-tag">inline editing</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128736;</div>
+        <h3>Scenario Wizards</h3>
+        <p>8 step-by-step wizards aligned to Microsoft DNS Policy docs. Typed execution with per-step progress, structured errors, and automatic credential handling.</p>
+        <span class="feature-tag">typed execution</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128203;</div>
+        <h3>Policy Management</h3>
+        <p>Create, list, toggle, delete, and reorder policies. Processing order editor with visual diff. Cross-server copy for query resolution and zone transfer policies.</p>
+        <span class="feature-tag">drag reorder</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128274;</div>
+        <h3>DNSSEC</h3>
+        <p>Zone signing status overview, KSK/ZSK key management, trust anchors and trust points. Sign, unsign, and export public keys. Supports RSA and ECDSA algorithms.</p>
+        <span class="feature-tag">key management</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128737;</div>
+        <h3>Best Practices Analyzer</h3>
+        <p>Run the Windows BPA model for DNS Server from the UI. Severity-coded findings with expandable problem descriptions, impact analysis, and resolution steps.</p>
+        <span class="feature-tag">one-click audit</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128187;</div>
+        <h3>Multi-Server</h3>
+        <p>Manage multiple DNS servers with three credential modes: Kerberos/NTLM, DPAPI-encrypted saved credentials, and session-based auth. Test all servers at once.</p>
+        <span class="feature-tag">3 auth modes</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#128230;</div>
+        <h3>Backup &amp; Import</h3>
+        <p>Export policies as JSON, restore from backups, and bulk-import domain blocklists from text files. Progress tracking with per-record error reporting.</p>
+        <span class="feature-tag">json + csv</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#9000;</div>
+        <h3>PowerShell Output</h3>
+        <p>Every operation generates the PowerShell command. Copy individual commands or the full history. Works offline as a pure command generator &mdash; no bridge needed.</p>
+        <span class="feature-tag">offline mode</span>
+      </div>
+    </div>
+
+    <!-- Cmdlet coverage -->
+    <div class="coverage-bar" style="max-width:480px;margin-top:40px">
+      <p style="font-size:13px;color:var(--fg-muted);margin-bottom:8px">DnsServer Module Coverage</p>
+      <div class="coverage-track"><div class="coverage-fill"></div></div>
+      <div class="coverage-label"><span>98 of ~120 cmdlets with dedicated UI</span><span style="color:var(--cyan)">82%</span></div>
+      <p style="font-size:11px;color:var(--fg-ghost);margin-top:4px">Remaining cmdlets accessible via the execute endpoint</p>
+    </div>
+  </div>
+</section>
+
+<div class="container"><div class="glow-line"></div></div>
+
+<!-- ── Wizards ────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">
+      <span class="section-num">03</span>
+      <span class="section-title">Wizard Scenarios</span>
+      <span class="section-line"></span>
+    </div>
+    <p style="color:var(--fg-muted);max-width:600px;margin-bottom:32px;font-size:14px">
+      Each wizard generates the complete set of PowerShell commands &mdash; subnets, zone scopes, resource records, and policies &mdash; in the correct dependency order.
+    </p>
+    <div class="scenarios">
+      <div class="scenario"><div class="scenario-icon">&#127757;</div><h4>Geo-Location Routing</h4><p>Route queries by client subnet to region-specific IPs</p></div>
+      <div class="scenario"><div class="scenario-icon">&#128256;</div><h4>Split-Brain DNS</h4><p>Different answers for internal vs. external clients</p></div>
+      <div class="scenario"><div class="scenario-icon">&#9200;</div><h4>Time-of-Day</h4><p>Weighted distribution with peak-hour cloud offload</p></div>
+      <div class="scenario"><div class="scenario-icon">&#9878;&#65039;</div><h4>Load Balancing</h4><p>Distribute queries across backends with weighted scopes</p></div>
+      <div class="scenario"><div class="scenario-icon">&#128683;</div><h4>Domain Blocklist</h4><p>Block or drop queries for malicious domains</p></div>
+      <div class="scenario"><div class="scenario-icon">&#128736;&#65039;</div><h4>Query Filters</h4><p>Block or allow by FQDN, subnet, QType, or interface</p></div>
+      <div class="scenario"><div class="scenario-icon">&#127760;</div><h4>Geo + Load Balancing</h4><p>Per-region weighted datacenter distribution</p></div>
+      <div class="scenario"><div class="scenario-icon">&#128260;</div><h4>Primary-Secondary</h4><p>Replicate geo setup to secondary DNS servers</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="container"><div class="glow-line"></div></div>
+
+<!-- ── Architecture ───────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">
+      <span class="section-num">04</span>
+      <span class="section-title">Architecture</span>
+      <span class="section-line"></span>
+    </div>
+    <div class="arch">
+      <div class="arch-flow">
+        <div class="arch-node">
+          <div class="arch-node-label">Browser</div>
+          <div class="arch-node-sub">Next.js on :10010</div>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node" style="border-color:rgba(34,211,238,0.2)">
+          <div class="arch-node-label" style="color:var(--cyan)">PowerShell Bridge</div>
+          <div class="arch-node-sub">HttpListener on :8650</div>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node">
+          <div class="arch-node-label">DNS Server</div>
+          <div class="arch-node-sub">DnsServer cmdlets</div>
+        </div>
+      </div>
+      <div class="arch-note">
+        <p style="margin-top:20px">The bridge binds to <strong>127.0.0.1 only</strong> &mdash; never exposed to the network.</p>
+        <p>All cmdlet calls use <strong>splatted parameters</strong> to prevent command injection.</p>
+        <p>Credentials are stored via <strong>Windows DPAPI encryption</strong> &mdash; no plaintext, no cloud.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="callout-icon">&#128274;</div>
+      <div>
+        <h4>Zero-Trust Local Architecture</h4>
+        <p>Nothing leaves your network. The bridge runs on localhost, credentials are encrypted with DPAPI, and the execute endpoint only allows DnsServer module cmdlets. No telemetry, no cloud services, no external API calls. Docker support is available for the frontend, but the bridge always runs on the Windows host.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="container"><div class="glow-line"></div></div>
+
+<!-- ── Get Started ────────────────────────────────────── -->
+<section id="get-started">
+  <div class="container">
+    <div class="section-label">
+      <span class="section-num">05</span>
+      <span class="section-title">Get Started</span>
+      <span class="section-line"></span>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>Clone the Repository</h4>
+        <p>Download the source and install frontend dependencies.</p>
+        <code>git clone &amp;&amp; cd dns-manager &amp;&amp; npm install</code>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>Start the Bridge</h4>
+        <p>Run the PowerShell bridge on the machine with the DnsServer module.</p>
+        <code>powershell -File server\bridge.ps1</code>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>Launch the Frontend</h4>
+        <p>Start the Next.js dev server and open your browser.</p>
+        <code>npm run dev</code>
+      </div>
+    </div>
+    <p style="color:var(--fg-muted);font-size:13px;margin-top:24px">
+      Or use the one-command launcher: <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;color:var(--cyan)">powershell -File Start-DNSPolicyManager.ps1</code>
+    </p>
+    <p style="color:var(--fg-ghost);font-size:12px;margin-top:8px">
+      Requires: Node.js 18+, Windows Server with DNS Server role or RSAT DNS tools.
+    </p>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <p style="margin-bottom:8px">
+      <a href="https://github.com/joshuatownsend/Windows-DNS-Policy-Manager" style="color:var(--fg-muted)">GitHub</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/joshuatownsend/Windows-DNS-Policy-Manager/issues" style="color:var(--fg-muted)">Issues</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/joshuatownsend/Windows-DNS-Policy-Manager/blob/main/docs/help/getting-started.md" style="color:var(--fg-muted)">Documentation</a>
+    </p>
+    <p>Windows DNS Policy Manager &middot; Open Source &middot; MIT License</p>
+  </div>
+</footer>
+
+</body>
+</html>
