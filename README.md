@@ -192,13 +192,14 @@ server/
 dns-manager/                      Next.js frontend
   Dockerfile                      Multi-stage Alpine build (standalone output)
   src/
-    app/                          App Router pages (8 tabs + help)
-      server/page.tsx             Server management
+    app/                          App Router pages (9 tabs + help)
+      server/page.tsx             Server management + configuration dashboard
       objects/page.tsx            DNS Objects (subnets, scopes)
-      zones/page.tsx              Zone browser + record CRUD
+      zones/page.tsx              Zone browser + record CRUD + lifecycle
       policies/page.tsx           Policy list
       create/page.tsx             Create Policy form
       wizards/page.tsx            Scenario wizards (10 scenarios)
+      dnssec/page.tsx             DNSSEC management
       backup/page.tsx             Backup & Import
       powershell/page.tsx         PowerShell output
       help/[slug]/page.tsx        Help documentation viewer
@@ -208,7 +209,7 @@ dns-manager/                      Next.js frontend
       help-panel.tsx              Slide-over help panel
       ui/                         shadcn/ui components
     lib/
-      api.ts                      Typed API client (39 methods)
+      api.ts                      Typed API client (~80 methods)
       store.ts                    Zustand store
       types.ts                    TypeScript interfaces
       help-mapping.ts             Route-to-help-doc mapping
@@ -220,6 +221,25 @@ docs/help/                        Source help documentation
 archive/
   vanilla-frontend/               Original vanilla JS/HTML/CSS (pre-migration)
 ```
+
+## DnsServer Module Coverage
+
+The app wraps ~98 of ~120 cmdlets in the [DnsServer PowerShell module](https://learn.microsoft.com/en-us/powershell/module/dnsserver/) with dedicated UI. The remaining cmdlets are accessible through the **PowerShell tab** via the execute endpoint, which allows any `DnsServer` cmdlet.
+
+**Cmdlets without dedicated UI** (reachable via execute):
+
+| Group | Cmdlets | Reason |
+|-------|---------|--------|
+| Type-specific record creation | `Add-DnsServerResourceRecordA`, `...AAAA`, `...CName`, `...MX`, `...Ptr`, `...DnsKey`, `...DS` | Already handled by the generic `Add-DnsServerResourceRecord` |
+| Record aging | `Set-DnsServerResourceRecordAging` | Bulk operation, run via execute |
+| Key rollover | `Invoke-DnsServerSigningKeyRollover`, `Step-DnsServerSigningKeyRollover` | One-off DNSSEC operations |
+| Zone restore | `Restore-DnsServerPrimaryZone`, `Restore-DnsServerSecondaryZone` | Rarely used, forces reload from AD/file |
+| Zone sync | `Sync-DnsServerZone` | Flushes memory to storage |
+| Imports | `Import-DnsServerRootHint`, `Import-DnsServerResourceRecordDS`, `Import-DnsServerTrustAnchor` | File-based import operations |
+| Key storage | `Show-DnsServerKeyStorageProvider` | Read-only diagnostic |
+| Directory partitions | `Get/Add/Remove/Register/Unregister-DnsServerDirectoryPartition` | AD infrastructure, rarely changed |
+| Virtualization | `Get/Add/Set/Remove-DnsServerVirtualizationInstance` | Server 2016+ niche feature |
+| Encryption (DoH) | `Get/Set-DnsServerEncryptionProtocol` | Server 2025+ only |
 
 ## Browser Support
 
