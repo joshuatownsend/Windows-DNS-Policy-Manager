@@ -263,6 +263,39 @@ export interface ServerStatistics {
   [key: string]: unknown;
 }
 
+// ── RRL & Scavenging Types ────────────────────────────────
+
+export interface RRLConfig {
+  Mode?: string;
+  ResponsesPerSec?: number;
+  ErrorsPerSec?: number;
+  WindowInSec?: number;
+  IPv4PrefixLength?: number;
+  IPv6PrefixLength?: number;
+  LeakRate?: number;
+  TruncateRate?: number;
+  TCRate?: number;
+  MaximumResponsesPerWindow?: number;
+  [key: string]: unknown;
+}
+
+export interface RRLException {
+  Name?: string;
+  Fqdn?: string;
+  ClientSubnet?: string;
+  ServerInterfaceIP?: string;
+  [key: string]: unknown;
+}
+
+export interface ScavengingConfig {
+  ScavengingState?: boolean;
+  ScavengingInterval?: string;
+  RefreshInterval?: string;
+  NoRefreshInterval?: string;
+  LastScavengeTime?: string;
+  [key: string]: unknown;
+}
+
 // ── API Response Types ────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {

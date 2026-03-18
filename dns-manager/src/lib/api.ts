@@ -410,6 +410,36 @@ export const api = {
   clearStatistics: (server?: string, serverId?: string, credentialMode?: string) =>
     request("DELETE", "/api/server/statistics" + serverParams(server, serverId, credentialMode)),
 
+  // RRL
+  getRRL: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/rrl" + serverParams(server, serverId, credentialMode)),
+
+  setRRL: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/rrl" + serverParams(server, serverId, credentialMode), data),
+
+  getRRLExceptions: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/rrl/exceptions" + serverParams(server, serverId, credentialMode)),
+
+  addRRLException: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/rrl/exceptions" + serverParams(server, serverId, credentialMode), data),
+
+  removeRRLException: (name: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", `/api/server/rrl/exceptions/${encodeURIComponent(name)}${serverParams(server, serverId, credentialMode)}`),
+
+  // Scavenging
+  getScavenging: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/scavenging" + serverParams(server, serverId, credentialMode)),
+
+  setScavenging: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/server/scavenging" + serverParams(server, serverId, credentialMode), data),
+
+  startScavenging: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/scavenging/start" + serverParams(server, serverId, credentialMode)),
+
+  // Test
+  testDnsServer: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/test" + serverParams(server, serverId, credentialMode)),
+
   // Backup
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {

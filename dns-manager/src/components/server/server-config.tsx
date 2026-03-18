@@ -28,6 +28,9 @@ import {
   Shield,
   BarChart3,
   Activity,
+  ShieldAlert,
+  Timer,
+  FlaskConical,
 } from "lucide-react";
 
 function getServerParams() {
@@ -171,6 +174,39 @@ export function ServerConfig() {
     else toast.error("Failed to load statistics: " + r.error);
     setL("statistics", false);
   }, [sp, setServerConfig]);
+
+  // RRL, Scavenging, Test — local state (not in global store)
+  const [rrl, setRrl] = useState<Record<string, unknown> | null>(null);
+  const [rrlExceptions, setRrlExceptions] = useState<Record<string, unknown>[] | null>(null);
+  const [scavenging, setScavenging] = useState<Record<string, unknown> | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
+
+  const loadRRL = useCallback(async () => {
+    setL("rrl", true);
+    const p = sp();
+    const r = await api.getRRL(p.server, p.serverId, p.credentialMode);
+    if (r.success) setRrl((r as Record<string, unknown>).rrl as Record<string, unknown>);
+    else toast.error("Failed to load RRL: " + r.error);
+    setL("rrl", false);
+  }, [sp]);
+
+  const loadRRLExceptions = useCallback(async () => {
+    setL("rrlExc", true);
+    const p = sp();
+    const r = await api.getRRLExceptions(p.server, p.serverId, p.credentialMode);
+    if (r.success) setRrlExceptions((r as Record<string, unknown>).exceptions as Record<string, unknown>[]);
+    else toast.error("Failed to load RRL exceptions: " + r.error);
+    setL("rrlExc", false);
+  }, [sp]);
+
+  const loadScavenging = useCallback(async () => {
+    setL("scavenging", true);
+    const p = sp();
+    const r = await api.getScavenging(p.server, p.serverId, p.credentialMode);
+    if (r.success) setScavenging((r as Record<string, unknown>).scavenging as Record<string, unknown>);
+    else toast.error("Failed to load scavenging: " + r.error);
+    setL("scavenging", false);
+  }, [sp]);
 
   if (!bridgeConnected) return null;
 
@@ -339,6 +375,116 @@ export function ServerConfig() {
           <p className="text-sm text-muted-foreground">Click refresh to load statistics.</p>
         )}
       </ConfigSection>
+
+      {/* ── Response Rate Limiting ─────────────────────── */}
+      <ConfigSection title="Response Rate Limiting" icon={ShieldAlert} onRefresh={() => { loadRRL(); loadRRLExceptions(); }} loading={loading.rrl}>
+        {rrl ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {["Mode", "ResponsesPerSec", "ErrorsPerSec", "WindowInSec", "LeakRate", "TruncateRate", "TCRate", "IPv4PrefixLength", "IPv6PrefixLength"].map((key) =>
+                rrl[key] !== undefined ? (
+                  <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                    <span className="text-xs text-muted-foreground">{key}</span>
+                    <span className="text-sm font-mono">{String(rrl[key])}</span>
+                  </div>
+                ) : null
+              )}
+            </div>
+
+            {/* RRL Exceptions */}
+            <Separator />
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Exception Lists</h4>
+            {rrlExceptions && rrlExceptions.length > 0 ? (
+              <div className="space-y-1.5">
+                {rrlExceptions.map((exc, i) => (
+                  <div key={i} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                    <div>
+                      <span className="text-sm font-medium">{String(exc.Name || "")}</span>
+                      {exc.Fqdn ? <span className="text-xs text-muted-foreground ml-2">FQDN: {String(exc.Fqdn)}</span> : null}
+                    </div>
+                    <Button
+                      variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive"
+                      onClick={async () => {
+                        const p = getServerParams();
+                        const r = await api.removeRRLException(String(exc.Name), p.server, p.serverId, p.credentialMode);
+                        if (r.success) { toast.success("Exception removed."); loadRRLExceptions(); }
+                        else toast.error("Failed: " + r.error);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No RRL exception lists.</p>
+            )}
+            <RRLExceptionAdder onAdded={loadRRLExceptions} />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load RRL settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Scavenging ─────────────────────────────────── */}
+      <ConfigSection title="Scavenging" icon={Timer} onRefresh={loadScavenging} loading={loading.scavenging}>
+        {scavenging ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(scavenging).map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between p-2 rounded bg-secondary/30">
+                  <span className="text-xs text-muted-foreground">{key}</span>
+                  <span className="text-sm font-mono">{typeof val === "boolean" ? (val ? "Enabled" : "Disabled") : String(val ?? "")}</span>
+                </div>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const p = getServerParams();
+                const r = await api.startScavenging(p.server, p.serverId, p.credentialMode);
+                if (r.success) toast.success("Scavenging started.");
+                else toast.error("Failed: " + r.error);
+              }}
+            >
+              <Timer className="h-3.5 w-3.5 mr-1.5" /> Scavenge Now
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click refresh to load scavenging settings.</p>
+        )}
+      </ConfigSection>
+
+      {/* ── Test Server ────────────────────────────────── */}
+      <ConfigSection title="Server Test" icon={FlaskConical}>
+        <div className="space-y-3">
+          <Button
+            size="sm"
+            onClick={async () => {
+              setL("test", true);
+              const p = sp();
+              const r = await api.testDnsServer(p.server, p.serverId, p.credentialMode);
+              if (r.success) {
+                setTestResult((r as Record<string, unknown>).result as Record<string, unknown>);
+                toast.success("Server test completed.");
+              } else {
+                toast.error("Test failed: " + r.error);
+              }
+              setL("test", false);
+            }}
+            disabled={loading.test}
+          >
+            {loading.test ? <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5 mr-1.5" />}
+            Run Test
+          </Button>
+          {testResult && (
+            <pre className="text-xs font-mono p-3 bg-background rounded-lg border border-border max-h-48 overflow-auto whitespace-pre-wrap">
+              {JSON.stringify(testResult, null, 2)}
+            </pre>
+          )}
+        </div>
+      </ConfigSection>
     </div>
   );
 }
@@ -474,6 +620,33 @@ function BlocklistPanel({
           <Plus className="h-3.5 w-3.5 mr-1" /> Add
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── RRL Exception Adder ──────────────────────────────────
+
+function RRLExceptionAdder({ onAdded }: { onAdded: () => void }) {
+  const [name, setName] = useState("");
+  const [fqdn, setFqdn] = useState("");
+
+  const add = async () => {
+    if (!name.trim()) { toast.warning("Exception name required."); return; }
+    const p = getServerParams();
+    const data: Record<string, unknown> = { name: name.trim() };
+    if (fqdn.trim()) data.fqdn = fqdn.trim();
+    const r = await api.addRRLException(data, p.server, p.serverId, p.credentialMode);
+    if (r.success) { toast.success("RRL exception added."); setName(""); setFqdn(""); onAdded(); }
+    else toast.error("Failed: " + r.error);
+  };
+
+  return (
+    <div className="flex gap-2">
+      <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="flex-1" />
+      <Input placeholder="FQDN (optional)" value={fqdn} onChange={(e) => setFqdn(e.target.value)} className="flex-1" />
+      <Button size="sm" onClick={add}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add
+      </Button>
     </div>
   );
 }

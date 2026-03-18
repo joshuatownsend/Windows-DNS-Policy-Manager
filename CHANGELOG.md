@@ -25,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - Supports Primary (file-backed or AD-integrated), Secondary, Stub, and Conditional Forwarder zones
 - 16 new DnsServer cmdlets wrapped (Add-DnsServerPrimaryZone, Add-DnsServerSecondaryZone, Add-DnsServerStubZone, Add/Set-DnsServerConditionalForwarderZone, Remove-DnsServerZone, ConvertTo-DnsServerPrimaryZone, ConvertTo-DnsServerSecondaryZone, Set-DnsServerSecondaryZone, Set-DnsServerStubZone, Export-DnsServerZone, Resume/Suspend-DnsServerZone, Start-DnsServerZoneTransfer, Get/Set-DnsServerZoneAging)
 - 9 new bridge endpoints for zone lifecycle operations
+- **Response Rate Limiting (RRL)** — View and configure RRL settings (mode, rates, window, prefix lengths), manage RRL exception lists with add/remove
+- **Scavenging** — View scavenging settings (state, intervals, last scavenge time), trigger immediate scavenging with "Scavenge Now" button
+- **Server Test** — Run `Test-DnsServer` diagnostic from the UI with JSON result display
+- 9 new DnsServer cmdlets wrapped (Get/Set-DnsServerResponseRateLimiting, Add/Remove/Get-DnsServerResponseRateLimitingExceptionlist, Get/Set-DnsServerScavenging, Start-DnsServerScavenging, Test-DnsServer)
+- 9 new bridge endpoints for RRL, scavenging, and server test
 
 ### Changed
 

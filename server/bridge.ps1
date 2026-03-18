@@ -2119,6 +2119,160 @@ function Handle-ClearStatistics {
     }
 }
 
+# ── RRL, Scavenging & Test Handlers ───────────────────────────────────────
+
+function Handle-GetRRL {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $rrl = Get-DnsServerResponseRateLimiting @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; rrl = $rrl }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetRRL {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $intFields = @('ResponsesPerSec','ErrorsPerSec','WindowInSec','IPv4PrefixLength','IPv6PrefixLength',
+                       'LeakRate','TruncateRate','MaximumResponsesPerWindow','TCRate')
+        foreach ($f in $intFields) {
+            $camel = $f.Substring(0,1).ToLower() + $f.Substring(1)
+            if ($null -ne $Body.$camel) { $splatParams[$f] = [int]$Body.$camel }
+        }
+        if ($null -ne $Body.mode) { $splatParams['Mode'] = $Body.mode }
+        Set-DnsServerResponseRateLimiting @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetRRLExceptions {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $exceptions = @(Get-DnsServerResponseRateLimitingExceptionlist @p -ErrorAction SilentlyContinue)
+        Send-Response -Response $Response -Body @{ success = $true; exceptions = $exceptions }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-AddRRLException {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $Body.name }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($Body.fqdn) { $splatParams['Fqdn'] = $Body.fqdn }
+        if ($Body.clientSubnet) { $splatParams['ClientSubnet'] = $Body.clientSubnet }
+        if ($Body.serverInterfaceIP) { $splatParams['ServerInterfaceIP'] = $Body.serverInterfaceIP }
+        Add-DnsServerResponseRateLimitingExceptionlist @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-RemoveRRLException {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$Name
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $Name }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Remove-DnsServerResponseRateLimitingExceptionlist @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetScavenging {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $scav = Get-DnsServerScavenging @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; scavenging = $scav }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetScavenging {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{}
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.scavengingState) { $splatParams['ScavengingState'] = [bool]$Body.scavengingState }
+        if ($Body.scavengingInterval) { $splatParams['ScavengingInterval'] = $Body.scavengingInterval }
+        if ($Body.refreshInterval) { $splatParams['RefreshInterval'] = $Body.refreshInterval }
+        if ($Body.noRefreshInterval) { $splatParams['NoRefreshInterval'] = $Body.noRefreshInterval }
+        Set-DnsServerScavenging @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-StartScavenging {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        Start-DnsServerScavenging @p -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-TestDnsServer {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $result = Test-DnsServer @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; result = $result }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 # ── Core Handlers ─────────────────────────────────────────────────────────
 
 function Handle-Health {
@@ -3123,6 +3277,44 @@ function Route-Request {
                     'DELETE' { Handle-ClearStatistics -Response $response -Request $request }
                     default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
+            }
+            # ── RRL & Scavenging ──────────────────────────────
+            '^/api/server/rrl/exceptions/([^/]+)$' {
+                $name = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'DELETE') {
+                    Handle-RemoveRRLException -Response $response -Request $request -Name $name
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/rrl/exceptions$' {
+                switch ($method) {
+                    'GET'  { Handle-GetRRLExceptions -Response $response -Request $request }
+                    'POST' { $body = Read-RequestBody -Request $request; Handle-AddRRLException -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/rrl$' {
+                switch ($method) {
+                    'GET' { Handle-GetRRL -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetRRL -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/scavenging/start$' {
+                if ($method -eq 'POST') {
+                    Handle-StartScavenging -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/server/scavenging$' {
+                switch ($method) {
+                    'GET' { Handle-GetScavenging -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetScavenging -Response $response -Request $request -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/test$' {
+                if ($method -eq 'POST') {
+                    Handle-TestDnsServer -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
             default {
                 Send-Response -Response $response -Body @{ success = $false; error = "Not found: $path" } -StatusCode 404
