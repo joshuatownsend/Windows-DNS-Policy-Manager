@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **E2E tests with Playwright** — 20 tests across all 9 tabs using a mock HTTP bridge on port 8650. Tests run against the production build (no dev server needed). Covers navigation, help panel, bridge status, server CRUD, zone browsing/records/creation, policy list/create/generate, wizard scenarios, backup/powershell empty states, and DNSSEC status. CI workflow updated to run tests automatically.
 - **Typed wizard execution** — "Execute on Server" now uses structured API calls instead of raw PowerShell command strings. Each wizard step calls the appropriate typed endpoint (createSubnet, createZoneScope, addPolicy, etc.) with per-step progress display, structured error messages, and proper credential handling. "Generate Commands" still produces PowerShell strings for manual use.
 - **Server Configuration Dashboard** — New collapsible panels on the Server tab for viewing and managing server-wide DNS settings:
   - **General Settings**: Round Robin, Bind Secondaries, Strict File Parsing, Local Net Priority

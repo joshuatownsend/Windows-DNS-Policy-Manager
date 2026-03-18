@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "policies": [
+    {
+      "Name": "GeoNorthAmericaPolicy",
+      "ProcessingOrder": "1",
+      "IsEnabled": "True",
+      "Action": "ALLOW",
+      "Level": "Zone",
+      "ZoneName": "contoso.com",
+      "Condition": null
+    },
+    {
+      "Name": "GeoEuropePolicy",
+      "ProcessingOrder": "2",
+      "IsEnabled": "True",
+      "Action": "ALLOW",
+      "Level": "Zone",
+      "ZoneName": "contoso.com",
+      "Condition": null
+    },
+    {
+      "Name": "BlockMalware",
+      "ProcessingOrder": "3",
+      "IsEnabled": "False",
+      "Action": "DENY",
+      "Level": "Server",
+      "ZoneName": null,
+      "Condition": null
+    }
+  ]
+}

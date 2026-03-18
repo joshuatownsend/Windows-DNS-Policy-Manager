@@ -32,3 +32,11 @@ jobs:
       - name: Lint
         working-directory: dns-manager
         run: npm run lint
+
+      - name: Install Playwright browsers
+        working-directory: dns-manager
+        run: npx playwright install chromium --with-deps
+
+      - name: E2E tests
+        working-directory: dns-manager
+        run: npm run test:e2e

@@ -1,10 +1,5 @@
 # TODO
 
-## High Priority
-
-### E2E Tests with Playwright
-Add end-to-end tests covering all 9 tabs. Test against a mock bridge or a real DNS server in a CI environment. Priority flows: server connection, zone browsing, record CRUD, policy create/toggle/delete, wizard completion, backup export/import.
-
 ## Medium Priority
 
 ### Wizard Processing Order Editor

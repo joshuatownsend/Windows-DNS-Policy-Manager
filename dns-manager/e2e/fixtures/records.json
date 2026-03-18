@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "records": [
+    {
+      "HostName": "@",
+      "RecordType": "SOA",
+      "RecordData": { "PrimaryServer": "ns1.contoso.com.", "ResponsiblePerson": "admin.contoso.com." },
+      "TimeToLive": "01:00:00"
+    },
+    {
+      "HostName": "@",
+      "RecordType": "NS",
+      "RecordData": { "NameServer": "ns1.contoso.com." },
+      "TimeToLive": "01:00:00"
+    },
+    {
+      "HostName": "www",
+      "RecordType": "A",
+      "RecordData": { "IPv4Address": "192.168.1.10" },
+      "TimeToLive": "00:05:00"
+    },
+    {
+      "HostName": "mail",
+      "RecordType": "A",
+      "RecordData": { "IPv4Address": "192.168.1.20" },
+      "TimeToLive": "01:00:00"
+    },
+    {
+      "HostName": "@",
+      "RecordType": "MX",
+      "RecordData": { "MailExchange": "mail.contoso.com.", "Preference": "10" },
+      "TimeToLive": "01:00:00"
+    },
+    {
+      "HostName": "alias",
+      "RecordType": "CNAME",
+      "RecordData": { "HostNameAlias": "www.contoso.com." },
+      "TimeToLive": "01:00:00"
+    }
+  ]
+}
