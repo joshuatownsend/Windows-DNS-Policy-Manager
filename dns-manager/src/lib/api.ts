@@ -185,7 +185,8 @@ export const api = {
     }>,
     zone?: string,
     sourceServerId?: string,
-    sourceCredentialMode?: CredentialMode
+    sourceCredentialMode?: CredentialMode,
+    policyType?: "QueryResolution" | "ZoneTransfer"
   ) =>
     request("POST", "/api/policies/copy", {
       sourceServer,
@@ -193,6 +194,7 @@ export const api = {
       zone: zone || null,
       sourceServerId: sourceServerId || null,
       sourceCredentialMode: sourceCredentialMode || "currentUser",
+      policyType: policyType || "QueryResolution",
     }),
 
   // Zone Transfer Policies

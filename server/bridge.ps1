@@ -283,6 +283,7 @@ function Handle-CopyPolicies {
         }
 
         $zone = if ($Body.zone) { $Body.zone } else { $null }
+        $policyType = if ($Body.policyType) { $Body.policyType } else { 'QueryResolution' }
         $sourceServerId = if ($Body.sourceServerId) { $Body.sourceServerId } else { $null }
         $sourceCredMode = if ($Body.sourceCredentialMode) { $Body.sourceCredentialMode } else { 'currentUser' }
 
@@ -297,7 +298,11 @@ function Handle-CopyPolicies {
         if ($zone) { $getSplatParams['ZoneName'] = $zone }
 
         # Get policies from source (returns empty array if none exist)
-        $policies = @(Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        if ($policyType -eq 'ZoneTransfer') {
+            $policies = @(Get-DnsServerZoneTransferPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        } else {
+            $policies = @(Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction SilentlyContinue)
+        }
 
         $results = @()
         foreach ($targetObj in $Body.targetServers) {
@@ -341,7 +346,11 @@ function Handle-CopyPolicies {
                     # Copy zone scopes if present
                     if ($policy.ZoneScope) { $addSplatParams['ZoneScope'] = $policy.ZoneScope }
 
-                    Add-DnsServerQueryResolutionPolicy @addSplatParams -ErrorAction Stop
+                    if ($policyType -eq 'ZoneTransfer') {
+                        Add-DnsServerZoneTransferPolicy @addSplatParams -ErrorAction Stop
+                    } else {
+                        Add-DnsServerQueryResolutionPolicy @addSplatParams -ErrorAction Stop
+                    }
                     $copiedCount++
                 }
 
