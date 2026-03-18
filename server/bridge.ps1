@@ -4,14 +4,16 @@
     DNS Policy Manager - PowerShell HTTP Bridge
 .DESCRIPTION
     Local HTTP bridge that exposes DNS Server cmdlets as REST API endpoints.
-    Binds only to 127.0.0.1 (default port 8650) for security. Zero external dependencies.
+    Binds to 127.0.0.1 by default (port 8650) for security. Zero external dependencies.
+    Use -BindAddress 0.0.0.0 to listen on all interfaces (required for Docker networking).
 .NOTES
     Run with: powershell -ExecutionPolicy Bypass -File bridge.ps1
     Stop with: Ctrl+C
 #>
 
 param(
-    [int]$Port = 8650
+    [int]$Port = 8650,
+    [string]$BindAddress = '127.0.0.1'
 )
 
 Set-StrictMode -Version Latest
@@ -294,8 +296,8 @@ function Handle-CopyPolicies {
         }
         if ($zone) { $getSplatParams['ZoneName'] = $zone }
 
-        # Get policies from source
-        $policies = Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction Stop
+        # Get policies from source (returns empty array if none exist)
+        $policies = @(Get-DnsServerQueryResolutionPolicy @getSplatParams -ErrorAction SilentlyContinue)
 
         $results = @()
         foreach ($targetObj in $Body.targetServers) {
@@ -320,7 +322,12 @@ function Handle-CopyPolicies {
                     }
 
                     if ($zone) { $addSplatParams['ZoneName'] = $zone }
+                    if ($policy.IsEnabled -eq $false) { $addSplatParams['IsEnabled'] = $false }
                     if ($policy.Condition) { $addSplatParams['Condition'] = $policy.Condition.ToString() }
+
+                    # Recursion-specific fields (split-brain / recursion policies)
+                    if ($policy.ApplyOnRecursion) { $addSplatParams['ApplyOnRecursion'] = $true }
+                    if ($policy.RecursionScope) { $addSplatParams['RecursionScope'] = $policy.RecursionScope }
 
                     # Copy criteria
                     if ($policy.ClientSubnet) { $addSplatParams['ClientSubnet'] = $policy.ClientSubnet }
@@ -2497,7 +2504,7 @@ function Route-Request {
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-$prefix = "http://127.0.0.1:${Port}/"
+$prefix = "http://${BindAddress}:${Port}/"
 $listener = $null
 
 # Remove stale URL ACL reservations that can block HttpListener
@@ -2510,7 +2517,12 @@ try {
 } catch {}
 
 # Try binding with multiple prefix formats for compatibility
-$prefixes = @($prefix, "http://localhost:${Port}/")
+$prefixes = @($prefix)
+if ($BindAddress -eq '127.0.0.1') {
+    $prefixes += "http://localhost:${Port}/"
+} elseif ($BindAddress -eq '0.0.0.0') {
+    $prefixes = @("http://+:${Port}/")
+}
 $started = $false
 
 foreach ($pfx in $prefixes) {

@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
+import { HelpPanel } from "./help-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background ops-grid-bg">
@@ -16,7 +19,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between">
             {/* Brand */}
             <div className="flex items-center gap-4">
-              {/* Icon mark */}
               <div className="relative flex items-center justify-center w-9 h-9">
                 <div className="absolute inset-0 rounded-lg bg-cyan/10 border border-cyan/20" />
                 <svg
@@ -51,10 +53,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <ExecutionToggle />
               <div className="w-px h-5 bg-border" />
               <BridgeStatus />
+              <div className="w-px h-5 bg-border" />
+              {/* Help button */}
+              <button
+                onClick={() => setHelpOpen(true)}
+                className="group relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-[rgba(136,180,255,0.08)] transition-colors"
+                title="Help (context-sensitive)"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-muted-foreground group-hover:text-cyan transition-colors"
+                >
+                  <circle cx="8" cy="8" r="6.5" />
+                  <path d="M6 6.5a2 2 0 013.94.5c0 1-1.44 1.5-1.44 1.5" />
+                  <circle cx="8" cy="11" r="0.5" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
-        {/* Glowing rule line */}
         <div className="header-rule" />
       </header>
 
@@ -63,6 +87,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <TabNav />
         <main className="py-6 animate-fade-in">{children}</main>
       </div>
+
+      {/* ── Help slide-over ─────────────────────────────── */}
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

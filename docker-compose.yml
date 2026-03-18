@@ -1,0 +1,49 @@
+# DNS Policy Manager — Docker Compose
+#
+# The frontend runs in a Linux container. The bridge requires Windows
+# PowerShell with the DnsServer module, so it runs either:
+#   (a) on the Docker host (see "bridge on host" below), or
+#   (b) in a Windows container (uncomment the bridge service)
+#
+# Usage:
+#   docker compose up -d              # frontend only, bridge on host
+#   docker compose --profile bridge up -d   # both (Windows containers required)
+
+services:
+  # ── Frontend (Next.js) ────────────────────────────────────
+  frontend:
+    build:
+      context: ./dns-manager
+      args:
+        # Point rewrites at the bridge. Use "host.docker.internal" when
+        # the bridge runs on the Docker host, or "bridge" when using
+        # the bridge container.
+        BRIDGE_URL: http://host.docker.internal:8650
+    ports:
+      - "10010:10010"
+    environment:
+      - NODE_ENV=production
+      - PORT=10010
+      - HOSTNAME=0.0.0.0
+    restart: unless-stopped
+
+  # ── Bridge (PowerShell) — Windows container ───────────────
+  # Requires Docker with Windows containers enabled.
+  # Uncomment to run the bridge in a container instead of on the host.
+  #
+  # bridge:
+  #   image: mcr.microsoft.com/windows/servercore:ltsc2022
+  #   profiles: ["bridge"]
+  #   ports:
+  #     - "8650:8650"
+  #   volumes:
+  #     - ./server:/app/server:ro
+  #   working_dir: /app
+  #   command: >
+  #     powershell -ExecutionPolicy Bypass -File server/bridge.ps1
+  #     -Port 8650 -BindAddress 0.0.0.0
+  #   restart: unless-stopped
+  #   # Note: The DnsServer PowerShell module must be available in the
+  #   # container. Install RSAT-DNS-Server or mount the module from the host.
+  #   # For credential storage (DPAPI), mount a persistent volume for
+  #   # the credentials directory.

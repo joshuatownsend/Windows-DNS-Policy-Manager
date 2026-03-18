@@ -1,0 +1,16 @@
+# Bridge runtime
+bridge.log
+server/credentials/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files
+.env*
+
+# Large binaries / PDFs
+*.pdf

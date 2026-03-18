@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
 
+const bridgeUrl = process.env.BRIDGE_URL || "http://127.0.0.1:8650";
+
 const nextConfig: NextConfig = {
+  output: "standalone",
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://127.0.0.1:8650/api/:path*",
+        destination: `${bridgeUrl}/api/:path*`,
       },
     ];
   },

@@ -1,0 +1,9 @@
+.git
+archive
+docs
+*.md
+*.pdf
+*.log
+.playwright-mcp
+dns-manager/node_modules
+dns-manager/.next
