@@ -5,9 +5,6 @@
 ### E2E Tests with Playwright
 Add end-to-end tests covering all 9 tabs. Test against a mock bridge or a real DNS server in a CI environment. Priority flows: server connection, zone browsing, record CRUD, policy create/toggle/delete, wizard completion, backup export/import.
 
-### Wizard Execution: Use Typed API Endpoints
-Currently `wizardExecute()` sends each command line to `/api/execute` sequentially. Refactor to call typed API endpoints directly (e.g., `api.createSubnet()`, `api.createZoneScope()`, `api.addPolicy()`). This would provide structured error handling per object type and make rollback on partial failure feasible.
-
 ## Medium Priority
 
 ### Wizard Processing Order Editor

@@ -163,9 +163,13 @@ Create flexible query filters using combinations of criteria types.
 
 ## After Execution
 
-When you execute wizard commands:
-- A progress indicator shows while commands run
-- Results appear in the **PowerShell** tab showing which commands succeeded and which failed
-- DNS objects (subnets, scopes) are refreshed automatically
+When you click **Execute on Server**, the wizard runs each step individually using the application's typed API — not raw PowerShell strings. This provides:
 
-If any command fails, the remaining commands still execute. Check the PowerShell tab for error details.
+- **Per-step progress** — A progress bar shows which step is running (e.g., "Creating client subnet: NorthAmericaSubnet")
+- **Step-by-step results** — Each step shows a green checkmark or red X with the specific error
+- **Proper credentials** — All steps use the active server's credential mode automatically
+- **PowerShell tab log** — A summary of all steps (pass/fail) is added to the PowerShell tab
+
+If a step fails, the remaining steps still execute. Review the results list below the command preview for details on any failures.
+
+**Generate Commands** still produces raw PowerShell strings that you can copy and run manually — this flow is unchanged.
