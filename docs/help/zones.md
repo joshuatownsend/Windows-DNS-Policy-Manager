@@ -18,6 +18,31 @@ Use the **search box** at the top to filter zones by name.
 
 Click a zone to load its details and records in the right panel.
 
+## Creating a Zone
+
+Click **Create** in the zone list header. Choose a zone type:
+
+| Type | Description |
+|------|-------------|
+| **Primary** | Authoritative read-write zone. Can be file-backed or AD-integrated. |
+| **Secondary** | Read-only copy that transfers from a master server. |
+| **Stub** | Contains only NS records, delegates queries to a master server. |
+| **Conditional Forwarder** | Forwards queries for this domain to specified servers. |
+
+Fill in the required fields (zone name, master servers for non-primary types) and click **Create Zone**.
+
+For AD-integrated zones, select a **Replication Scope** (Domain, Forest, or Legacy). Leave it empty for file-backed zones.
+
+## Zone Actions
+
+Each zone has a **three-dot menu** with actions:
+
+- **Suspend** — Pauses name resolution for the zone. The zone remains on the server but stops answering queries.
+- **Resume** — Resumes a suspended zone.
+- **Force Transfer** — Triggers an immediate zone transfer from the master server (secondary and stub zones only).
+- **Export** — Exports the zone contents to a DNS file on the server.
+- **Delete Zone** — Permanently removes the zone. You must type the zone name to confirm.
+
 ## Zone Settings
 
 When you select a zone, the right panel shows a collapsible **Settings** section with:

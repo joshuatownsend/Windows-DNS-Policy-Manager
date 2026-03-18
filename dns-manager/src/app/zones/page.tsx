@@ -42,6 +42,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
+import { CreateZoneDialog } from "@/components/zones/create-zone-dialog";
+import { ZoneActions } from "@/components/zones/zone-actions";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -280,6 +282,9 @@ export default function ZonesPage() {
   const [aging, setAging] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState("");
   const [noRefreshInterval, setNoRefreshInterval] = useState("");
+
+  // Create zone dialog
+  const [createZoneOpen, setCreateZoneOpen] = useState(false);
 
   // Record modal
   const [recordDialogOpen, setRecordDialogOpen] = useState(false);
@@ -541,9 +546,14 @@ export default function ZonesPage() {
       {/* ── Left Panel: Zone List ──────────────────────────── */}
       <Card className="w-1/3 flex flex-col border-zinc-800 bg-zinc-950">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-zinc-400">
-            Zones
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-zinc-400">
+              Zones
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setCreateZoneOpen(true)}>
+              Create
+            </Button>
+          </div>
           <Input
             placeholder="Search zones..."
             value={zoneSearch}
@@ -587,15 +597,24 @@ export default function ZonesPage() {
                         >
                           {zone.ZoneName}
                         </span>
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] shrink-0 ${
-                            ZONE_TYPE_COLORS[zone.ZoneType] ||
-                            "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
-                          }`}
-                        >
-                          {zone.ZoneType}
-                        </Badge>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              ZONE_TYPE_COLORS[zone.ZoneType] ||
+                              "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                            }`}
+                          >
+                            {zone.ZoneType}
+                          </Badge>
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <ZoneActions
+                              zoneName={zone.ZoneName}
+                              zoneType={zone.ZoneType}
+                              onDeleted={() => loadZones()}
+                            />
+                          </span>
+                        </div>
                       </div>
                       <div className="flex gap-1.5 mt-1">
                         {zone.IsDsIntegrated && (
@@ -1253,6 +1272,13 @@ export default function ZonesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Zone Dialog */}
+      <CreateZoneDialog
+        open={createZoneOpen}
+        onOpenChange={setCreateZoneOpen}
+        onCreated={() => loadZones()}
+      />
     </div>
   );
 }

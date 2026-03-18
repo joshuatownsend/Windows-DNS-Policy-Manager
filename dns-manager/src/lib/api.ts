@@ -333,6 +333,34 @@ export const api = {
       `/api/recursionscopes/${encodeURIComponent(name)}${serverParams(server, serverId, credentialMode)}`
     ),
 
+  // Zone Lifecycle
+  createZone: (data: Record<string, unknown>) =>
+    request("POST", "/api/zones", data),
+
+  removeZone: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("DELETE", `/api/zones/${encodeURIComponent(zoneName)}${serverParams(server, serverId, credentialMode)}`),
+
+  convertZone: (zoneName: string, data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/zones/${encodeURIComponent(zoneName)}/convert${serverParams(server, serverId, credentialMode)}`, data),
+
+  startZoneTransfer: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/zones/${encodeURIComponent(zoneName)}/transfer${serverParams(server, serverId, credentialMode)}`),
+
+  suspendZone: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/zones/${encodeURIComponent(zoneName)}/suspend${serverParams(server, serverId, credentialMode)}`),
+
+  resumeZone: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/zones/${encodeURIComponent(zoneName)}/resume${serverParams(server, serverId, credentialMode)}`),
+
+  exportZone: (zoneName: string, fileName?: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", `/api/zones/${encodeURIComponent(zoneName)}/export${serverParams(server, serverId, credentialMode)}`, { fileName }),
+
+  getZoneAging: (zoneName: string, server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", `/api/zones/${encodeURIComponent(zoneName)}/aging${serverParams(server, serverId, credentialMode)}`),
+
+  setZoneAging: (zoneName: string, data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", `/api/zones/${encodeURIComponent(zoneName)}/aging${serverParams(server, serverId, credentialMode)}`, data),
+
   // Server Configuration
   getServerSettings: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/settings" + serverParams(server, serverId, credentialMode)),

@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - **Statistics**: View raw server counters, Clear Statistics action
 - 15 new DnsServer cmdlets wrapped (Get/Set-DnsServerSetting, Get/Set/Add/Remove-DnsServerForwarder, Get-DnsServerCache, Clear-DnsServerCache, Get/Set-DnsServerRecursion, Get/Set-DnsServerGlobalQueryBlockList, Get/Set-DnsServerDiagnostics, Get/Clear-DnsServerStatistics)
 - 16 new bridge endpoints under `/api/server/*`
+- **Zone Lifecycle Management** — Create, delete, convert, suspend, resume, export zones, and manage zone aging:
+  - **Create Zone** dialog with type selector (Primary, Secondary, Stub, Conditional Forwarder), AD replication scope, dynamic update options
+  - **Zone Actions** dropdown per zone: Suspend, Resume, Force Transfer (secondary), Export, Delete (with typed confirmation)
+  - **Zone Aging** settings via bridge endpoint
+  - Supports Primary (file-backed or AD-integrated), Secondary, Stub, and Conditional Forwarder zones
+- 16 new DnsServer cmdlets wrapped (Add-DnsServerPrimaryZone, Add-DnsServerSecondaryZone, Add-DnsServerStubZone, Add/Set-DnsServerConditionalForwarderZone, Remove-DnsServerZone, ConvertTo-DnsServerPrimaryZone, ConvertTo-DnsServerSecondaryZone, Set-DnsServerSecondaryZone, Set-DnsServerStubZone, Export-DnsServerZone, Resume/Suspend-DnsServerZone, Start-DnsServerZoneTransfer, Get/Set-DnsServerZoneAging)
+- 9 new bridge endpoints for zone lifecycle operations
 
 ### Changed
 

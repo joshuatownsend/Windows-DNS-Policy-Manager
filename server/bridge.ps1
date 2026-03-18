@@ -2173,6 +2173,236 @@ function Handle-Connect {
     }
 }
 
+# ── Zone Lifecycle Handlers ────────────────────────────────────────────────
+
+function Handle-CreateZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [psobject]$Body
+    )
+    try {
+        $p = @{}
+        if ($Body.server) {
+            if ($Body.serverId) {
+                $p = Resolve-ServerCredential -ServerId $Body.serverId -CredentialMode ($Body.credentialMode ?? 'currentUser') -Hostname $Body.server
+            } elseif ($Body.server -ne 'localhost' -and $Body.server -ne $env:COMPUTERNAME) {
+                $p['ComputerName'] = $Body.server
+            }
+        }
+        $zoneType = $Body.zoneType  # 'Primary', 'Secondary', 'Stub', 'ConditionalForwarder'
+        switch ($zoneType) {
+            'Primary' {
+                $splatParams = @{ Name = $Body.zoneName }
+                foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+                if ($Body.replicationScope) {
+                    $splatParams['ReplicationScope'] = $Body.replicationScope
+                } elseif ($Body.zoneFile) {
+                    $splatParams['ZoneFile'] = $Body.zoneFile
+                }
+                if ($Body.dynamicUpdate) { $splatParams['DynamicUpdate'] = $Body.dynamicUpdate }
+                Add-DnsServerPrimaryZone @splatParams -ErrorAction Stop
+            }
+            'Secondary' {
+                $splatParams = @{
+                    Name          = $Body.zoneName
+                    ZoneFile      = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                    MasterServers = [string[]]$Body.masterServers
+                }
+                foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+                Add-DnsServerSecondaryZone @splatParams -ErrorAction Stop
+            }
+            'Stub' {
+                $splatParams = @{
+                    Name          = $Body.zoneName
+                    MasterServers = [string[]]$Body.masterServers
+                }
+                foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+                if ($Body.replicationScope) {
+                    $splatParams['ReplicationScope'] = $Body.replicationScope
+                } else {
+                    $splatParams['ZoneFile'] = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                }
+                Add-DnsServerStubZone @splatParams -ErrorAction Stop
+            }
+            'ConditionalForwarder' {
+                $splatParams = @{
+                    Name          = $Body.zoneName
+                    MasterServers = [string[]]$Body.masterServers
+                }
+                foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+                if ($Body.replicationScope) { $splatParams['ReplicationScope'] = $Body.replicationScope }
+                Add-DnsServerConditionalForwarderZone @splatParams -ErrorAction Stop
+            }
+            default {
+                Send-Response -Response $Response -Body @{ success = $false; error = "Unknown zone type: $zoneType" } -StatusCode 400
+                return
+            }
+        }
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-RemoveZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Remove-DnsServerZone @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ConvertZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $targetType = $Body.targetType  # 'Primary' or 'Secondary'
+        if ($targetType -eq 'Primary') {
+            if ($Body.replicationScope) { $splatParams['ReplicationScope'] = $Body.replicationScope }
+            elseif ($Body.zoneFile) { $splatParams['ZoneFile'] = $Body.zoneFile }
+            ConvertTo-DnsServerPrimaryZone @splatParams -Force -ErrorAction Stop
+        } elseif ($targetType -eq 'Secondary') {
+            if ($Body.masterServers) { $splatParams['MasterServers'] = [string[]]$Body.masterServers }
+            if ($Body.zoneFile) { $splatParams['ZoneFile'] = $Body.zoneFile }
+            ConvertTo-DnsServerSecondaryZone @splatParams -Force -ErrorAction Stop
+        } else {
+            Send-Response -Response $Response -Body @{ success = $false; error = "Invalid target type: $targetType" } -StatusCode 400
+            return
+        }
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-StartZoneTransfer {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Start-DnsServerZoneTransfer @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SuspendZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Suspend-DnsServerZone @splatParams -Force -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ResumeZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Resume-DnsServerZone @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ExportZone {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $fileName = if ($Body -and $Body.fileName) { $Body.fileName } else { "$ZoneName.dns" }
+        $splatParams = @{ Name = $ZoneName; FileName = $fileName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        Export-DnsServerZone @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; fileName = $fileName }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetZoneAging {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        $aging = Get-DnsServerZoneAging @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success = $true
+            aging   = $aging
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-SetZoneAging {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        [string]$ZoneName,
+        [psobject]$Body
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $splatParams = @{ Name = $ZoneName }
+        foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
+        if ($null -ne $Body.aging) { $splatParams['Aging'] = [bool]$Body.aging }
+        if ($Body.refreshInterval) { $splatParams['RefreshInterval'] = $Body.refreshInterval }
+        if ($Body.noRefreshInterval) { $splatParams['NoRefreshInterval'] = $Body.noRefreshInterval }
+        if ($Body.scavengeServers) { $splatParams['ScavengeServers'] = [string[]]$Body.scavengeServers }
+        Set-DnsServerZoneAging @splatParams -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 function Handle-GetZones {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -2672,6 +2902,47 @@ function Route-Request {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
                 }
             }
+            # ── Zone Lifecycle ─────────────────────────────
+            '^/api/zones/([^/]+)/aging$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                switch ($method) {
+                    'GET' { Handle-GetZoneAging -Response $response -Request $request -ZoneName $zn }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetZoneAging -Response $response -Request $request -ZoneName $zn -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/zones/([^/]+)/convert$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-ConvertZone -Response $response -Request $request -ZoneName $zn -Body $body
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/zones/([^/]+)/transfer$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') {
+                    Handle-StartZoneTransfer -Response $response -Request $request -ZoneName $zn
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/zones/([^/]+)/suspend$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') {
+                    Handle-SuspendZone -Response $response -Request $request -ZoneName $zn
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/zones/([^/]+)/resume$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') {
+                    Handle-ResumeZone -Response $response -Request $request -ZoneName $zn
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/zones/([^/]+)/export$' {
+                $zn = [System.Uri]::UnescapeDataString($Matches[1])
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-ExportZone -Response $response -Request $request -ZoneName $zn -Body $body
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
             # ── Zone Records & Settings ─────────────────────
             '^/api/zones/([^/]+)/records$' {
                 $zn = [System.Uri]::UnescapeDataString($Matches[1])
@@ -2707,14 +2978,18 @@ function Route-Request {
             }
             '^/api/zones/([^/]+)$' {
                 $zn = [System.Uri]::UnescapeDataString($Matches[1])
-                if ($method -eq 'GET') {
-                    Handle-GetZoneDetails -Response $response -Request $request -ZoneName $zn
-                } else {
-                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                switch ($method) {
+                    'GET'    { Handle-GetZoneDetails -Response $response -Request $request -ZoneName $zn }
+                    'DELETE' { Handle-RemoveZone -Response $response -Request $request -ZoneName $zn }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }
             '^/api/zones$' {
-                Handle-GetZones -Response $response -Request $request
+                switch ($method) {
+                    'GET'  { Handle-GetZones -Response $response -Request $request }
+                    'POST' { $body = Read-RequestBody -Request $request; Handle-CreateZone -Response $response -Body $body }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
             }
             '^/api/credentials/store$' {
                 if ($method -eq 'POST') {

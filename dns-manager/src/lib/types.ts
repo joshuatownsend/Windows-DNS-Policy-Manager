@@ -167,6 +167,31 @@ export interface WizardState {
   data: Record<string, unknown>;
 }
 
+// ── Zone Lifecycle Types ──────────────────────────────────
+
+export type CreateZoneType = "Primary" | "Secondary" | "Stub" | "ConditionalForwarder";
+
+export interface CreateZoneParams {
+  zoneName: string;
+  zoneType: CreateZoneType;
+  replicationScope?: string;
+  zoneFile?: string;
+  dynamicUpdate?: string;
+  masterServers?: string[];
+  server?: string;
+  serverId?: string;
+  credentialMode?: string;
+}
+
+export interface ZoneAging {
+  AgingEnabled?: boolean;
+  RefreshInterval?: string;
+  NoRefreshInterval?: string;
+  ScavengeServers?: string[];
+  AvailForScavengeTime?: string;
+  [key: string]: unknown;
+}
+
 // ── Server Configuration Types ────────────────────────────
 
 export interface ServerSettings {
