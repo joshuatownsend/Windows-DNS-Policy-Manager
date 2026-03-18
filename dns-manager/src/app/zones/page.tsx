@@ -44,6 +44,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CreateZoneDialog } from "@/components/zones/create-zone-dialog";
 import { ZoneActions } from "@/components/zones/zone-actions";
+import { exportRecordsCsv } from "@/components/zones/record-export";
+import { RecordImportDialog } from "@/components/zones/record-import";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -285,6 +287,7 @@ export default function ZonesPage() {
 
   // Create zone dialog
   const [createZoneOpen, setCreateZoneOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Record modal
   const [recordDialogOpen, setRecordDialogOpen] = useState(false);
@@ -529,6 +532,20 @@ export default function ZonesPage() {
 
     return records;
   }, [zoneRecords, zoneRecordFilter]);
+
+  // ── Pagination ─────────────────────────────────────────
+  const PAGE_SIZE = 50;
+  const [recordPage, setRecordPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
+  const paginatedRecords = filteredRecords.slice(
+    recordPage * PAGE_SIZE,
+    (recordPage + 1) * PAGE_SIZE
+  );
+
+  // Reset page when filters or zone change
+  useEffect(() => {
+    setRecordPage(0);
+  }, [zoneRecordFilter, selectedZone]);
 
   // ── Update record form field ─────────────────────────────
 
@@ -838,9 +855,9 @@ export default function ZonesPage() {
                     Records
                     {zoneRecords.length > 0 && (
                       <span className="ml-2 text-zinc-600">
-                        ({filteredRecords.length}
+                        ({recordPage * PAGE_SIZE + 1}-{Math.min((recordPage + 1) * PAGE_SIZE, filteredRecords.length)} of {filteredRecords.length}
                         {filteredRecords.length !== zoneRecords.length &&
-                          ` of ${zoneRecords.length}`}
+                          ` / ${zoneRecords.length} total`}
                         )
                       </span>
                     )}
@@ -854,6 +871,21 @@ export default function ZonesPage() {
                       className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                     >
                       Refresh
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => exportRecordsCsv(filteredRecords, selectedZone?.ZoneName || "zone")}
+                      disabled={filteredRecords.length === 0}
+                    >
+                      Export CSV
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setImportOpen(true)}
+                    >
+                      Import CSV
                     </Button>
                     <Button
                       size="sm"
@@ -936,7 +968,7 @@ export default function ZonesPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredRecords.map((record, idx) => (
+                        {paginatedRecords.map((record, idx) => (
                           <TableRow
                             key={`${record.HostName}-${record.RecordType}-${idx}`}
                             className="border-zinc-800/50 hover:bg-zinc-900/50"
@@ -991,6 +1023,31 @@ export default function ZonesPage() {
                     </Table>
                   )}
                 </ScrollArea>
+
+                {/* Pagination */}
+                {filteredRecords.length > PAGE_SIZE && (
+                  <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={recordPage === 0}
+                      onClick={() => setRecordPage((p) => p - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-zinc-400">
+                      Page {recordPage + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={recordPage >= totalPages - 1}
+                      onClick={() => setRecordPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </>
@@ -1279,6 +1336,16 @@ export default function ZonesPage() {
         onOpenChange={setCreateZoneOpen}
         onCreated={() => loadZones()}
       />
+
+      {/* Record Import Dialog */}
+      {selectedZone && (
+        <RecordImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          zoneName={selectedZone.ZoneName}
+          onImported={() => selectZone(selectedZone)}
+        />
+      )}
     </div>
   );
 }

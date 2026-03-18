@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Record pagination** — Zones with more than 50 records now paginate with Previous/Next controls. Page resets on filter or zone change.
+- **Bulk record export** — Export current zone records (or filtered subset) as CSV with one click.
+- **Bulk record import** — Import records from CSV files with drag-and-drop, preview table with validation, per-record progress bar, and error reporting. Supports A, AAAA, CNAME, MX, NS, PTR, SRV, TXT records.
 - **E2E tests with Playwright** — 20 tests across all 9 tabs using a mock HTTP bridge on port 8650. Tests run against the production build (no dev server needed). Covers navigation, help panel, bridge status, server CRUD, zone browsing/records/creation, policy list/create/generate, wizard scenarios, backup/powershell empty states, and DNSSEC status. CI workflow updated to run tests automatically.
 - **Typed wizard execution** — "Execute on Server" now uses structured API calls instead of raw PowerShell command strings. Each wizard step calls the appropriate typed endpoint (createSubnet, createZoneScope, addPolicy, etc.) with per-step progress display, structured error messages, and proper credential handling. "Generate Commands" still produces PowerShell strings for manual use.
 - **Server Configuration Dashboard** — New collapsible panels on the Server tab for viewing and managing server-wide DNS settings:

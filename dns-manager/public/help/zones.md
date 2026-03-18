@@ -108,6 +108,43 @@ SOA records are read-only and cannot be edited through this tool.
 
 Click the **trash icon** on any record row and confirm the deletion.
 
+## Pagination
+
+When a zone has more than 50 records, the table paginates automatically. Use the **Previous** and **Next** buttons below the table to navigate pages. The header shows which records are currently displayed (e.g., "1-50 of 234").
+
+Changing the type filter or search text resets to the first page.
+
+## Bulk Export
+
+Click **Export CSV** in the records header to download the current records as a CSV file. If filters are active, only the filtered records are exported.
+
+The CSV format is:
+```
+HostName,RecordType,Data,TTL
+www,A,192.168.1.10,00:05:00
+mail,A,192.168.1.20,01:00:00
+```
+
+## Bulk Import
+
+Click **Import CSV** to open the import dialog. Drag and drop a CSV or TXT file, or click to browse.
+
+**CSV format:**
+```
+HostName,RecordType,Data,TTL
+www,A,192.168.1.10,300
+ftp,CNAME,ftp.contoso.com,3600
+@,MX,mail.contoso.com:10,3600
+```
+
+- **RecordType** must be one of: A, AAAA, CNAME, MX, NS, PTR, SRV, TXT
+- **Data** format depends on type: A/AAAA = IP address, CNAME = alias, MX = host:preference, SRV = host:priority:weight:port, TXT = text, NS = nameserver, PTR = domain
+- **TTL** in seconds
+- Lines starting with `#` are treated as comments
+- The header row is auto-detected and skipped
+
+After selecting a file, a preview table shows all parsed records with validation status. Invalid records (wrong type, missing fields) are flagged in red. Click **Import** to create the valid records on the server with a progress bar.
+
 ## Reloading Records
 
-Click the **Reload Records** button to refresh the record list from the server. This is useful after making changes through other tools or the command line.
+Click the **Refresh** button to reload the record list from the server. This is useful after making changes through other tools or the command line.
