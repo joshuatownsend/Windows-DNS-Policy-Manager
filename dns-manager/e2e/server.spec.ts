@@ -8,7 +8,7 @@ test.describe("Server Tab", () => {
 
   test("add server dialog opens", async ({ page }) => {
     await page.goto("/server");
-    const addBtn = page.getByRole("button", { name: "Add Server" });
+    const addBtn = page.getByRole("button", { name: "Add Server" }).first();
     await addBtn.waitFor({ state: "visible" });
     await addBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
