@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { getServerParams } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,11 +46,7 @@ import {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function sp() {
-  const s = useStore.getState().getActiveServer();
-  if (!s) return {};
-  return { server: s.hostname, serverId: s.id, credentialMode: s.credentialMode };
-}
+const sp = getServerParams;
 
 export default function DnssecPage() {
   const zones = useStore((s) => s.zones);

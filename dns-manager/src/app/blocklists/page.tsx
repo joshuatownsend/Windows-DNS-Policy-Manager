@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { getServerParams } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,12 +50,6 @@ import type { PolicyAction } from "@/lib/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function sp() {
-  const s = useStore.getState().getActiveServer();
-  if (!s) return {};
-  return { server: s.hostname, serverId: s.id, credentialMode: s.credentialMode };
-}
-
 function sanitizeDomainName(domain: string): string {
   return domain.replace(/[^a-zA-Z0-9.-]/g, "_").replace(/\./g, "_");
 }
@@ -99,7 +94,7 @@ export default function BlocklistsPage() {
 
   // ── Load active block policies ──
   const loadBlockPolicies = useCallback(async () => {
-    const p = sp();
+    const p = getServerParams();
     setLoadingPolicies(true);
     try {
       // Fetch server-level policies
@@ -120,7 +115,7 @@ export default function BlocklistsPage() {
 
   // ── Load Global Query Block List ──
   const loadGlobalBlockList = useCallback(async () => {
-    const p = sp();
+    const p = getServerParams();
     setLoadingGlobal(true);
     try {
       const res = await api.getBlockList(p.server, p.serverId, p.credentialMode);
@@ -217,7 +212,9 @@ export default function BlocklistsPage() {
       } else {
         successCount++;
       }
-      setBulkProgress({ done: i + 1, total: domains.length });
+      if ((i + 1) % 10 === 0 || i === domains.length - 1) {
+        setBulkProgress({ done: i + 1, total: domains.length });
+      }
     }
 
     setBulkImporting(false);
@@ -232,7 +229,7 @@ export default function BlocklistsPage() {
 
   // ── Delete block policy ──
   async function handleDeletePolicy(name: string, zoneName?: string) {
-    const p = sp();
+    const p = getServerParams();
     const res = await api.removePolicy(name, p.server, zoneName);
     if (res.success) {
       toast.success(`Removed "${name}"`);
@@ -245,7 +242,7 @@ export default function BlocklistsPage() {
   // ── Global block list management ──
   async function handleAddGlobalDomain() {
     if (!newGlobalDomain.trim()) return;
-    const p = sp();
+    const p = getServerParams();
     const updated = [...globalBlockList, newGlobalDomain.trim()];
     const res = await api.setBlockList({ list: updated }, p.server, p.serverId, p.credentialMode);
     if (res.success) {
@@ -258,7 +255,7 @@ export default function BlocklistsPage() {
   }
 
   async function handleRemoveGlobalDomain(domain: string) {
-    const p = sp();
+    const p = getServerParams();
     const updated = globalBlockList.filter((d) => d !== domain);
     const res = await api.setBlockList({ list: updated }, p.server, p.serverId, p.credentialMode);
     if (res.success) {
@@ -270,12 +267,14 @@ export default function BlocklistsPage() {
   }
 
   // ── Filtered block policies ──
-  const filteredPolicies = policySearch.trim()
-    ? blockPolicies.filter((p) =>
-        p.Name?.toLowerCase().includes(policySearch.toLowerCase()) ||
-        p.Fqdn?.toLowerCase().includes(policySearch.toLowerCase())
-      )
-    : blockPolicies;
+  const filteredPolicies = useMemo(() => {
+    if (!policySearch.trim()) return blockPolicies;
+    const term = policySearch.toLowerCase();
+    return blockPolicies.filter((p: any) =>
+      p.Name?.toLowerCase().includes(term) ||
+      p.Fqdn?.toLowerCase().includes(term)
+    );
+  }, [blockPolicies, policySearch]);
 
   return (
     <div className="space-y-6">

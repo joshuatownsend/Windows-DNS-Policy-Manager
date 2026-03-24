@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { downloadJson } from "@/lib/utils";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,24 +30,6 @@ import {
 } from "lucide-react";
 
 import type { BackupData } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
 
 // ---------------------------------------------------------------------------
 // Page

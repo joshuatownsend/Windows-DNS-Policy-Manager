@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { getServerParamsFor } from "@/lib/utils";
 import type { NetworkDnsConfig, ResolverData, Server } from "@/lib/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -57,13 +58,7 @@ interface ServerResolverData {
   error?: string;
 }
 
-function sp(server: Server) {
-  return {
-    server: server.hostname,
-    serverId: server.id,
-    credentialMode: server.credentialMode,
-  };
-}
+const sp = getServerParamsFor;
 
 // Normalize forwarder data — IPAddress may be a string, object, or array
 function normalizeForwarders(raw: any): { IPAddress: string[]; UseRootHint?: boolean; Timeout?: number } {
@@ -310,38 +305,48 @@ export default function ResolversPage() {
     fetchAll();
   }, [bridgeConnected, fetchAll]);
 
-  // Render Mermaid diagram when data changes
+  // Initialize Mermaid once
+  const mermaidReady = useRef(false);
   useEffect(() => {
-    const dataWithResults = resolverData.filter((d) => d.data);
-    if (dataWithResults.length === 0 || !mermaidRef.current) return;
+    (async () => {
+      const mermaid = (await import("mermaid")).default;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "dark",
+        themeVariables: {
+          primaryColor: "#0e4066",
+          primaryBorderColor: "#22d3ee",
+          lineColor: "#94a3b8",
+          textColor: "#e2e8f0",
+          fontSize: "14px",
+        },
+        flowchart: { curve: "basis", padding: 16 },
+        securityLevel: "strict",
+      });
+      mermaidReady.current = true;
+    })();
+  }, []);
 
-    const graphDef = buildMermaidGraph(dataWithResults);
+  // Memoize graph definition
+  const dataWithResults = useMemo(
+    () => resolverData.filter((d) => d.data),
+    [resolverData]
+  );
+  const graphDef = useMemo(
+    () => (dataWithResults.length > 0 ? buildMermaidGraph(dataWithResults) : null),
+    [dataWithResults]
+  );
+
+  // Render Mermaid diagram when graph definition changes
+  useEffect(() => {
+    if (!graphDef || !mermaidRef.current || !mermaidReady.current) return;
 
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "dark",
-          themeVariables: {
-            primaryColor: "#0e4066",
-            primaryBorderColor: "#22d3ee",
-            lineColor: "#94a3b8",
-            textColor: "#e2e8f0",
-            fontSize: "14px",
-          },
-          flowchart: { curve: "basis", padding: 16 },
-          securityLevel: "strict",
-        });
-
-        // Clear previous render
-        if (mermaidRef.current) {
-          mermaidRef.current.textContent = "";
-        }
-
+        if (mermaidRef.current) mermaidRef.current.textContent = "";
         const { svg } = await mermaid.render("resolver-diagram", graphDef);
         if (mermaidRef.current) {
-          // Sanitize Mermaid SVG before inserting into DOM
           const safeSvg = sanitizeSvg(svg);
           mermaidRef.current.insertAdjacentHTML("afterbegin", safeSvg);
           setMermaidError(null);
@@ -350,7 +355,7 @@ export default function ResolversPage() {
         setMermaidError(err?.message || "Failed to render diagram");
       }
     })();
-  }, [resolverData]);
+  }, [graphDef]);
 
   // Find discrepancies between IP stack and forwarder DNS for a server
   function findDiscrepancies(data: ResolverData) {

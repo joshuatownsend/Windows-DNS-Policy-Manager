@@ -156,11 +156,11 @@ export function BpaPanel() {
 
       {findings && findings.length > 0 && (
         <CardContent className="pt-0 px-4 pb-4 space-y-2">
-          {findings.map((f, i) => {
+          {findings.map((f) => {
             const sev = SEVERITY_CONFIG[f.Severity] || SEVERITY_CONFIG.Information;
             const Icon = sev.icon;
             return (
-              <FindingItem key={i} finding={f} Icon={Icon} sev={sev} />
+              <FindingItem key={f.ResultId || f.Title} finding={f} Icon={Icon} sev={sev} />
             );
           })}
         </CardContent>

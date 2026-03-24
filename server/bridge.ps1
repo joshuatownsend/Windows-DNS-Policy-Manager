@@ -190,6 +190,36 @@ function Resolve-ServerCredential {
     return $params
 }
 
+function Resolve-BackgroundJobCredential {
+    # Extract hostname + credential from resolved params for use with Invoke-Command
+    # in background jobs (CimSession can't cross job boundaries).
+    param(
+        [hashtable]$ResolvedParams,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $remoteHost = $null
+    $remoteCred = $null
+    if ($ResolvedParams.ContainsKey('CimSession')) {
+        $remoteHost = $ResolvedParams['CimSession'].ComputerName
+        $qs = $Request.QueryString
+        $sid = $qs['serverId']
+        $cm  = $qs['credentialMode']
+        if ($cm -eq 'savedCredential' -and $sid) {
+            $credFile = Join-Path $script:CredStorePath "$sid.cred"
+            if (Test-Path $credFile) {
+                $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+                $securePass = $credData.Password | ConvertTo-SecureString
+                $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
+            }
+        } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
+            $remoteCred = $script:SessionCredentials[$sid]
+        }
+    } elseif ($ResolvedParams.ContainsKey('ComputerName')) {
+        $remoteHost = $ResolvedParams['ComputerName']
+    }
+    return @{ Host = $remoteHost; Credential = $remoteCred }
+}
+
 function Handle-StoreCredential {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -1946,27 +1976,10 @@ function Handle-StartResolvers {
             return
         }
 
-        $remoteHost = $null
-        $remoteCred = $null
-        $cimComputerName = $null
-        if ($p.ContainsKey('CimSession')) {
-            $cimComputerName = $p['CimSession'].ComputerName
-            $remoteHost = $cimComputerName
-            $sid = $qs['serverId']
-            $cm  = $qs['credentialMode']
-            if ($cm -eq 'savedCredential' -and $sid) {
-                $credFile = Join-Path $script:CredStorePath "$sid.cred"
-                if (Test-Path $credFile) {
-                    $credData = Get-Content $credFile -Raw | ConvertFrom-Json
-                    $securePass = $credData.Password | ConvertTo-SecureString
-                    $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-                }
-            } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
-                $remoteCred = $script:SessionCredentials[$sid]
-            }
-        } elseif ($p.ContainsKey('ComputerName')) {
-            $remoteHost = $p['ComputerName']
-        }
+        $bgCred = Resolve-BackgroundJobCredential -ResolvedParams $p -Request $Request
+        $remoteHost = $bgCred.Host
+        $remoteCred = $bgCred.Credential
+        $cimComputerName = if ($p.ContainsKey('CimSession')) { $p['CimSession'].ComputerName } else { $null }
 
         $script:ResolverJobs[$jobKey] = @{
             Job    = Start-Job -ScriptBlock {
@@ -2513,27 +2526,9 @@ function Handle-StartBpa {
         $p = Resolve-ServerConfigParams -Request $Request
         $modelId = 'Microsoft/Windows/DNSServer'
 
-        # Determine remote host and credentials for the background job
-        $remoteHost = $null
-        $remoteCred = $null
-        if ($p.ContainsKey('CimSession')) {
-            $remoteHost = $p['CimSession'].ComputerName
-            $qs = $Request.QueryString
-            $sid = $qs['serverId']
-            $cm  = $qs['credentialMode']
-            if ($cm -eq 'savedCredential' -and $sid) {
-                $credFile = Join-Path $script:CredStorePath "$sid.cred"
-                if (Test-Path $credFile) {
-                    $credData = Get-Content $credFile -Raw | ConvertFrom-Json
-                    $securePass = $credData.Password | ConvertTo-SecureString
-                    $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-                }
-            } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
-                $remoteCred = $script:SessionCredentials[$sid]
-            }
-        } elseif ($p.ContainsKey('ComputerName')) {
-            $remoteHost = $p['ComputerName']
-        }
+        $bgCred = Resolve-BackgroundJobCredential -ResolvedParams $p -Request $Request
+        $remoteHost = $bgCred.Host
+        $remoteCred = $bgCred.Credential
 
         # Clear previous result
         $script:BpaResult = $null
