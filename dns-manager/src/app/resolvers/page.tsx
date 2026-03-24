@@ -99,6 +99,11 @@ function sanitizeSvg(svg: string): string {
   return svgEl.outerHTML;
 }
 
+// Escape text for use in Mermaid node labels — prevents syntax injection
+function escapeMermaidLabel(text: string): string {
+  return text.replace(/["\\<>{}()\[\]|]/g, "");
+}
+
 // Generate Mermaid graph definition from resolver data
 function buildMermaidGraph(allData: ServerResolverData[]): string {
   const lines: string[] = ["graph LR"];
@@ -125,7 +130,7 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
   // Add managed server nodes
   for (const entry of allData) {
     const id = getNodeId(entry.server.hostname);
-    const label = entry.server.name || entry.server.hostname;
+    const label = escapeMermaidLabel(entry.server.name || entry.server.hostname);
     lines.push(`  ${id}["${label}"]:::managed`);
   }
 
@@ -150,7 +155,8 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
         // Add target node if not already a managed server
         if (!managedIPs.has(addr)) {
           const knownName = KNOWN_RESOLVERS[addr];
-          const label = knownName ? `${knownName}<br/>${addr}` : addr;
+          const safeAddr = escapeMermaidLabel(addr);
+          const label = knownName ? `${escapeMermaidLabel(knownName)}<br/>${safeAddr}` : safeAddr;
           lines.push(`  ${targetId}("${label}"):::external`);
         }
       }
@@ -167,7 +173,8 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
 
       if (!managedIPs.has(addr) && !ipStackEdges.has(edgeKey)) {
         const knownName = KNOWN_RESOLVERS[addr];
-        const label = knownName ? `${knownName}<br/>${addr}` : addr;
+        const safeAddr = escapeMermaidLabel(addr);
+        const label = knownName ? `${escapeMermaidLabel(knownName)}<br/>${safeAddr}` : safeAddr;
         lines.push(`  ${targetId}("${label}"):::external`);
       }
     }

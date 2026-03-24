@@ -142,6 +142,28 @@ function Test-DnsModule {
     }
 }
 
+# ── Security Helpers ─────────────────────────────────────────────────────────
+
+function Assert-SafeId {
+    # Validate that an ID contains only safe characters (alphanumeric, hyphens, underscores, dots).
+    # Prevents path traversal via serverId or similar parameters.
+    param([string]$Id, [string]$ParamName = 'id')
+    if ($Id -notmatch '^[a-zA-Z0-9._-]+$') {
+        throw "Invalid $ParamName : contains disallowed characters"
+    }
+    return $Id
+}
+
+function Assert-SafeFileName {
+    # Strip path components, leaving only the filename. Prevents path traversal via fileName params.
+    param([string]$FileName)
+    $safe = [System.IO.Path]::GetFileName($FileName)
+    if (-not $safe -or $safe -ne $FileName) {
+        throw "Invalid file name: path traversal not allowed"
+    }
+    return $safe
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
 $script:SessionCredentials = @{}
@@ -156,6 +178,9 @@ function Resolve-ServerCredential {
 
     $params = @{}
     $isRemote = $Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME
+
+    # Validate serverId to prevent path traversal
+    if ($ServerId) { $null = Assert-SafeId -Id $ServerId -ParamName 'serverId' }
 
     # Resolve the PSCredential object (if any)
     $cred = $null
@@ -204,6 +229,7 @@ function Resolve-BackgroundJobCredential {
         $qs = $Request.QueryString
         $sid = $qs['serverId']
         $cm  = $qs['credentialMode']
+        if ($sid) { $null = Assert-SafeId -Id $sid -ParamName 'serverId' }
         if ($cm -eq 'savedCredential' -and $sid) {
             $credFile = Join-Path $script:CredStorePath "$sid.cred"
             if (Test-Path $credFile) {
@@ -234,6 +260,8 @@ function Handle-StoreCredential {
             } -StatusCode 400
             return
         }
+
+        $null = Assert-SafeId -Id $Body.serverId -ParamName 'serverId'
 
         # Ensure credential store directory exists
         if (-not (Test-Path $script:CredStorePath)) {
@@ -280,6 +308,7 @@ function Handle-CheckCredential {
         return
     }
 
+    $null = Assert-SafeId -Id $serverId -ParamName 'serverId'
     $credFile = Join-Path $script:CredStorePath "$serverId.cred"
     $exists = Test-Path $credFile
 
@@ -295,6 +324,7 @@ function Handle-DeleteCredential {
         [string]$ServerId
     )
 
+    $null = Assert-SafeId -Id $ServerId -ParamName 'serverId'
     $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
     if (Test-Path $credFile) {
         Remove-Item $credFile -Force
@@ -3236,7 +3266,7 @@ function Handle-ExportZone {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $fileName = if ($Body -and $Body.fileName) { $Body.fileName } else { "$ZoneName.dns" }
+        $fileName = if ($Body -and $Body.fileName) { Assert-SafeFileName $Body.fileName } else { "$ZoneName.dns" }
         $splatParams = @{ Name = $ZoneName; FileName = $fileName }
         foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
         Export-DnsServerZone @splatParams -ErrorAction Stop
