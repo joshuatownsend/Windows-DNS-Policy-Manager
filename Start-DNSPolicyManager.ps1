@@ -4,11 +4,19 @@
     Launches the DNS Policy Manager bridge and opens the web UI.
 .DESCRIPTION
     Starts bridge.ps1 in background, waits for health check, then starts the Next.js frontend.
+    Optionally builds/starts the MCP server for AI agent integration.
+.PARAMETER Port
+    Bridge port (default 8650).
+.PARAMETER NoBrowser
+    Skip opening browser.
+.PARAMETER MCP
+    Build and register the MCP server for AI agent integration (Claude Code, Cursor, etc.).
 #>
 
 param(
     [int]$Port = 8650,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$MCP
 )
 
 $ErrorActionPreference = 'Stop'
@@ -130,6 +138,32 @@ if ($ready) {
         Start-Process 'http://localhost:10010'
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
+
+    # MCP Server (optional)
+    if ($MCP) {
+        $mcpDir = Join-Path $scriptDir 'mcp-server'
+        if (Test-Path (Join-Path $mcpDir 'package.json')) {
+            # Install + build if needed
+            if (-not (Test-Path (Join-Path $mcpDir 'node_modules'))) {
+                Write-Host '  Installing MCP server dependencies...' -ForegroundColor Yellow
+                Push-Location $mcpDir
+                npm install --silent 2>&1 | Out-Null
+                Pop-Location
+            }
+            if (-not (Test-Path (Join-Path $mcpDir 'dist\index.js'))) {
+                Write-Host '  Building MCP server...' -ForegroundColor Yellow
+                Push-Location $mcpDir
+                npx tsc 2>&1 | Out-Null
+                Pop-Location
+            }
+            $mcpEntry = Join-Path $mcpDir 'dist\index.js'
+            Write-Host "  MCP server built: $mcpEntry" -ForegroundColor Green
+            Write-Host '  Register with Claude Code:' -ForegroundColor Cyan
+            Write-Host "    claude mcp add dns-policy-manager -e BRIDGE_URL=http://127.0.0.1:${Port} -- node `"$mcpEntry`"" -ForegroundColor DarkGray
+        } else {
+            Write-Host '  MCP server not found at mcp-server/.' -ForegroundColor Yellow
+        }
+    }
 } else {
     Write-Host '  Bridge failed to start.' -ForegroundColor Red
     # Show the log file contents for diagnostics
@@ -154,5 +188,6 @@ if ($ready) {
 
 Write-Host ''
 Write-Host "  API: http://127.0.0.1:${Port}/api/health" -ForegroundColor DarkGray
+Write-Host '  MCP: Start-DNSPolicyManager.ps1 -MCP to build the AI agent server' -ForegroundColor DarkGray
 Write-Host '  Press Ctrl+C in the bridge window to stop.' -ForegroundColor DarkGray
 Write-Host ''

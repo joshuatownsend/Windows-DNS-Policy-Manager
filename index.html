@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Windows DNS Policy Manager</title>
-<meta name="description" content="Visual DNS policy management for Windows Server. 98 cmdlets, 8 wizard scenarios, zero-trust local architecture.">
+<meta name="description" content="Visual DNS policy management for Windows Server. 98 cmdlets, 8 wizard scenarios, 31 MCP tools for AI agents, zero-trust local architecture.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -231,7 +231,7 @@ footer a{color:var(--fg-muted)}
 @media(max-width:900px){
   .features{grid-template-columns:repeat(2,1fr)}
   .scenarios{grid-template-columns:repeat(2,1fr)}
-  .stats{grid-template-columns:repeat(2,1fr)}
+  .stats{grid-template-columns:repeat(3,1fr) !important}
   .steps{grid-template-columns:1fr}
   .arch-flow{flex-direction:column}
 }
@@ -268,7 +268,7 @@ footer a{color:var(--fg-muted)}
 
 <!-- ── Stats ──────────────────────────────────────────── -->
 <div class="container">
-  <div class="stats fade-up d4">
+  <div class="stats fade-up d4" style="grid-template-columns:repeat(5,1fr)">
     <div class="stat">
       <div class="stat-value">98</div>
       <div class="stat-label">DnsServer Cmdlets</div>
@@ -280,6 +280,10 @@ footer a{color:var(--fg-muted)}
     <div class="stat">
       <div class="stat-value">8</div>
       <div class="stat-label">Wizard Scenarios</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">31</div>
+      <div class="stat-label">MCP Tools</div>
     </div>
     <div class="stat">
       <div class="stat-value">0</div>
@@ -388,6 +392,12 @@ footer a{color:var(--fg-muted)}
         <p>Every operation generates the PowerShell command. Copy individual commands or the full history. Works offline as a pure command generator &mdash; no bridge needed.</p>
         <span class="feature-tag">offline mode</span>
       </div>
+      <div class="feature" style="border-color:rgba(34,211,238,0.15)">
+        <div class="feature-icon">&#129302;</div>
+        <h3>MCP Server for AI Agents</h3>
+        <p>31 read-only tools expose zones, records, policies, server config, DNSSEC, and more to AI agents via the Model Context Protocol. Works with Claude Code, Cursor, and VS Code. Includes offline PowerShell command generation.</p>
+        <span class="feature-tag">stdio transport</span>
+      </div>
     </div>
 
     <!-- Cmdlet coverage -->
@@ -438,9 +448,15 @@ footer a{color:var(--fg-muted)}
     </div>
     <div class="arch">
       <div class="arch-flow">
-        <div class="arch-node">
-          <div class="arch-node-label">Browser</div>
-          <div class="arch-node-sub">Next.js on :10010</div>
+        <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end">
+          <div class="arch-node">
+            <div class="arch-node-label">Browser</div>
+            <div class="arch-node-sub">Next.js on :10010</div>
+          </div>
+          <div class="arch-node" style="border-color:rgba(251,191,36,0.25)">
+            <div class="arch-node-label" style="color:var(--amber)">AI Agent</div>
+            <div class="arch-node-sub">MCP &middot; stdio</div>
+          </div>
         </div>
         <div class="arch-arrow">&rarr;</div>
         <div class="arch-node" style="border-color:rgba(34,211,238,0.2)">
@@ -458,6 +474,7 @@ footer a{color:var(--fg-muted)}
         <p>Concurrent request handling via <strong>runspace pool</strong> with CIM sessions for remote servers.</p>
         <p>All cmdlet calls use <strong>splatted parameters</strong> to prevent command injection.</p>
         <p>Credentials are stored via <strong>Windows DPAPI encryption</strong> &mdash; no plaintext, no cloud.</p>
+        <p>The <strong>MCP server</strong> connects AI agents (Claude Code, Cursor) to the same bridge &mdash; 31 read-only tools, no write access.</p>
       </div>
     </div>
 
@@ -507,6 +524,14 @@ footer a{color:var(--fg-muted)}
     <p style="color:var(--fg-ghost);font-size:12px;margin-top:8px">
       Requires: Node.js 18+, Windows Server with DNS Server role or RSAT DNS tools.
     </p>
+    <div class="callout" style="margin-top:32px">
+      <div class="callout-icon" style="background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.15)">&#129302;</div>
+      <div>
+        <h4 style="color:var(--amber)">AI Agent Integration (MCP)</h4>
+        <p>Connect Claude Code, Cursor, or any MCP-compatible AI tool to query your DNS servers. 31 read-only tools for zones, records, policies, DNSSEC, and more &mdash; plus offline PowerShell command generation.</p>
+        <code style="display:inline-block;margin-top:8px;font-family:var(--font-mono);font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 10px;color:var(--amber)">cd mcp-server &amp;&amp; npm install &amp;&amp; npm run build</code>
+      </div>
+    </div>
   </div>
 </section>
 
