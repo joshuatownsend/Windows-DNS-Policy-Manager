@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -50,6 +51,7 @@ function ServerSwitcher() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="min-w-[220px]">
+        <DropdownMenuGroup>
         <DropdownMenuLabel>DNS Servers</DropdownMenuLabel>
         {servers.map((s) => {
           const isActive = s.id === activeServerId;
@@ -74,6 +76,7 @@ function ServerSwitcher() {
             </DropdownMenuItem>
           );
         })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
