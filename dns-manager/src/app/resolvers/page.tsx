@@ -107,13 +107,12 @@ function escapeMermaidLabel(text: string): string {
 type AddressFilter = "both" | "ipv4" | "ipv6";
 
 // Generate Mermaid graph definition from resolver data
-// Layout: TB (top-to-bottom). External resolvers at top, mid-tier servers in middle, leaf servers at bottom.
+// Layout: TB (top-to-bottom). External (upstream) resolvers at top, managed servers below.
 function buildMermaidGraph(allData: ServerResolverData[], addressFilter: AddressFilter): string {
   const lines: string[] = ["graph TB"];
   const managedIPs = new Set<string>();
   const nodeIds = new Map<string, string>();
-  const externalNodes = new Set<string>();  // node IDs of external resolvers
-  const managedNodeIds = new Map<string, string>(); // hostname -> nodeId
+  const externalNodes = new Set<string>();
   let nodeCounter = 0;
 
   function getNodeId(label: string): string {
@@ -146,10 +145,10 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
     }
   }
 
-  // Register managed server node IDs
+  // Precompute nodeId → entry lookup for O(1) access in subgraph rendering
+  const entryByNodeId = new Map<string, ServerResolverData>();
   for (const entry of allData) {
-    const id = getNodeId(entry.server.hostname);
-    managedNodeIds.set(entry.server.hostname.toLowerCase(), id);
+    entryByNodeId.set(getNodeId(entry.server.hostname), entry);
   }
 
   // Collect edges (only server→external, skip peer-to-peer)
@@ -224,7 +223,7 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
     lines.push(`  subgraph servers [" "]`);
     lines.push(`    direction LR`);
     for (const id of serverTier) {
-      const entry = allData.find((e) => getNodeId(e.server.hostname) === id);
+      const entry = entryByNodeId.get(id);
       const label = entry ? escapeMermaidLabel(entry.server.name || entry.server.hostname) : id;
       lines.push(`    ${id}["${label}"]:::managed`);
     }
@@ -258,9 +257,13 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
   lines.push(`  classDef managed fill:#0e4066,stroke:#22d3ee,stroke-width:2px,color:#e2e8f0`);
   lines.push(`  classDef external fill:#1a1a2e,stroke:#f59e0b,stroke-width:1px,color:#e2e8f0`);
 
-  // Hide subgraph borders
-  lines.push(`  style upstream fill:transparent,stroke:transparent`);
-  lines.push(`  style servers fill:transparent,stroke:transparent`);
+  // Hide subgraph borders (only if subgraph exists)
+  if (topTier.length > 0) {
+    lines.push(`  style upstream fill:transparent,stroke:transparent`);
+  }
+  if (serverTier.length > 0) {
+    lines.push(`  style servers fill:transparent,stroke:transparent`);
+  }
 
   // Per-edge color styles
   if (ipStackIndices.length > 0) {
