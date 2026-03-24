@@ -170,7 +170,7 @@ export default function DnssecPage() {
       </div>
 
       {/* Zone signing status table */}
-      <Card>
+      <Card accent>
         <CardHeader className="py-3">
           <CardTitle className="text-sm">Zone Signing Status</CardTitle>
         </CardHeader>
@@ -218,7 +218,7 @@ export default function DnssecPage() {
 
       {/* Selected zone DNSSEC detail */}
       {selectedZone && (
-        <Card>
+        <Card accent>
           <CardHeader className="py-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">DNSSEC — {selectedZone}</CardTitle>
@@ -300,7 +300,7 @@ export default function DnssecPage() {
 
       {/* Trust Anchors */}
       {trustAnchors.length > 0 && (
-        <Card>
+        <Card accent>
           <CardHeader className="py-3">
             <CardTitle className="text-sm">Trust Anchors</CardTitle>
           </CardHeader>
@@ -342,7 +342,7 @@ export default function DnssecPage() {
 
       {/* Trust Points */}
       {trustPoints.length > 0 && (
-        <Card>
+        <Card accent>
           <CardHeader className="py-3">
             <CardTitle className="text-sm">Trust Points</CardTitle>
           </CardHeader>

@@ -255,7 +255,7 @@ export default function BackupPage() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Backup & Import</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Export DNS server configuration, zones, and policies. Import policy
           backups and blocklists.
         </p>
@@ -276,7 +276,7 @@ export default function BackupPage() {
       </div>
 
       {/* ────────────────── Export Server Config ────────────── */}
-      <Card className="border-zinc-800 bg-zinc-950">
+      <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Server className="h-5 w-5 text-cyan-400" />
@@ -285,7 +285,7 @@ export default function BackupPage() {
           <CardDescription>
             Export the complete DNS server configuration (settings, cache, recursion,
             forwarders, diagnostics, scavenging, EDNS, block list) as JSON. Equivalent to{" "}
-            <code className="text-zinc-400">Get-DnsServer</code>.
+            <code className="text-muted-foreground">Get-DnsServer</code>.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -304,7 +304,7 @@ export default function BackupPage() {
       </Card>
 
       {/* ────────────────── Export Zones ────────────────────── */}
-      <Card className="border-zinc-800 bg-zinc-950">
+      <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Globe className="h-5 w-5 text-cyan-400" />
@@ -312,21 +312,21 @@ export default function BackupPage() {
           </CardTitle>
           <CardDescription>
             Export zone files to the server&apos;s DNS directory using{" "}
-            <code className="text-zinc-400">Export-DnsServerZone</code>. Files are written
-            to <code className="text-zinc-400">%SystemRoot%\System32\dns\</code> on the
+            <code className="text-muted-foreground">Export-DnsServerZone</code>. Files are written
+            to <code className="text-muted-foreground">%SystemRoot%\System32\dns\</code> on the
             target server.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1.5 flex-1 min-w-[200px]">
-              <Label className="text-xs text-zinc-400">Single Zone</Label>
+              <Label className="text-xs text-muted-foreground">Single Zone</Label>
               <div className="flex gap-2">
                 <Input
                   placeholder="e.g. contoso.com"
                   value={singleZoneName}
                   onChange={(e) => setSingleZoneName(e.target.value)}
-                  className="bg-zinc-900 border-zinc-700"
+                  className="bg-secondary border-border"
                 />
                 <Button
                   variant="outline"
@@ -344,12 +344,12 @@ export default function BackupPage() {
             </div>
           </div>
 
-          <Separator className="bg-zinc-800" />
+          <Separator />
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-zinc-300">Export All Primary Zones</p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-sm text-foreground/80">Export All Primary Zones</p>
+              <p className="text-xs text-muted-foreground/60">
                 Exports all non-autocreated primary zones to individual zone files on the server.
               </p>
             </div>
@@ -370,7 +370,7 @@ export default function BackupPage() {
       </Card>
 
       {/* ────────────────── Export Policies ────────────────── */}
-      <Card className="border-zinc-800 bg-zinc-950">
+      <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Download className="h-5 w-5 text-cyan-400" />
@@ -383,9 +383,9 @@ export default function BackupPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1.5 min-w-[200px]">
-              <Label className="text-xs text-zinc-400">Server</Label>
+              <Label className="text-xs text-muted-foreground">Server</Label>
               <Select value={exportServer} onValueChange={(v) => { if (v) setExportServer(v); }}>
-                <SelectTrigger className="bg-zinc-900 border-zinc-700">
+                <SelectTrigger className="bg-secondary border-border">
                   <SelectValue placeholder="Select a server" />
                 </SelectTrigger>
                 <SelectContent>
@@ -403,21 +403,21 @@ export default function BackupPage() {
             </div>
 
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={includeZone}
                   onChange={(e) => setIncludeZone(e.target.checked)}
-                  className="rounded border-zinc-600 bg-zinc-800 text-cyan-500 focus:ring-cyan-500"
+                  className="rounded border-muted-foreground/40 bg-muted text-cyan-500 focus:ring-cyan-500"
                 />
                 Include Zone Policies
               </label>
-              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={includeServer}
                   onChange={(e) => setIncludeServer(e.target.checked)}
-                  className="rounded border-zinc-600 bg-zinc-800 text-cyan-500 focus:ring-cyan-500"
+                  className="rounded border-muted-foreground/40 bg-muted text-cyan-500 focus:ring-cyan-500"
                 />
                 Include Server Policies
               </label>
@@ -445,7 +445,7 @@ export default function BackupPage() {
       </Card>
 
       {/* ────────────────── Import Policies ────────────────── */}
-      <Card className="border-zinc-800 bg-zinc-950">
+      <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Upload className="h-5 w-5 text-cyan-400" />
@@ -461,19 +461,28 @@ export default function BackupPage() {
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
               dragOverImport
                 ? "border-cyan-500 bg-cyan-950/20"
-                : "border-zinc-700 hover:border-zinc-500"
+                : "border-border hover:border-foreground/20"
             }`}
             onClick={() => importFileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                importFileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               setDragOverImport(true);
             }}
             onDragLeave={() => setDragOverImport(false)}
             onDrop={handleImportDrop}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload policy backup JSON file"
           >
-            <FileText className="h-10 w-10 mx-auto mb-3 text-zinc-500" />
-            <p className="text-sm text-zinc-400">
-              Drag & drop a <span className="text-zinc-200">.json</span> backup
+            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
+            <p className="text-sm text-muted-foreground">
+              Drag & drop a <span className="text-foreground">.json</span> backup
               file here, or click to browse
             </p>
             <input
@@ -488,28 +497,28 @@ export default function BackupPage() {
           {/* Preview */}
           {importData && (
             <>
-              <Separator className="bg-zinc-800" />
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-2">
-                <h3 className="text-sm font-semibold text-zinc-200">
+              <Separator />
+              <div className="rounded-lg border border-border bg-secondary/50 p-4 space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">
                   Backup Summary
                 </h3>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Server:</span>{" "}
-                    <span className="text-zinc-200">
+                    <span className="text-muted-foreground/60">Server:</span>{" "}
+                    <span className="text-foreground">
                       {importData.server || "Unknown"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Export Date:</span>{" "}
-                    <span className="text-zinc-200">
+                    <span className="text-muted-foreground/60">Export Date:</span>{" "}
+                    <span className="text-foreground">
                       {importData.exportDate
                         ? new Date(importData.exportDate).toLocaleString()
                         : "Unknown"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Policies:</span>{" "}
+                    <span className="text-muted-foreground/60">Policies:</span>{" "}
                     <Badge variant="secondary" className="ml-1">
                       {importPolicyCount}
                     </Badge>
@@ -531,8 +540,8 @@ export default function BackupPage() {
                 </Button>
 
                 {importing && (
-                  <div className="flex items-center gap-2 text-sm text-zinc-400">
-                    <div className="w-40 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="w-40 h-2 bg-muted rounded-full overflow-hidden">
                       <div
                         className="h-full bg-cyan-500 transition-all duration-300"
                         style={{

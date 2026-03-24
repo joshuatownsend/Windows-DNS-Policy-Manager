@@ -10,26 +10,26 @@ test.describe("Navigation", () => {
     await page.goto("/server");
 
     const tabs = [
-      { label: "Objects", url: "/objects" },
+      { label: "DNS Objects", url: "/objects" },
       { label: "Zones", url: "/zones" },
       { label: "Policies", url: "/policies" },
-      { label: "Create", url: "/create" },
+      { label: "Create Policy", url: "/create" },
       { label: "Wizards", url: "/wizards" },
       { label: "DNSSEC", url: "/dnssec" },
-      { label: "Backup", url: "/backup" },
-      { label: "PowerShell", url: "/powershell" },
+      { label: "Backup & Import", url: "/backup" },
+      { label: "PowerShell Commands", url: "/powershell" },
       { label: "Server", url: "/server" },
     ];
 
     for (const tab of tabs) {
-      await page.getByRole("tab", { name: tab.label }).click();
+      await page.getByRole("link", { name: tab.label }).click();
       await expect(page).toHaveURL(new RegExp(tab.url));
     }
   });
 
   test("help panel opens and closes", async ({ page }) => {
     await page.goto("/server");
-    await page.getByTitle("Help (context-sensitive)").click();
+    await page.getByRole("button", { name: "Open context-sensitive help" }).click();
     const dialog = page.getByRole("dialog", { name: "Help documentation" });
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");

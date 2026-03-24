@@ -352,14 +352,13 @@ export default function PoliciesPage() {
       {/* Not connected state */}
       {!bridgeConnected && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <AlertTriangleIcon className="size-10 text-amber-400 mb-3" />
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center max-w-md mx-auto">
+            <AlertTriangleIcon className="size-8 text-amber-400/60 mb-3" />
             <CardTitle className="text-base mb-1">
-              Bridge Not Connected
+              Bridge not connected
             </CardTitle>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Connect to a DNS server via the Server tab to view and manage
-              policies.
+            <p className="text-sm text-muted-foreground">
+              Start the PowerShell bridge and add a server on the Server tab to view policies. You can still create policies offline using the Create Policy tab.
             </p>
           </CardContent>
         </Card>
@@ -368,13 +367,13 @@ export default function PoliciesPage() {
       {/* Empty state */}
       {bridgeConnected && isEmpty && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <ShieldIcon className="size-10 text-muted-foreground/50 mb-3" />
-            <CardTitle className="text-base mb-1">No Policies Found</CardTitle>
-            <p className="text-sm text-muted-foreground max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center max-w-md mx-auto">
+            <ShieldIcon className="size-8 text-muted-foreground/30 mb-3" />
+            <CardTitle className="text-base mb-1">No policies configured</CardTitle>
+            <p className="text-sm text-muted-foreground">
               {zoneFilter
                 ? `No policies found for zone "${zoneFilter}". Try clearing the filter or creating a new policy.`
-                : "No DNS policies are configured on this server. Create a policy using the Create Policy tab."}
+                : "DNS policies control how the server responds to queries. Use the Create Policy tab to add your first policy, or try a Wizard for common scenarios."}
             </p>
           </CardContent>
         </Card>

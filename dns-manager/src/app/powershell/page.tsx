@@ -55,7 +55,7 @@ export default function PowerShellPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             PowerShell Commands
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Generated and executed PowerShell commands for DNS policy management.
           </p>
         </div>
@@ -65,7 +65,7 @@ export default function PowerShellPage() {
             size="sm"
             onClick={handleCopyAll}
             disabled={psOutput.length === 0}
-            className="border-zinc-700"
+            className="border-border"
           >
             <Copy className="h-3.5 w-3.5 mr-2" />
             Copy All
@@ -75,7 +75,7 @@ export default function PowerShellPage() {
             size="sm"
             onClick={handleClear}
             disabled={psOutput.length === 0}
-            className="border-zinc-700 hover:border-red-700 hover:text-red-400"
+            className="border-border hover:border-red-700 hover:text-red-400"
           >
             <Trash2 className="h-3.5 w-3.5 mr-2" />
             Clear Output
@@ -83,11 +83,11 @@ export default function PowerShellPage() {
         </div>
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-950">
+      <Card className="border-border bg-card">
         <CardContent className="p-0">
           {psOutput.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-              <Terminal className="h-12 w-12 mb-4 text-zinc-600" />
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground/60">
+              <Terminal className="h-12 w-12 mb-4 text-muted-foreground/40" />
               <p className="text-sm text-center max-w-md">
                 No commands generated yet. Use the Create Policy or Wizards tab
                 to generate commands.
@@ -95,7 +95,7 @@ export default function PowerShellPage() {
             </div>
           ) : (
             <ScrollArea className="h-[calc(100vh-260px)]">
-              <div className="divide-y divide-zinc-800/50">
+              <div className="divide-y divide-border/50">
                 {psOutput.map((entry, index) => {
                   const timestamp = extractTimestamp(entry);
                   const command = extractCommand(entry);
@@ -103,22 +103,22 @@ export default function PowerShellPage() {
                   return (
                     <div
                       key={index}
-                      className="group flex items-start gap-3 px-4 py-3 hover:bg-zinc-900/50 transition-colors"
+                      className="group flex items-start gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         {timestamp && (
-                          <span className="text-xs text-zinc-600 block mb-1">
+                          <span className="text-xs text-muted-foreground/40 block mb-1">
                             {timestamp}
                           </span>
                         )}
-                        <pre className="font-mono text-sm text-zinc-300 whitespace-pre-wrap break-all">
+                        <pre className="font-mono text-sm text-foreground/80 whitespace-pre-wrap break-all">
                           {command}
                         </pre>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-cyan-400 transition-opacity shrink-0 mt-1"
+                        className="h-7 w-7 p-0 text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-cyan-400 transition-opacity shrink-0 mt-1"
                         onClick={() => copyToClipboard(command)}
                       >
                         <Copy className="h-3.5 w-3.5" />

@@ -115,66 +115,8 @@
   }
 }
 
-/* ── Engineering grid background ─────────────────────────── */
-.ops-grid-bg {
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(136, 180, 255, 0.035) 1px, transparent 0);
-  background-size: 24px 24px;
-}
 
-/* ── Scanline overlay for header ─────────────────────────── */
-.ops-scanline::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(136, 180, 255, 0.015) 2px,
-    rgba(136, 180, 255, 0.015) 4px
-  );
-}
-
-/* ── Glow effects ────────────────────────────────────────── */
-.glow-cyan {
-  box-shadow:
-    0 0 8px rgba(34, 211, 238, 0.15),
-    0 0 24px rgba(34, 211, 238, 0.05);
-}
-
-.glow-dot-online {
-  box-shadow:
-    0 0 4px rgba(52, 211, 153, 0.6),
-    0 0 12px rgba(52, 211, 153, 0.2);
-}
-
-.glow-dot-offline {
-  box-shadow: 0 0 4px rgba(123, 139, 168, 0.3);
-}
-
-/* ── Status indicator animations ─────────────────────────── */
-@keyframes beacon {
-  0%, 100% {
-    opacity: 1;
-    box-shadow:
-      0 0 4px rgba(52, 211, 153, 0.6),
-      0 0 12px rgba(52, 211, 153, 0.2);
-  }
-  50% {
-    opacity: 0.7;
-    box-shadow:
-      0 0 6px rgba(52, 211, 153, 0.8),
-      0 0 20px rgba(52, 211, 153, 0.3);
-  }
-}
-
-@keyframes flatline {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.25; }
-}
-
+/* ── Subtle transitions ──────────────────────────────────── */
 @keyframes slide-in-from-top {
   0% { opacity: 0; transform: translateY(-8px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -185,14 +127,6 @@
   100% { opacity: 1; }
 }
 
-.animate-beacon {
-  animation: beacon 2s ease-in-out infinite;
-}
-
-.animate-flatline {
-  animation: flatline 2.5s ease-in-out infinite;
-}
-
 .animate-slide-in {
   animation: slide-in-from-top 0.3s ease-out both;
 }
@@ -201,39 +135,22 @@
   animation: fade-in 0.4s ease-out both;
 }
 
-/* Staggered child animations */
-.stagger-children > * {
-  animation: fade-in 0.3s ease-out both;
-}
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
-.stagger-children > *:nth-child(7) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(8) { animation-delay: 280ms; }
+/* ── Reduced motion ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 
-/* ── Tab switch indicator ────────────────────────────────── */
-.tab-indicator {
-  position: relative;
+  html {
+    scroll-behavior: auto !important;
+  }
 }
-.tab-indicator::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 2px;
-  background: var(--primary);
-  border-radius: 1px;
-  transition: width 0.2s ease-out;
-  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
-}
-.tab-indicator[data-active="true"]::after {
-  width: 100%;
-}
+
 
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar {
@@ -251,30 +168,11 @@
   background: rgba(136, 180, 255, 0.2);
 }
 
-/* ── Subtle noise texture ────────────────────────────────── */
-.noise-overlay::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.012;
-  z-index: 9999;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-}
 
 /* ── Header rule line ────────────────────────────────────── */
 .header-rule {
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(34, 211, 238, 0.2) 20%,
-    rgba(34, 211, 238, 0.4) 50%,
-    rgba(34, 211, 238, 0.2) 80%,
-    transparent
-  );
+  background: var(--border);
 }
 
 /* ── Help content markdown typography ────────────────────── */

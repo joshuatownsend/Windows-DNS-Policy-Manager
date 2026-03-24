@@ -71,7 +71,7 @@ const STATUS_COLORS: Record<Server["status"], string> = {
   online: "bg-emerald-500",
   offline: "bg-red-500",
   error: "bg-amber-500",
-  unknown: "bg-zinc-500",
+  unknown: "bg-muted-foreground/50",
 };
 
 const STATUS_LABELS: Record<Server["status"], string> = {
@@ -408,7 +408,7 @@ export default function ServerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">DNS Servers</h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Manage and monitor your DNS server connections
           </p>
         </div>
@@ -441,10 +441,10 @@ export default function ServerPage() {
           return (
             <Card
               key={server.id}
-              className={`cursor-pointer transition-all hover:ring-1 hover:ring-zinc-600 ${
+              className={`cursor-pointer transition-all hover:ring-1 hover:ring-border ${
                 isActive
-                  ? "ring-2 ring-cyan-500 bg-zinc-900/80"
-                  : "bg-zinc-900/40"
+                  ? "ring-2 ring-cyan-500 bg-secondary"
+                  : "bg-secondary/40"
               }`}
               onClick={() => activateServer(server)}
             >
@@ -459,7 +459,7 @@ export default function ServerPage() {
                       <CardTitle className="text-sm font-semibold truncate">
                         {server.name}
                       </CardTitle>
-                      <p className="text-xs text-zinc-400 truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {server.hostname}
                       </p>
                     </div>
@@ -472,7 +472,7 @@ export default function ServerPage() {
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-xs text-zinc-400">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Globe className="h-3 w-3" />
                       {server.zoneCount} zone{server.zoneCount !== 1 ? "s" : ""}
@@ -528,14 +528,16 @@ export default function ServerPage() {
       </div>
 
       {servers.length === 0 && (
-        <Card className="bg-zinc-900/40 border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-zinc-400">
-            <ServerIcon className="h-10 w-10 mb-3 opacity-40" />
-            <p className="text-sm font-medium">No servers configured</p>
-            <p className="text-xs mt-1">
+        <Card accent className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-14 max-w-md mx-auto text-center">
+            <ServerIcon className="h-10 w-10 mb-4 text-muted-foreground/40" />
+            <p className="text-sm font-semibold text-foreground">
               Add a DNS server to get started
             </p>
-            <Button size="sm" className="mt-4" onClick={openAddDialog}>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              Connect to a Windows DNS server to manage policies, zones, and records. Or use the app offline to generate PowerShell commands.
+            </p>
+            <Button size="sm" className="mt-5" onClick={openAddDialog}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add Server
             </Button>
@@ -547,7 +549,7 @@ export default function ServerPage() {
       {activeServer && activeIsOnline && (
         <div className="space-y-4">
           {/* Server Info Panel */}
-          <Card className="bg-zinc-900/60">
+          <Card className="bg-card">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Wifi className="h-4 w-4 text-cyan-500" />
@@ -559,11 +561,11 @@ export default function ServerPage() {
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-xs text-zinc-400 mb-0.5">Hostname</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Hostname</p>
                   <p className="font-medium">{activeServer.hostname}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-400 mb-0.5">Status</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Status</p>
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`inline-block h-2 w-2 rounded-full ${STATUS_COLORS[activeServer.status]}`}
@@ -574,12 +576,12 @@ export default function ServerPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-400 mb-0.5">Zones</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Zones</p>
                   <p className="font-medium">{activeServer.zoneCount}</p>
                 </div>
                 {activeServer.serverInfo?.version && (
                   <div>
-                    <p className="text-xs text-zinc-400 mb-0.5">Version</p>
+                    <p className="text-xs text-muted-foreground mb-0.5">Version</p>
                     <p className="font-medium">
                       {activeServer.serverInfo.version}
                     </p>
@@ -592,7 +594,7 @@ export default function ServerPage() {
           {/* Zone Cards Grid */}
           {serverZones.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-foreground/80 mb-3 flex items-center gap-2">
                 <Globe className="h-4 w-4 text-cyan-500" />
                 Zones ({serverZones.length})
               </h2>
@@ -600,7 +602,7 @@ export default function ServerPage() {
                 {serverZones.map((zone) => (
                   <Card
                     key={zone.ZoneName}
-                    className="bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors"
+                    className="bg-secondary/40 hover:bg-card transition-colors"
                   >
                     <CardContent className="p-3">
                       <p
@@ -645,7 +647,7 @@ export default function ServerPage() {
                         {zone.IsAutoCreated && (
                           <Badge
                             variant="outline"
-                            className="text-[10px] px-1.5 py-0 text-zinc-500"
+                            className="text-[10px] px-1.5 py-0 text-muted-foreground/60"
                           >
                             Auto
                           </Badge>
@@ -659,8 +661,8 @@ export default function ServerPage() {
           )}
 
           {serverZones.length === 0 && (
-            <Card className="bg-zinc-900/40 border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-8 text-zinc-400">
+            <Card className="bg-secondary/40 border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <HelpCircle className="h-8 w-8 mb-2 opacity-40" />
                 <p className="text-sm">No zones returned from server</p>
               </CardContent>
@@ -670,12 +672,14 @@ export default function ServerPage() {
       )}
 
       {activeServer && !activeIsOnline && (
-        <Card className="bg-zinc-900/40 border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-10 text-zinc-400">
-            <WifiOff className="h-8 w-8 mb-3 opacity-40" />
-            <p className="text-sm font-medium">Server not connected</p>
-            <p className="text-xs mt-1">
-              Test the connection to view server details and zones
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-10 max-w-md mx-auto text-center">
+            <WifiOff className="h-8 w-8 mb-3 text-muted-foreground/40" />
+            <p className="text-sm font-semibold text-foreground">
+              {activeServer.name || activeServer.hostname} is not connected
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              Test the connection to view server details, zones, and policies. Make sure the PowerShell bridge is running.
             </p>
             <Button
               variant="outline"

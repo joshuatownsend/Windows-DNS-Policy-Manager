@@ -80,19 +80,18 @@ export function HelpPanel({ open, onClose }: HelpPanelProps) {
         className={cn(
           "fixed top-0 right-0 z-50 h-full w-full max-w-lg",
           "flex flex-col",
-          "bg-[#0a0f1a] border-l border-[rgba(136,180,255,0.1)]",
+          "bg-sidebar border-l border-border",
           "shadow-[-8px_0_32px_rgba(0,0,0,0.5)]",
           "transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
           open ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(136,180,255,0.08)] bg-[#080c14]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-background">
           <div className="flex items-center gap-3 min-w-0">
             {showNav ? (
               <h2
-                className="text-sm font-semibold tracking-wide text-foreground truncate"
-                style={{ fontFamily: "var(--font-display)" }}
+                className="text-sm font-semibold tracking-wide text-foreground truncate font-display"
               >
                 HELP DOCS
               </h2>
@@ -100,7 +99,7 @@ export function HelpPanel({ open, onClose }: HelpPanelProps) {
               <>
                 <button
                   onClick={() => setShowNav(true)}
-                  className="shrink-0 p-1 rounded hover:bg-[rgba(136,180,255,0.08)] text-muted-foreground hover:text-foreground transition-colors"
+                  className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                   title="All help topics"
                 >
                   <Menu size={16} />
@@ -117,14 +116,14 @@ export function HelpPanel({ open, onClose }: HelpPanelProps) {
               href={`/help/${slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 rounded hover:bg-[rgba(136,180,255,0.08)] text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Open in new tab"
             >
               <ExternalLink size={14} />
             </a>
             <button
               onClick={onClose}
-              className="p-1.5 rounded hover:bg-[rgba(136,180,255,0.08)] text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Close (Esc)"
             >
               <X size={14} />
@@ -144,7 +143,7 @@ export function HelpPanel({ open, onClose }: HelpPanelProps) {
                     "w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors",
                     doc.slug === slug
                       ? "bg-cyan/10 text-cyan font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-[rgba(136,180,255,0.05)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
                   {doc.title}

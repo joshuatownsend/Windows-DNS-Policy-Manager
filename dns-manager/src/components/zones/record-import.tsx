@@ -173,16 +173,25 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
           /* File upload area */
           <div
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
-              dragOver ? "border-cyan-500 bg-cyan-950/20" : "border-zinc-700 hover:border-zinc-500"
+              dragOver ? "border-cyan-500 bg-cyan-950/20" : "border-border hover:border-foreground/20"
             }`}
             onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload DNS records from CSV file"
           >
-            <Upload className="h-10 w-10 mx-auto mb-3 text-zinc-500" />
-            <p className="text-sm text-zinc-300">Drop a CSV file here or click to browse</p>
-            <p className="text-xs text-zinc-500 mt-2">
+            <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
+            <p className="text-sm text-foreground/80">Drop a CSV file here or click to browse</p>
+            <p className="text-xs text-muted-foreground/60 mt-2">
               Format: HostName,RecordType,Data,TTL (one record per line)
             </p>
             <input
@@ -207,11 +216,11 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
                 <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                   <div className="h-full bg-primary transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
                 </div>
-                <p className="text-xs text-zinc-400">{progress.done} / {progress.total}</p>
+                <p className="text-xs text-muted-foreground">{progress.done} / {progress.total}</p>
               </div>
             )}
 
-            <div className="max-h-64 overflow-auto border border-zinc-800 rounded">
+            <div className="max-h-64 overflow-auto border border-border rounded">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -239,7 +248,7 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
                 </TableBody>
               </Table>
               {records.length > 100 && (
-                <p className="text-xs text-zinc-500 p-2">Showing first 100 of {records.length} records.</p>
+                <p className="text-xs text-muted-foreground/60 p-2">Showing first 100 of {records.length} records.</p>
               )}
             </div>
           </div>

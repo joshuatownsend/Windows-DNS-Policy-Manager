@@ -300,7 +300,7 @@ export default function BlocklistsPage() {
       </div>
 
       {/* ── Quick Block ──────────────────────────────────────── */}
-      <Card>
+      <Card accent>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldBan className="h-4 w-4 text-red-400" />
@@ -358,7 +358,7 @@ export default function BlocklistsPage() {
       </Card>
 
       {/* ── Bulk Import ──────────────────────────────────────── */}
-      <Card>
+      <Card accent>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Upload className="h-4 w-4 text-cyan" />

@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${bodyFont.variable} ${monoFont.variable} ${displayFont.variable} antialiased noise-overlay`}
+        className={`${bodyFont.variable} ${monoFont.variable} ${displayFont.variable} antialiased`}
       >
         <TooltipProvider>
           <AppShell>{children}</AppShell>
@@ -47,8 +47,8 @@ export default function RootLayout({
           theme="dark"
           toastOptions={{
             style: {
-              background: "#0d1320",
-              border: "1px solid rgba(136, 180, 255, 0.1)",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
               fontFamily: "var(--font-sans)",
             },
           }}
