@@ -29,9 +29,9 @@ The app works in two modes: **offline** (frontend only — generates PowerShell 
 
 Next.js App Router with TypeScript, Tailwind CSS v4, and shadcn/ui components.
 
-- **Routing**: File-based via `src/app/{tab}/page.tsx`. 10 tab routes: server, objects, zones, policies, create, blocklists, wizards, dnssec, resolvers, backup, powershell.
+- **Routing**: File-based via `src/app/{tab}/page.tsx`. 11 tab routes: server, objects, zones, policies, create, blocklists, wizards, dnssec, resolvers, backup, powershell.
 - **State**: Zustand store (`src/lib/store.ts`) with `persist` middleware for server registry in localStorage. All state is typed.
-- **API client**: `src/lib/api.ts` — single typed fetch wrapper with shared query-string builder. All 39 methods. Proxied through Next.js rewrites (`/api/*` → bridge at `:8650`).
+- **API client**: `src/lib/api.ts` — single typed fetch wrapper with shared query-string builder. All API calls go directly to the bridge (no Next.js proxy).
 - **Types**: `src/lib/types.ts` — shared interfaces for Server, Zone, DnsRecord, Policy, WizardState, etc.
 - **Wizards**: `src/wizards/scenarios.ts` (definitions) + `src/wizards/command-generator.ts` (PowerShell generation) + `src/app/wizards/page.tsx` (React UI). 8 scenarios covering all 10 Microsoft DNS Policy use cases.
 - **Components**: shadcn/ui primitives in `src/components/ui/`. App shell components (header, tabs, bridge status) in `src/components/`.

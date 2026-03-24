@@ -2031,28 +2031,30 @@ function Handle-StartResolvers {
                     }
 
                     # 2. Get DNS Server forwarder configuration
+                    $cimSession = $null
                     $dnsParams = @{}
-                    if ($cimHost -and $rCred) {
-                        $so = New-CimSessionOption -Protocol Dcom
-                        $cs = New-CimSession -ComputerName $cimHost -Credential $rCred -SessionOption $so -ErrorAction Stop
-                        $dnsParams['CimSession'] = $cs
-                    } elseif ($rHost) {
-                        $dnsParams['ComputerName'] = $rHost
-                    }
-                    $rawFwd = Get-DnsServerForwarder @dnsParams -ErrorAction Stop
-                    # Flatten forwarder CIM object to primitives before crossing job boundary
-                    $forwarders = @{
-                        IPAddress   = @($rawFwd.IPAddress | ForEach-Object { "$_" })
-                        UseRootHint = [bool]$rawFwd.UseRootHint
-                        Timeout     = $rawFwd.Timeout
-                    }
+                    try {
+                        if ($cimHost -and $rCred) {
+                            $so = New-CimSessionOption -Protocol Dcom
+                            $cimSession = New-CimSession -ComputerName $cimHost -Credential $rCred -SessionOption $so -ErrorAction Stop
+                            $dnsParams['CimSession'] = $cimSession
+                        } elseif ($rHost) {
+                            $dnsParams['ComputerName'] = $rHost
+                        }
+                        $rawFwd = Get-DnsServerForwarder @dnsParams -ErrorAction Stop
+                        $forwarders = @{
+                            IPAddress   = @($rawFwd.IPAddress | ForEach-Object { "$_" })
+                            UseRootHint = [bool]$rawFwd.UseRootHint
+                            Timeout     = $rawFwd.Timeout
+                        }
 
-                    # 3. Get DNS Server listening addresses
-                    $settings = Get-DnsServerSetting @dnsParams -All -ErrorAction Stop
-                    $listeningAddresses = @($settings.ListeningIPAddress | ForEach-Object { "$_" })
-
-                    if ($dnsParams['CimSession']) {
-                        Remove-CimSession -CimSession $dnsParams['CimSession'] -ErrorAction SilentlyContinue
+                        # 3. Get DNS Server listening addresses
+                        $settings = Get-DnsServerSetting @dnsParams -All -ErrorAction Stop
+                        $listeningAddresses = @($settings.ListeningIPAddress | ForEach-Object { "$_" })
+                    } finally {
+                        if ($cimSession) {
+                            Remove-CimSession -CimSession $cimSession -ErrorAction SilentlyContinue
+                        }
                     }
 
                     @{
@@ -2535,8 +2537,7 @@ function Handle-TestDnsServer {
 
 # BPA runs in a background job to avoid blocking the single-threaded listener.
 # POST /api/server/bpa starts the job, GET /api/server/bpa polls for results.
-$script:BpaJob = $null
-$script:BpaResult = $null
+$script:BpaJobs = @{}  # keyed by serverId or 'local'
 
 function Handle-StartBpa {
     param(
@@ -2544,8 +2545,11 @@ function Handle-StartBpa {
         [System.Net.HttpListenerRequest]$Request
     )
     try {
-        # If a BPA job is already running, don't start another
-        if ($script:BpaJob -and $script:BpaJob.State -eq 'Running') {
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+
+        # If a BPA job is already running for this server, just acknowledge
+        if ($script:BpaJobs[$jobKey] -and $script:BpaJobs[$jobKey].Job -and $script:BpaJobs[$jobKey].Job.State -eq 'Running') {
             Send-Response -Response $Response -Body @{
                 success = $true
                 status  = 'running'
@@ -2560,11 +2564,8 @@ function Handle-StartBpa {
         $remoteHost = $bgCred.Host
         $remoteCred = $bgCred.Credential
 
-        # Clear previous result
-        $script:BpaResult = $null
-
         # Launch BPA in a background job so the listener stays responsive
-        $script:BpaJob = Start-Job -ScriptBlock {
+        $script:BpaJobs[$jobKey] = @{ Job = Start-Job -ScriptBlock {
             param($mid, $rHost, $rCred)
             try {
                 if ($rHost) {
@@ -2620,7 +2621,7 @@ function Handle-StartBpa {
                     error   = "BPA failed: $($_.Exception.Message). Ensure the DNS Server role is installed."
                 }
             }
-        } -ArgumentList $modelId, $remoteHost, $remoteCred
+        } -ArgumentList $modelId, $remoteHost, $remoteCred; Result = $null }
 
         Send-Response -Response $Response -Body @{
             success = $true
@@ -2637,30 +2638,33 @@ function Handle-PollBpa {
         [System.Net.HttpListenerRequest]$Request
     )
     try {
-        if (-not $script:BpaJob) {
-            # No BPA has been run yet — return cached result if available
-            if ($script:BpaResult) {
-                Send-Response -Response $Response -Body $script:BpaResult
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+        $entry = $script:BpaJobs[$jobKey]
+
+        if (-not $entry -or -not $entry.Job) {
+            if ($entry -and $entry.Result) {
+                Send-Response -Response $Response -Body $entry.Result
             } else {
                 Send-Response -Response $Response -Body @{ success = $true; status = 'idle' }
             }
             return
         }
 
-        if ($script:BpaJob.State -eq 'Running') {
+        if ($entry.Job.State -eq 'Running') {
             Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
             return
         }
 
         # Job completed — collect result
-        $result = Receive-Job -Job $script:BpaJob -ErrorAction SilentlyContinue
-        Remove-Job -Job $script:BpaJob -Force -ErrorAction SilentlyContinue
-        $script:BpaJob = $null
+        $result = Receive-Job -Job $entry.Job -ErrorAction SilentlyContinue
+        Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
 
         if ($result) {
-            $script:BpaResult = $result
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $result }
             Send-Response -Response $Response -Body $result
         } else {
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $null }
             Send-Response -Response $Response -Body @{
                 success = $false
                 error   = 'BPA job completed but returned no results.'
@@ -4367,7 +4371,7 @@ try {
 
     # Collect all functions defined in this session into InitialSessionState
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam)' } | ForEach-Object {
+    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-)' } | ForEach-Object {
         $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($_.Name, $_.Definition)
         $iss.Commands.Add($entry)
     }
@@ -4376,8 +4380,7 @@ try {
     $sharedState = [hashtable]::Synchronized(@{
         SessionCredentials = $script:SessionCredentials
         CredStorePath      = $script:CredStorePath
-        BpaJob             = $null
-        BpaResult          = $null
+        BpaJobs            = @{}
         ResolverJobs       = @{}
     })
     $iss.Variables.Add(
@@ -4425,8 +4428,7 @@ try {
             # Bind shared state into script scope for handlers
             $script:SessionCredentials = $state.SessionCredentials
             $script:CredStorePath      = $state.CredStorePath
-            $script:BpaJob             = $state.BpaJob
-            $script:BpaResult          = $state.BpaResult
+            $script:BpaJobs            = $state.BpaJobs
             $script:ResolverJobs       = $state.ResolverJobs
 
             try {
@@ -4441,8 +4443,7 @@ try {
             }
 
             # Write back mutable state
-            $state.BpaJob       = $script:BpaJob
-            $state.BpaResult    = $script:BpaResult
+            $state.BpaJobs      = $script:BpaJobs
             $state.ResolverJobs = $script:ResolverJobs
         }).AddArgument($context).AddArgument($sharedState)
 

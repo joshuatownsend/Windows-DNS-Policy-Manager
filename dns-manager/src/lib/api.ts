@@ -145,8 +145,8 @@ export const api = {
     ),
 
   // Policies
-  listPolicies: (server?: string, zone?: string) =>
-    request("GET", "/api/policies" + qs({ server, zone })),
+  listPolicies: (server?: string, zone?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/policies" + qs({ server, zone, serverId, credentialMode })),
 
   addPolicy: (policy: Record<string, unknown>) =>
     request("POST", "/api/policies", policy),
@@ -154,11 +154,13 @@ export const api = {
   removePolicy: (
     name: string,
     server?: string,
-    zone?: string
+    zone?: string,
+    serverId?: string,
+    credentialMode?: string,
   ) =>
     request(
       "DELETE",
-      `/api/policies/${encodeURIComponent(name)}${qs({ server, zone })}`
+      `/api/policies/${encodeURIComponent(name)}${qs({ server, zone, serverId, credentialMode })}`
     ),
 
   setPolicyState: (

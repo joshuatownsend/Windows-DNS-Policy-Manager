@@ -187,9 +187,10 @@ Browser (:10010)                         PowerShell Bridge (:8650)
 | GET | `/api/credentials/check` | Check credential exists |
 | DELETE | `/api/credentials/{id}` | Delete credential |
 | POST | `/api/backup` | Export policies as JSON |
-| GET | `/api/resolvers` | Get DNS client resolver config per adapter |
-| GET | `/api/export/serverconfig` | Export full server config (Get-DnsServer) as JSON |
-| GET | `/api/export/allzones` | Export all primary zones via Export-DnsServerZone |
+| POST | `/api/server/resolvers` | Start DNS client resolver discovery job |
+| GET | `/api/server/resolvers` | Poll resolver discovery job result |
+| GET | `/api/export/serverconfig` | Export full server config as JSON |
+| POST | `/api/export/allzones` | Export all primary zones |
 | POST | `/api/execute` | Run allowlisted DNS cmdlet |
 
 ## Project Structure

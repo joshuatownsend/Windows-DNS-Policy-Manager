@@ -98,7 +98,7 @@ export default function BlocklistsPage() {
     setLoadingPolicies(true);
     try {
       // Fetch server-level policies
-      const res = await api.listPolicies(p.server);
+      const res = await api.listPolicies(p.server, undefined, p.serverId, p.credentialMode);
       if (res.success) {
         const policies = ((res as any).policies || []) as any[];
         // Filter to DENY/IGNORE actions (block-related)
@@ -140,6 +140,7 @@ export default function BlocklistsPage() {
     if (!quickDomain.trim()) { toast.error("Enter a domain"); return; }
     if (!quickZone.trim()) { toast.error("Enter a zone name"); return; }
     setQuickBlocking(true);
+    const p = getServerParams();
 
     const sanitized = sanitizeDomainName(quickDomain.trim());
     const policyData: Record<string, unknown> = {
@@ -147,6 +148,9 @@ export default function BlocklistsPage() {
       action: quickAction,
       fqdn: `EQ,${quickDomain.trim()}`,
       zoneName: quickZone.trim(),
+      server: p.server,
+      serverId: p.serverId,
+      credentialMode: p.credentialMode,
     };
 
     const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${quickAction} -Fqdn "EQ,${quickDomain.trim()}" -ZoneName "${quickZone.trim()}"`;
@@ -186,6 +190,7 @@ export default function BlocklistsPage() {
 
     setBulkImporting(true);
     setBulkProgress({ done: 0, total: domains.length });
+    const p = getServerParams();
     let successCount = 0;
     let failCount = 0;
 
@@ -198,6 +203,9 @@ export default function BlocklistsPage() {
         fqdn: `EQ,${domain}`,
         zoneName: bulkZone.trim(),
         processingOrder: String(bulkStartOrder + i),
+        server: p.server,
+        serverId: p.serverId,
+        credentialMode: p.credentialMode,
       };
 
       const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${bulkAction} -Fqdn "EQ,${domain}" -ZoneName "${bulkZone.trim()}" -ProcessingOrder ${bulkStartOrder + i}`;
@@ -230,7 +238,7 @@ export default function BlocklistsPage() {
   // ── Delete block policy ──
   async function handleDeletePolicy(name: string, zoneName?: string) {
     const p = getServerParams();
-    const res = await api.removePolicy(name, p.server, zoneName);
+    const res = await api.removePolicy(name, p.server, zoneName, p.serverId, p.credentialMode);
     if (res.success) {
       toast.success(`Removed "${name}"`);
       loadBlockPolicies();
