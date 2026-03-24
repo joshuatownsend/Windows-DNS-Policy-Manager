@@ -1,5 +1,7 @@
 # Windows DNS Policy Manager
 
+[**Project Homepage**](https://joshuatownsend.github.io/Windows-DNS-Policy-Manager/)
+
 A browser-based GUI for creating and managing Windows Server DNS Policies. Built with Next.js, TypeScript, and shadcn/ui. Connects to a live DNS server via the included PowerShell bridge for real-time policy management. Includes an MCP server for AI agent integration (Claude Code, Cursor, VS Code).
 
 ## Features
