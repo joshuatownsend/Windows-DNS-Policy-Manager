@@ -19,9 +19,10 @@ const SCENARIOS = [
 
 type ScenarioId = (typeof SCENARIOS)[number];
 
-/** Escape double quotes and backticks for safe PowerShell double-quoted strings */
+/** Escape PowerShell metacharacters for safe use inside double-quoted strings.
+ *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
 function psEscape(value: string): string {
-  return value.replace(/[`"]/g, (ch) => "`" + ch).replace(/[\r\n]+/g, " ");
+  return value.replace(/[`"$]/g, (ch) => "`" + ch).replace(/[\r\n]+/g, " ");
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
