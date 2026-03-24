@@ -274,7 +274,7 @@ footer a{color:var(--fg-muted)}
       <div class="stat-label">DnsServer Cmdlets</div>
     </div>
     <div class="stat">
-      <div class="stat-value">9</div>
+      <div class="stat-value">11</div>
       <div class="stat-label">Management Tabs</div>
     </div>
     <div class="stat">
@@ -365,10 +365,22 @@ footer a{color:var(--fg-muted)}
         <span class="feature-tag">3 auth modes</span>
       </div>
       <div class="feature">
+        <div class="feature-icon">&#128683;</div>
+        <h3>Blocklists</h3>
+        <p>Quick Block for single domains, Bulk Import from .txt files, Active Block Policies table with enable/disable, and Global Query Block List management &mdash; all from one tab.</p>
+        <span class="feature-tag">bulk import</span>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#127760;</div>
+        <h3>Resolvers &amp; Topology</h3>
+        <p>View IP stack DNS per adapter (IPv4 and IPv6), configure forwarders, and visualize the resolver topology with a Mermaid diagram using color-coded edges.</p>
+        <span class="feature-tag">topology diagram</span>
+      </div>
+      <div class="feature">
         <div class="feature-icon">&#128230;</div>
-        <h3>Backup &amp; Import</h3>
-        <p>Export policies as JSON, restore from backups, and bulk-import domain blocklists from text files. Progress tracking with per-record error reporting.</p>
-        <span class="feature-tag">json + csv</span>
+        <h3>Backup &amp; Export</h3>
+        <p>Export policies as JSON, restore from backups, export full server configuration (Get-DnsServer as JSON), and export DNS zones (single or all primary). AD-integrated backup guidance included.</p>
+        <span class="feature-tag">json + zone export</span>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9000;</div>
@@ -433,7 +445,7 @@ footer a{color:var(--fg-muted)}
         <div class="arch-arrow">&rarr;</div>
         <div class="arch-node" style="border-color:rgba(34,211,238,0.2)">
           <div class="arch-node-label" style="color:var(--cyan)">PowerShell Bridge</div>
-          <div class="arch-node-sub">HttpListener on :8650</div>
+          <div class="arch-node-sub">Runspace Pool on :8650</div>
         </div>
         <div class="arch-arrow">&rarr;</div>
         <div class="arch-node">
@@ -443,6 +455,7 @@ footer a{color:var(--fg-muted)}
       </div>
       <div class="arch-note">
         <p style="margin-top:20px">The bridge binds to <strong>127.0.0.1 only</strong> &mdash; never exposed to the network.</p>
+        <p>Concurrent request handling via <strong>runspace pool</strong> with CIM sessions for remote servers.</p>
         <p>All cmdlet calls use <strong>splatted parameters</strong> to prevent command injection.</p>
         <p>Credentials are stored via <strong>Windows DPAPI encryption</strong> &mdash; no plaintext, no cloud.</p>
       </div>

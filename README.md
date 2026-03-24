@@ -4,19 +4,20 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 ## Features
 
-- **9-tab interface**: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, DNSSEC, Backup & Import, PowerShell
-- **Multi-server management** with Kerberos, DPAPI-saved, or session-based credentials
+- **11-tab interface**: Server, Objects, Zones, Policies, Create, Blocklists, Wizards, DNSSEC, Resolvers, Backup, PowerShell
+- **Multi-server management** with Kerberos, DPAPI-saved, or session-based credentials and header server switcher for quick switching from any tab
 - **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone, DoH/DoT)
 - **DNS Best Practices Analyzer** — run Windows BPA from the UI with severity-coded findings
-- **Zone browser** with two-panel layout, settings editor, full record CRUD, CSV import/export, and pagination
+- **Zone browser** with two-panel layout, settings editor, full record CRUD, CSV import/export, pagination, and filters for Forward/Reverse, zone type (Primary/Secondary/Stub/Forwarder), and AD-integrated
 - **8 scenario wizards** with typed execution (geo-location, split-brain, time-of-day, load balancing, query filters, blocklist, geo+LB combo, primary-secondary)
+- **Blocklists tab** — Quick Block (single domain), Bulk Import (.txt), Active Block Policies table, and Global Query Block List management
+- **Resolvers tab** — IP stack DNS per adapter (IPv4/IPv6), forwarder configuration, Mermaid topology diagram with color-coded edges
 - **DNSSEC management** — zone signing, signing key CRUD, trust anchors, trust points
 - **Policy CRUD** with enable/disable toggle, processing order editor, and cross-server copy
 - **DNS object management** for client subnets, zone scopes, and recursion scopes
 - **Zone lifecycle** — create, delete, convert, suspend, resume, export zones
 - **PowerShell command generation** with copy-to-clipboard — works offline as a command generator
-- **Blocklist import** from TXT files with batch policy creation
-- **Backup & export** of policies as JSON with restore support
+- **Backup & export** — policy JSON backup/restore, server configuration export (Get-DnsServer as JSON), DNS zone export (single or all primary zones via Export-DnsServerZone), AD-integrated backup info
 - **Context-sensitive help** with slide-over panel and full-page popout
 - **20 Playwright E2E tests** with mock bridge, integrated into CI
 - **Docker-ready** with multi-stage Alpine image (221 MB)
@@ -137,13 +138,15 @@ Browser (:10010)                         PowerShell Bridge (:8650)
 - Next.js App Router with TypeScript and Tailwind CSS v4
 - shadcn/ui components (Radix primitives)
 - Zustand store with localStorage persistence
-- API client proxied through Next.js rewrites
+- API client with direct bridge calls (bypasses Next.js proxy)
 - Standalone output for production Docker images
 
 **Bridge** (`server/bridge.ps1`):
-- PowerShell `HttpListener` with regex-based routing
+- PowerShell `HttpListener` with regex-based routing and **runspace pool** for concurrent request handling
 - Splatted parameters for all DNS cmdlet calls (prevents injection)
-- Three credential modes: Kerberos, DPAPI-encrypted, session
+- Three credential modes: Kerberos, DPAPI-encrypted, session — with **CIM sessions** for credential-based remote server access
+- Background jobs for long-running operations (BPA, Resolvers)
+- Path traversal protection on serverId and fileName parameters
 - Graceful degradation — frontend works offline when bridge is unavailable
 
 ## API Endpoints (Bridge)
@@ -184,6 +187,9 @@ Browser (:10010)                         PowerShell Bridge (:8650)
 | GET | `/api/credentials/check` | Check credential exists |
 | DELETE | `/api/credentials/{id}` | Delete credential |
 | POST | `/api/backup` | Export policies as JSON |
+| GET | `/api/resolvers` | Get DNS client resolver config per adapter |
+| GET | `/api/export/serverconfig` | Export full server config (Get-DnsServer) as JSON |
+| GET | `/api/export/allzones` | Export all primary zones via Export-DnsServerZone |
 | POST | `/api/execute` | Run allowlisted DNS cmdlet |
 
 ## Project Structure
@@ -197,15 +203,17 @@ server/
 dns-manager/                      Next.js frontend
   Dockerfile                      Multi-stage Alpine build (standalone output)
   src/
-    app/                          App Router pages (9 tabs + help)
+    app/                          App Router pages (11 tabs + help)
       server/page.tsx             Server management + configuration dashboard
       objects/page.tsx            DNS Objects (subnets, scopes)
-      zones/page.tsx              Zone browser + record CRUD + lifecycle
+      zones/page.tsx              Zone browser + record CRUD + lifecycle + filters
       policies/page.tsx           Policy list
       create/page.tsx             Create Policy form
+      blocklists/page.tsx         Blocklists (quick block, bulk import, GQBL)
       wizards/page.tsx            Scenario wizards (8 scenarios)
       dnssec/page.tsx             DNSSEC management
-      backup/page.tsx             Backup & Import
+      resolvers/page.tsx          Resolvers (adapter DNS, forwarders, topology)
+      backup/page.tsx             Backup & Import + zone/config export
       powershell/page.tsx         PowerShell output
       help/[slug]/page.tsx        Help documentation viewer
     components/
