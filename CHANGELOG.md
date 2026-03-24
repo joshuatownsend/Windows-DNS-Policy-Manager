@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **DNS Lookup utility** — slide-over panel accessible from the header (Search icon) on any tab. Supports nslookup and dig output styles with tool-specific options:
+  - **nslookup**: Recursion, Use TCP, Debug (verbose output), Search List
+  - **dig**: Recursion, Use TCP, DNSSEC, Short Output, Show Authority/Additional/Statistics
+  - Query any registered server or enter a custom nameserver IP
+  - Console-style output area with session history, copy, and clear
+  - Powered by `Resolve-DnsName` via the bridge (`/api/utilities/dns-lookup`)
+
 ### Fixed
 
 - **Server switcher crash** — wrap `DropdownMenuLabel` in `DropdownMenuGroup` to satisfy Base UI's `MenuGroupRootContext` requirement

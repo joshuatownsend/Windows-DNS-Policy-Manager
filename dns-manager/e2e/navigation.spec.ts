@@ -37,6 +37,16 @@ test.describe("Navigation", () => {
     await expect(dialog).toHaveClass(/translate-x-full/);
   });
 
+  test("DNS lookup panel opens and closes", async ({ page }) => {
+    await page.goto("/server");
+    await page.getByRole("button", { name: "Open DNS lookup utility" }).click();
+    const dialog = page.getByRole("dialog", { name: "DNS Lookup" });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByText("DNS LOOKUP")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveClass(/translate-x-full/);
+  });
+
   test("bridge status shows Online", async ({ page }) => {
     await page.goto("/server");
     // The bridge status component has "BRIDGE" label below the status

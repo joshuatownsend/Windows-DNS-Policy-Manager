@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
 import { HelpPanel } from "./help-panel";
+import { DnsLookupPanel } from "./dns-lookup-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 import { useStore } from "@/lib/store";
 import {
@@ -85,6 +86,7 @@ function ServerSwitcher() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [lookupOpen, setLookupOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -130,6 +132,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="w-px h-5 bg-border" />
               <BridgeStatus />
               <div className="w-px h-5 bg-border" />
+              {/* DNS Lookup button */}
+              <button
+                onClick={() => setLookupOpen(true)}
+                className="group relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                aria-label="Open DNS lookup utility"
+              >
+                <Search className="size-4 text-muted-foreground group-hover:text-cyan transition-colors" />
+              </button>
+              <div className="w-px h-5 bg-border" />
               {/* Help button */}
               <button
                 onClick={() => setHelpOpen(true)}
@@ -163,6 +174,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <TabNav />
         <main className="py-6 animate-fade-in">{children}</main>
       </div>
+
+      {/* ── DNS Lookup slide-over ─────────────────────────── */}
+      <DnsLookupPanel open={lookupOpen} onClose={() => setLookupOpen(false)} />
 
       {/* ── Help slide-over ─────────────────────────────── */}
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />

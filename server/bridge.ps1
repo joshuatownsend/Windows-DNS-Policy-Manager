@@ -3758,6 +3758,279 @@ function Handle-Execute {
     }
 }
 
+# ── DNS Lookup Utility ────────────────────────────────────────────────────────
+
+function Handle-DnsLookup {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        $Body
+    )
+
+    $tool       = if ($Body.tool)       { $Body.tool }       else { 'nslookup' }
+    $hostname   = if ($Body.hostname)   { $Body.hostname }   else { '' }
+    $server     = if ($Body.server)     { $Body.server }     else { '' }
+    $recordType = if ($Body.recordType) { $Body.recordType } else { 'A' }
+    $options    = if ($Body.options)     { $Body.options }    else { @{} }
+
+    # Validate hostname
+    if (-not $hostname -or $hostname -match '[;&|`$]') {
+        Send-Response -Response $Response -Body @{ success = $false; error = 'Invalid hostname' } -StatusCode 400
+        return
+    }
+
+    # Whitelist record types
+    $allowedTypes = @('A','AAAA','CNAME','MX','NS','PTR','SRV','TXT','SOA','ANY')
+    if ($recordType -notin $allowedTypes) {
+        Send-Response -Response $Response -Body @{ success = $false; error = "Invalid record type: $recordType" } -StatusCode 400
+        return
+    }
+
+    try {
+        # Build splatted params for Resolve-DnsName
+        $splatParams = @{
+            Name        = $hostname
+            Type        = $recordType
+            ErrorAction = 'Stop'
+        }
+        if ($server) { $splatParams['Server'] = $server }
+        if ($options.recursive -eq $false) { $splatParams['NoRecursion'] = $true }
+        if ($options.tcp -eq $true)        { $splatParams['TcpOnly'] = $true }
+        if ($options.dnssec -eq $true)     { $splatParams['DnssecOk'] = $true }
+
+        $cmdDisplay = "Resolve-DnsName -Name '$hostname' -Type $recordType"
+        if ($server) { $cmdDisplay += " -Server '$server'" }
+        if ($splatParams.ContainsKey('NoRecursion')) { $cmdDisplay += ' -NoRecursion' }
+        if ($splatParams.ContainsKey('TcpOnly'))     { $cmdDisplay += ' -TcpOnly' }
+        if ($splatParams.ContainsKey('DnssecOk'))    { $cmdDisplay += ' -DnssecOk' }
+
+        $startTime = [System.Diagnostics.Stopwatch]::StartNew()
+        $results = @(Resolve-DnsName @splatParams)
+        $startTime.Stop()
+        $queryTime = $startTime.ElapsedMilliseconds
+
+        # Format output based on tool
+        $output = if ($tool -eq 'dig') {
+            Format-DigOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+        } else {
+            Format-NslookupOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+        }
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            output  = $output
+            command = $cmdDisplay
+        }
+    } catch {
+        $errorOutput = if ($tool -eq 'dig') {
+            ";; connection timed out; no servers could be reached`n;; Error: $($_.Exception.Message)"
+        } else {
+            "*** $($server): can't find $hostname - $($_.Exception.Message)"
+        }
+        Send-Response -Response $Response -Body @{
+            success = $true
+            output  = $errorOutput
+            command = $cmdDisplay
+            error   = $_.Exception.Message
+        }
+    }
+}
+
+function Format-NslookupOutput {
+    param($Results, $Hostname, $Server, $RecordType, $QueryTime, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("Server:  $Server")
+    $lines.Add("Address:  $Server")
+    $lines.Add('')
+
+    $debug = ($Options.debug -eq $true)
+
+    if ($Results.Count -eq 0) {
+        $lines.Add("*** $Server can't find ${Hostname}: Non-existent domain")
+    } else {
+        $hasNonAuth = $false
+        foreach ($r in $Results) {
+            $section = if ($r.Section) { $r.Section.ToString() } else { 'Answer' }
+            if ($section -eq 'Additional') { $hasNonAuth = $true }
+
+            switch ($r.Type.ToString()) {
+                'A' {
+                    if ($debug) {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add("TTL:     $($r.TTL)")
+                        $lines.Add("Section: $section")
+                        $lines.Add('')
+                    } else {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add('')
+                    }
+                }
+                'AAAA' {
+                    if ($debug) {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add("TTL:     $($r.TTL)")
+                        $lines.Add("Section: $section")
+                        $lines.Add('')
+                    } else {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add('')
+                    }
+                }
+                'CNAME' {
+                    $lines.Add("$($r.Name)  canonical name = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'MX' {
+                    $lines.Add("$Hostname  MX preference = $($r.Preference), mail exchanger = $($r.NameExchange)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'NS' {
+                    $lines.Add("$Hostname  nameserver = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'SOA' {
+                    $lines.Add("$Hostname")
+                    $lines.Add("  primary name server = $($r.PrimaryServer)")
+                    $lines.Add("  responsible mail addr = $($r.NameAdministrator)")
+                    $lines.Add("  serial  = $($r.SerialNumber)")
+                    $lines.Add("  refresh = $($r.RefreshInterval)")
+                    $lines.Add("  retry   = $($r.RetryDelay)")
+                    $lines.Add("  expire  = $($r.ExpireLimit)")
+                    $lines.Add("  default TTL = $($r.MinimumTimeToLive)")
+                    $lines.Add('')
+                }
+                'TXT' {
+                    $txt = if ($r.Strings) { ($r.Strings -join '') } else { $r.Text }
+                    $lines.Add("$($r.Name)  text = `"$txt`"")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'SRV' {
+                    $lines.Add("$($r.Name)  SRV service location:")
+                    $lines.Add("  priority = $($r.Priority), weight = $($r.Weight), port = $($r.Port), target = $($r.NameTarget)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'PTR' {
+                    $lines.Add("$($r.Name)  name = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                default {
+                    $lines.Add("$($r.Name)  type = $($r.Type)  data = $($r | ConvertTo-Json -Compress)")
+                    if ($debug) { $lines.Add('') }
+                }
+            }
+        }
+        if ($hasNonAuth -and -not $debug) {
+            $lines.Insert(2, 'Non-authoritative answer:')
+        }
+    }
+
+    if ($debug) {
+        $lines.Add("Query time: ${QueryTime}ms")
+    }
+
+    return ($lines -join "`n")
+}
+
+function Format-DigOutput {
+    param($Results, $Hostname, $Server, $RecordType, $QueryTime, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $short = ($Options.short -eq $true)
+
+    if ($short) {
+        foreach ($r in $Results) {
+            switch ($r.Type.ToString()) {
+                'A'     { $lines.Add($r.IPAddress) }
+                'AAAA'  { $lines.Add($r.IPAddress) }
+                'CNAME' { $lines.Add($r.NameHost) }
+                'MX'    { $lines.Add("$($r.Preference) $($r.NameExchange)") }
+                'NS'    { $lines.Add($r.NameHost) }
+                'PTR'   { $lines.Add($r.NameHost) }
+                'TXT'   { $txt = if ($r.Strings) { ($r.Strings -join '') } else { $r.Text }; $lines.Add("`"$txt`"") }
+                'SRV'   { $lines.Add("$($r.Priority) $($r.Weight) $($r.Port) $($r.NameTarget)") }
+                'SOA'   { $lines.Add("$($r.PrimaryServer) $($r.NameAdministrator) $($r.SerialNumber) $($r.RefreshInterval) $($r.RetryDelay) $($r.ExpireLimit) $($r.MinimumTimeToLive)") }
+                default { $lines.Add(($r | ConvertTo-Json -Compress)) }
+            }
+        }
+        return ($lines -join "`n")
+    }
+
+    # Full dig-style output
+    $lines.Add("; <<>> Resolve-DnsName <<>> $Hostname $RecordType")
+    $lines.Add(";; global options: +cmd")
+    $lines.Add('')
+
+    # Question section
+    $lines.Add(';; QUESTION SECTION:')
+    $lines.Add(";$($Hostname.PadRight(28)) IN  $RecordType")
+    $lines.Add('')
+
+    # Group results by section
+    $answerRecords = @($Results | Where-Object { -not $_.Section -or $_.Section.ToString() -eq 'Answer' })
+    $authorityRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Authority' })
+    $additionalRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Additional' })
+
+    if ($answerRecords.Count -gt 0) {
+        $lines.Add(';; ANSWER SECTION:')
+        foreach ($r in $answerRecords) {
+            $lines.Add((Format-DigRecord $r))
+        }
+        $lines.Add('')
+    }
+
+    if ($authorityRecords.Count -gt 0 -and $Options.authority -ne $false) {
+        $lines.Add(';; AUTHORITY SECTION:')
+        foreach ($r in $authorityRecords) {
+            $lines.Add((Format-DigRecord $r))
+        }
+        $lines.Add('')
+    }
+
+    if ($additionalRecords.Count -gt 0 -and $Options.additional -ne $false) {
+        $lines.Add(';; ADDITIONAL SECTION:')
+        foreach ($r in $additionalRecords) {
+            $lines.Add((Format-DigRecord $r))
+        }
+        $lines.Add('')
+    }
+
+    if ($Options.stats -ne $false) {
+        $lines.Add(";; Query time: ${QueryTime} msec")
+        $lines.Add(";; SERVER: ${Server}")
+        $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
+        $lines.Add(";; MSG SIZE  rcvd: $($Results.Count) records")
+    }
+
+    return ($lines -join "`n")
+}
+
+function Format-DigRecord {
+    param($Record)
+    $name = $Record.Name.PadRight(28)
+    $ttl  = if ($Record.TTL) { "$($Record.TTL)".PadRight(6) } else { '0'.PadRight(6) }
+    $type = $Record.Type.ToString().PadRight(6)
+
+    $data = switch ($Record.Type.ToString()) {
+        'A'     { $Record.IPAddress }
+        'AAAA'  { $Record.IPAddress }
+        'CNAME' { $Record.NameHost }
+        'MX'    { "$($Record.Preference) $($Record.NameExchange)" }
+        'NS'    { $Record.NameHost }
+        'PTR'   { $Record.NameHost }
+        'TXT'   { $txt = if ($Record.Strings) { ($Record.Strings -join '') } else { $Record.Text }; "`"$txt`"" }
+        'SRV'   { "$($Record.Priority) $($Record.Weight) $($Record.Port) $($Record.NameTarget)" }
+        'SOA'   { "$($Record.PrimaryServer) $($Record.NameAdministrator) $($Record.SerialNumber) $($Record.RefreshInterval) $($Record.RetryDelay) $($Record.ExpireLimit) $($Record.MinimumTimeToLive)" }
+        default { $Record | ConvertTo-Json -Compress }
+    }
+
+    return "$name $ttl IN  $type $data"
+}
+
 # ── Router ───────────────────────────────────────────────────────────────────
 
 function Route-Request {
@@ -4286,6 +4559,15 @@ function Route-Request {
                 $zn = [System.Uri]::UnescapeDataString($Matches[1])
                 if ($method -eq 'GET') { Handle-GetZoneDelegation -Response $response -Request $request -ZoneName $zn }
                 else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            # ── Utilities ──────────────────────────────────
+            '^/api/utilities/dns-lookup$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-DnsLookup -Response $response -Request $request -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
             }
             default {
                 Send-Response -Response $response -Body @{ success = $false; error = "Not found: $path" } -StatusCode 404
