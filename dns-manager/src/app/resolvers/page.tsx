@@ -104,11 +104,15 @@ function escapeMermaidLabel(text: string): string {
   return text.replace(/["\\<>{}()\[\]|]/g, "");
 }
 
+type AddressFilter = "both" | "ipv4" | "ipv6";
+
 // Generate Mermaid graph definition from resolver data
-function buildMermaidGraph(allData: ServerResolverData[]): string {
-  const lines: string[] = ["graph LR"];
+// Layout: TB (top-to-bottom). External (upstream) resolvers at top, managed servers below.
+function buildMermaidGraph(allData: ServerResolverData[], addressFilter: AddressFilter): string {
+  const lines: string[] = ["graph TB"];
   const managedIPs = new Set<string>();
   const nodeIds = new Map<string, string>();
+  const externalNodes = new Set<string>();
   let nodeCounter = 0;
 
   function getNodeId(label: string): string {
@@ -119,6 +123,20 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
     return nodeIds.get(key)!;
   }
 
+  // Filter interfaces by address family
+  function filterInterfaces(interfaces: NetworkDnsConfig[]): NetworkDnsConfig[] {
+    if (addressFilter === "ipv4") return interfaces.filter((i) => i.AddressFamily === 2);
+    if (addressFilter === "ipv6") return interfaces.filter((i) => i.AddressFamily === 23);
+    return interfaces;
+  }
+
+  // Filter forwarder IPs by address family (v4 = contains '.', v6 = contains ':')
+  function filterIPs(ips: string[]): string[] {
+    if (addressFilter === "ipv4") return ips.filter((ip) => ip.includes("."));
+    if (addressFilter === "ipv6") return ips.filter((ip) => ip.includes(":"));
+    return ips;
+  }
+
   // Collect all listening IPs for managed servers
   for (const entry of allData) {
     if (!entry.data) continue;
@@ -127,14 +145,13 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
     }
   }
 
-  // Add managed server nodes
+  // Precompute nodeId → entry lookup for O(1) access in subgraph rendering
+  const entryByNodeId = new Map<string, ServerResolverData>();
   for (const entry of allData) {
-    const id = getNodeId(entry.server.hostname);
-    const label = escapeMermaidLabel(entry.server.name || entry.server.hostname);
-    lines.push(`  ${id}["${label}"]:::managed`);
+    entryByNodeId.set(getNodeId(entry.server.hostname), entry);
   }
 
-  // Track edges to detect overlap (both IP stack and forwarder)
+  // Collect edges (only server→external, skip peer-to-peer)
   const ipStackEdges = new Set<string>();
   const forwarderEdges = new Set<string>();
 
@@ -142,45 +159,78 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
     if (!entry.data) continue;
     const srcId = getNodeId(entry.server.hostname);
 
-    // IP stack DNS edges
-    for (const iface of entry.data.interfaces) {
+    // IP stack DNS edges — skip peer-to-peer (managed→managed) to keep peers on same level
+    for (const iface of filterInterfaces(entry.data.interfaces)) {
       for (const addr of iface.ServerAddresses) {
-        // Skip self-referencing
-        if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
-
+        if (managedIPs.has(addr)) continue; // Skip self-ref AND peer-to-peer
         const targetId = getNodeId(addr);
-        const edgeKey = `${srcId}->${targetId}`;
-        ipStackEdges.add(edgeKey);
-
-        // Add target node if not already a managed server
-        if (!managedIPs.has(addr)) {
-          const knownName = KNOWN_RESOLVERS[addr];
-          const safeAddr = escapeMermaidLabel(addr);
-          const label = knownName ? `${escapeMermaidLabel(knownName)}<br/>${safeAddr}` : safeAddr;
-          lines.push(`  ${targetId}("${label}"):::external`);
-        }
+        ipStackEdges.add(`${srcId}->${targetId}`);
+        externalNodes.add(targetId);
       }
     }
 
-    // Forwarder edges
-    const forwarderIPs = entry.data.forwarders?.IPAddress || [];
-    for (const addr of forwarderIPs) {
-      if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
-
+    // Forwarder edges — same: skip managed targets
+    for (const addr of filterIPs(entry.data.forwarders?.IPAddress || [])) {
+      if (managedIPs.has(addr)) continue;
       const targetId = getNodeId(addr);
-      const edgeKey = `${srcId}->${targetId}`;
-      forwarderEdges.add(edgeKey);
-
-      if (!managedIPs.has(addr) && !ipStackEdges.has(edgeKey)) {
-        const knownName = KNOWN_RESOLVERS[addr];
-        const safeAddr = escapeMermaidLabel(addr);
-        const label = knownName ? `${escapeMermaidLabel(knownName)}<br/>${safeAddr}` : safeAddr;
-        lines.push(`  ${targetId}("${label}"):::external`);
-      }
+      forwarderEdges.add(`${srcId}->${targetId}`);
+      externalNodes.add(targetId);
     }
   }
 
-  // Render edges with per-edge color styles via linkStyle index
+  // Two tiers: external resolvers on top, all managed servers on bottom (peers)
+  const topTier: string[] = [];    // External resolvers
+  const serverTier: string[] = []; // All managed servers (peers)
+
+  for (const nodeId of externalNodes) {
+    topTier.push(nodeId);
+  }
+  for (const entry of allData) {
+    serverTier.push(getNodeId(entry.server.hostname));
+  }
+
+  // Build external node labels
+  const externalLabels = new Map<string, string>();
+  for (const entry of allData) {
+    if (!entry.data) continue;
+    const addExternal = (addr: string) => {
+      const targetId = getNodeId(addr);
+      if (externalNodes.has(targetId) && !externalLabels.has(targetId)) {
+        const knownName = KNOWN_RESOLVERS[addr];
+        const safeAddr = escapeMermaidLabel(addr);
+        const label = knownName ? `${escapeMermaidLabel(knownName)}<br/>${safeAddr}` : safeAddr;
+        externalLabels.set(targetId, label);
+      }
+    };
+    for (const iface of filterInterfaces(entry.data.interfaces)) {
+      for (const addr of iface.ServerAddresses) addExternal(addr);
+    }
+    for (const addr of filterIPs(entry.data.forwarders?.IPAddress || [])) addExternal(addr);
+  }
+
+  // Render subgraphs: external resolvers on top, managed servers below
+  if (topTier.length > 0) {
+    lines.push(`  subgraph upstream [" "]`);
+    lines.push(`    direction LR`);
+    for (const id of topTier) {
+      const label = externalLabels.get(id) || id;
+      lines.push(`    ${id}("${label}"):::external`);
+    }
+    lines.push(`  end`);
+  }
+
+  if (serverTier.length > 0) {
+    lines.push(`  subgraph servers [" "]`);
+    lines.push(`    direction LR`);
+    for (const id of serverTier) {
+      const entry = entryByNodeId.get(id);
+      const label = entry ? escapeMermaidLabel(entry.server.name || entry.server.hostname) : id;
+      lines.push(`    ${id}["${label}"]:::managed`);
+    }
+    lines.push(`  end`);
+  }
+
+  // Render edges with per-edge color styles
   let edgeIndex = 0;
   const ipStackIndices: number[] = [];
   const forwarderIndices: number[] = [];
@@ -207,6 +257,14 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
   lines.push(`  classDef managed fill:#0e4066,stroke:#22d3ee,stroke-width:2px,color:#e2e8f0`);
   lines.push(`  classDef external fill:#1a1a2e,stroke:#f59e0b,stroke-width:1px,color:#e2e8f0`);
 
+  // Hide subgraph borders (only if subgraph exists)
+  if (topTier.length > 0) {
+    lines.push(`  style upstream fill:transparent,stroke:transparent`);
+  }
+  if (serverTier.length > 0) {
+    lines.push(`  style servers fill:transparent,stroke:transparent`);
+  }
+
   // Per-edge color styles
   if (ipStackIndices.length > 0) {
     lines.push(`  linkStyle ${ipStackIndices.join(",")} stroke:#22d3ee,stroke-width:2px`);
@@ -227,6 +285,7 @@ export default function ResolversPage() {
 
   const [resolverData, setResolverData] = useState<ServerResolverData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [addressFilter, setAddressFilter] = useState<AddressFilter>("both");
   const mermaidRef = useRef<HTMLDivElement>(null);
   const [mermaidError, setMermaidError] = useState<string | null>(null);
 
@@ -340,8 +399,8 @@ export default function ResolversPage() {
     [resolverData]
   );
   const graphDef = useMemo(
-    () => (dataWithResults.length > 0 ? buildMermaidGraph(dataWithResults) : null),
-    [dataWithResults]
+    () => (dataWithResults.length > 0 ? buildMermaidGraph(dataWithResults, addressFilter) : null),
+    [dataWithResults, addressFilter]
   );
 
   // Render Mermaid diagram when graph definition changes
@@ -432,10 +491,27 @@ export default function ResolversPage() {
       {onlineCount > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Network className="h-4 w-4 text-cyan" />
-              DNS Topology
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Network className="h-4 w-4 text-cyan" />
+                DNS Topology
+              </CardTitle>
+              <div className="flex items-center gap-1">
+                {(["both", "ipv4", "ipv6"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setAddressFilter(v)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                      addressFilter === v
+                        ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
+                        : "text-muted-foreground border-border hover:text-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    {v === "both" ? "All" : v === "ipv4" ? "IPv4" : "IPv6"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {/* Legend */}
