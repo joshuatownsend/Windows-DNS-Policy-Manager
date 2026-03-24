@@ -161,14 +161,23 @@ if ($ready) {
     Write-Host "  Bridge started (PID: $($bridgeJob.Id))" -ForegroundColor Green
     Write-Host "  DNS Module: $(if ($health.dnsModuleAvailable) { 'Available' } else { 'Not Found' })" -ForegroundColor $(if ($health.dnsModuleAvailable) { 'Green' } else { 'Yellow' })
 
-    # Start Next.js frontend
+    # Start Next.js frontend (auto-install if needed)
+    if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
+        Write-Host '  Installing frontend dependencies...' -ForegroundColor Yellow
+        Push-Location $frontendDir
+        npm install --silent 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Host '  npm install failed. Run manually: cd dns-manager && npm install' -ForegroundColor Red
+        } else {
+            Pop-Location
+        }
+    }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {
         Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
         $devCmd = "cd '$frontendDir'; npm run dev"
         Start-Process powershell -ArgumentList "-NoProfile -Command `"$devCmd`"" -WindowStyle Normal
         Start-Sleep -Milliseconds 2000
-    } else {
-        Write-Host '  Frontend not installed. Run: cd dns-manager && npm install' -ForegroundColor Yellow
     }
 
     if (-not $NoBrowser) {

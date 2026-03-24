@@ -40,7 +40,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 powershell -ExecutionPolicy Bypass -File Start-DNSPolicyManager.ps1
 ```
 
-This starts both the PowerShell bridge (port 8650) and the Next.js dev server (port 10010), then opens your browser.
+This starts both the PowerShell bridge (port 8650) and the Next.js dev server (port 10010), then opens your browser. Frontend dependencies are installed automatically on first run.
 
 ### Manual startup
 

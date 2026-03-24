@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Server switcher crash** — wrap `DropdownMenuLabel` in `DropdownMenuGroup` to satisfy Base UI's `MenuGroupRootContext` requirement
+- **Launcher** — `Start-DNSPolicyManager.ps1` now auto-installs frontend dependencies (`npm install`) on first run instead of printing a warning and skipping the frontend
+
 ### Changed
 
 - **Tab navigation** — redesigned from underline-indicator with numeric prefixes to pill-style active tabs with descriptive labels (e.g., "DNS Objects", "Create Policy", "Backup & Import")
