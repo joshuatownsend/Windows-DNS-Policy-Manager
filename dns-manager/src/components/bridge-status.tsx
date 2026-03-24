@@ -6,31 +6,16 @@ export function BridgeStatus() {
   const connected = useStore((s) => s.bridgeConnected);
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Indicator cluster */}
-      <div className="relative flex items-center justify-center">
-        {/* Outer ring */}
-        <div
-          className={`absolute w-5 h-5 rounded-full border transition-colors duration-500 ${
-            connected
-              ? "border-emerald-500/30"
-              : "border-muted-foreground/15"
-          }`}
-        />
-        {/* Inner dot */}
-        <div
-          className={`w-2 h-2 rounded-full transition-all duration-500 ${
-            connected
-              ? "bg-emerald-400 animate-beacon"
-              : "bg-muted-foreground/50 animate-flatline"
-          }`}
-        />
-      </div>
-
-      {/* Label */}
+    <div className="flex items-center gap-2.5" role="status" aria-live="polite" aria-label={`PowerShell bridge: ${connected ? "online" : "offline"}`}>
+      <div
+        className={`w-2 h-2 rounded-full shrink-0 ${
+          connected ? "bg-emerald-400" : "bg-muted-foreground/40"
+        }`}
+        aria-hidden="true"
+      />
       <div className="flex flex-col">
         <span
-          className={`text-[11px] font-semibold tracking-wider uppercase transition-colors duration-500 ${
+          className={`text-[11px] font-semibold tracking-wider uppercase ${
             connected ? "text-emerald-400" : "text-muted-foreground/60"
           }`}
         >

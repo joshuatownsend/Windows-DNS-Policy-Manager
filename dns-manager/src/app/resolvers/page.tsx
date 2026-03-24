@@ -658,7 +658,7 @@ export default function ResolversPage() {
                         className={
                           entry.data.forwarders.UseRootHint
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                            : "bg-zinc-500/10 text-zinc-400 border-zinc-500/30"
+                            : "bg-muted text-muted-foreground border-border"
                         }
                       >
                         Root Hints: {entry.data.forwarders.UseRootHint ? "On" : "Off"}

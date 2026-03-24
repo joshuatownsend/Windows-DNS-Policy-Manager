@@ -324,7 +324,7 @@ export default function ObjectsPage() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">DNS Objects</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Manage client subnets, zone scopes, and recursion scopes used by DNS
           policies.
         </p>
@@ -339,13 +339,13 @@ export default function ObjectsPage() {
 
       {/* ────────────────── Client Subnets ────────────────── */}
       <Collapsible open={subnetsOpen} onOpenChange={setSubnetsOpen}>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950">
-          <div className="flex w-full items-center justify-between px-4 py-3 hover:bg-zinc-900/60 transition-colors">
+        <div className="rounded-lg border border-border bg-card">
+          <div className="flex w-full items-center justify-between px-4 py-3 hover:bg-secondary/60 transition-colors">
             <CollapsibleTrigger className="flex items-center gap-3 text-left cursor-pointer flex-1">
               {subnetsOpen ? (
-                <ChevronDown className="h-4 w-4 text-zinc-400" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-zinc-400" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
               )}
               <Network className="h-4 w-4 text-cyan-400" />
               <span className="font-semibold">Client Subnets</span>
@@ -366,38 +366,38 @@ export default function ObjectsPage() {
           </div>
 
           <CollapsibleContent>
-            <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+            <div className="border-t border-border px-4 py-4 space-y-4">
               {/* Add form */}
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">Name</Label>
+                  <Label className="text-xs text-muted-foreground">Name</Label>
                   <Input
                     placeholder="e.g. CorpSubnet"
                     value={newSubnetName}
                     onChange={(e) => setNewSubnetName(e.target.value)}
-                    className="h-8 w-44 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-44 bg-secondary border-border"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     IPv4 Subnets (comma-separated)
                   </Label>
                   <Input
                     placeholder="e.g. 10.0.0.0/24, 192.168.1.0/24"
                     value={newSubnetIPv4}
                     onChange={(e) => setNewSubnetIPv4(e.target.value)}
-                    className="h-8 w-64 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-64 bg-secondary border-border"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     IPv6 Subnets (comma-separated)
                   </Label>
                   <Input
                     placeholder="e.g. fd00::/64"
                     value={newSubnetIPv6}
                     onChange={(e) => setNewSubnetIPv6(e.target.value)}
-                    className="h-8 w-56 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-56 bg-secondary border-border"
                   />
                 </div>
                 <Button
@@ -412,44 +412,44 @@ export default function ObjectsPage() {
 
               {/* Table */}
               {clientSubnets.length === 0 ? (
-                <p className="text-sm text-zinc-500 py-2">
+                <p className="text-sm text-muted-foreground/60 py-2">
                   No client subnets found.
                 </p>
               ) : (
-                <div className="rounded-md border border-zinc-800 overflow-hidden">
+                <div className="rounded-md border border-border overflow-hidden">
                   <Table>
                     <TableHeader>
-                      <TableRow className="border-zinc-800 hover:bg-transparent">
-                        <TableHead className="text-zinc-400">Name</TableHead>
-                        <TableHead className="text-zinc-400">
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableHead className="text-muted-foreground">Name</TableHead>
+                        <TableHead className="text-muted-foreground">
                           IPv4 Subnets
                         </TableHead>
-                        <TableHead className="text-zinc-400">
+                        <TableHead className="text-muted-foreground">
                           IPv6 Subnets
                         </TableHead>
-                        <TableHead className="text-zinc-400 w-16" />
+                        <TableHead className="text-muted-foreground w-16" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {clientSubnets.map((subnet) => (
                         <TableRow
                           key={subnet.Name}
-                          className="border-zinc-800"
+                          className="border-border"
                         >
                           <TableCell className="font-medium">
                             {subnet.Name}
                           </TableCell>
-                          <TableCell className="text-zinc-300">
+                          <TableCell className="text-foreground/80">
                             {subnet.IPv4Subnet?.join(", ") || "--"}
                           </TableCell>
-                          <TableCell className="text-zinc-300">
+                          <TableCell className="text-foreground/80">
                             {subnet.IPv6Subnet?.join(", ") || "--"}
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0 text-zinc-400 hover:text-red-400"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
                               onClick={() => handleDeleteSubnet(subnet.Name)}
                               disabled={!bridgeConnected}
                             >
@@ -469,14 +469,14 @@ export default function ObjectsPage() {
 
       {/* ────────────────── Zone Scopes ────────────────── */}
       <Collapsible open={zoneScopesOpen} onOpenChange={setZoneScopesOpen}>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950">
+        <div className="rounded-lg border border-border bg-card">
           <CollapsibleTrigger>
-            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-900/60 transition-colors">
+            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/60 transition-colors">
               <div className="flex items-center gap-3">
                 {zoneScopesOpen ? (
-                  <ChevronDown className="h-4 w-4 text-zinc-400" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-4 w-4 text-zinc-400" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
                 <Globe className="h-4 w-4 text-cyan-400" />
                 <span className="font-semibold">Zone Scopes</span>
@@ -501,18 +501,18 @@ export default function ObjectsPage() {
           </CollapsibleTrigger>
 
           <CollapsibleContent>
-            <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+            <div className="border-t border-border px-4 py-4 space-y-4">
               {/* Zone loader */}
               <div className="flex items-end gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     Zone Name (load scopes for zone)
                   </Label>
                   <Input
                     placeholder="e.g. contoso.com"
                     value={zoneScopeZone}
                     onChange={(e) => setZoneScopeZone(e.target.value)}
-                    className="h-8 w-56 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-56 bg-secondary border-border"
                   />
                 </div>
                 <Button
@@ -528,21 +528,21 @@ export default function ObjectsPage() {
               {/* Add form */}
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">Scope Name</Label>
+                  <Label className="text-xs text-muted-foreground">Scope Name</Label>
                   <Input
                     placeholder="e.g. InternalScope"
                     value={newZoneScopeName}
                     onChange={(e) => setNewZoneScopeName(e.target.value)}
-                    className="h-8 w-44 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-44 bg-secondary border-border"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">Zone Name</Label>
+                  <Label className="text-xs text-muted-foreground">Zone Name</Label>
                   <Input
                     placeholder="e.g. contoso.com"
                     value={newZoneScopeZone}
                     onChange={(e) => setNewZoneScopeZone(e.target.value)}
-                    className="h-8 w-56 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-56 bg-secondary border-border"
                   />
                 </div>
                 <Button
@@ -557,39 +557,39 @@ export default function ObjectsPage() {
 
               {/* Table */}
               {allZoneScopes.length === 0 ? (
-                <p className="text-sm text-zinc-500 py-2">
+                <p className="text-sm text-muted-foreground/60 py-2">
                   No zone scopes loaded. Enter a zone name above and click
                   &quot;Load Scopes&quot;.
                 </p>
               ) : (
-                <div className="rounded-md border border-zinc-800 overflow-hidden">
+                <div className="rounded-md border border-border overflow-hidden">
                   <Table>
                     <TableHeader>
-                      <TableRow className="border-zinc-800 hover:bg-transparent">
-                        <TableHead className="text-zinc-400">Name</TableHead>
-                        <TableHead className="text-zinc-400">
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableHead className="text-muted-foreground">Name</TableHead>
+                        <TableHead className="text-muted-foreground">
                           Zone Name
                         </TableHead>
-                        <TableHead className="text-zinc-400 w-16" />
+                        <TableHead className="text-muted-foreground w-16" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {allZoneScopes.map((scope) => (
                         <TableRow
                           key={`${scope.ZoneName}-${scope.Name}`}
-                          className="border-zinc-800"
+                          className="border-border"
                         >
                           <TableCell className="font-medium">
                             {scope.Name}
                           </TableCell>
-                          <TableCell className="text-zinc-300">
+                          <TableCell className="text-foreground/80">
                             {scope.ZoneName}
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0 text-zinc-400 hover:text-red-400"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
                               onClick={() =>
                                 handleDeleteZoneScope(scope.Name, scope.ZoneName)
                               }
@@ -611,14 +611,14 @@ export default function ObjectsPage() {
 
       {/* ────────────────── Recursion Scopes ────────────────── */}
       <Collapsible open={recursionOpen} onOpenChange={setRecursionOpen}>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950">
+        <div className="rounded-lg border border-border bg-card">
           <CollapsibleTrigger>
-            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-900/60 transition-colors">
+            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/60 transition-colors">
               <div className="flex items-center gap-3">
                 {recursionOpen ? (
-                  <ChevronDown className="h-4 w-4 text-zinc-400" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-4 w-4 text-zinc-400" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
                 <GitBranch className="h-4 w-4 text-cyan-400" />
                 <span className="font-semibold">Recursion Scopes</span>
@@ -643,16 +643,16 @@ export default function ObjectsPage() {
           </CollapsibleTrigger>
 
           <CollapsibleContent>
-            <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+            <div className="border-t border-border px-4 py-4 space-y-4">
               {/* Add form */}
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">Name</Label>
+                  <Label className="text-xs text-muted-foreground">Name</Label>
                   <Input
                     placeholder="e.g. InternalRecursion"
                     value={newRecName}
                     onChange={(e) => setNewRecName(e.target.value)}
-                    className="h-8 w-48 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-48 bg-secondary border-border"
                   />
                 </div>
                 <div className="flex items-center gap-2 pb-0.5">
@@ -661,19 +661,19 @@ export default function ObjectsPage() {
                     checked={newRecEnable}
                     onCheckedChange={setNewRecEnable}
                   />
-                  <Label htmlFor="rec-enable" className="text-xs text-zinc-400">
+                  <Label htmlFor="rec-enable" className="text-xs text-muted-foreground">
                     Enable Recursion
                   </Label>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     Forwarder IPs (comma-separated)
                   </Label>
                   <Input
                     placeholder="e.g. 8.8.8.8, 1.1.1.1"
                     value={newRecForwarder}
                     onChange={(e) => setNewRecForwarder(e.target.value)}
-                    className="h-8 w-56 bg-zinc-900 border-zinc-700"
+                    className="h-8 w-56 bg-secondary border-border"
                   />
                 </div>
                 <Button
@@ -688,29 +688,29 @@ export default function ObjectsPage() {
 
               {/* Table */}
               {recursionScopes.length === 0 ? (
-                <p className="text-sm text-zinc-500 py-2">
+                <p className="text-sm text-muted-foreground/60 py-2">
                   No recursion scopes found.
                 </p>
               ) : (
-                <div className="rounded-md border border-zinc-800 overflow-hidden">
+                <div className="rounded-md border border-border overflow-hidden">
                   <Table>
                     <TableHeader>
-                      <TableRow className="border-zinc-800 hover:bg-transparent">
-                        <TableHead className="text-zinc-400">Name</TableHead>
-                        <TableHead className="text-zinc-400">
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableHead className="text-muted-foreground">Name</TableHead>
+                        <TableHead className="text-muted-foreground">
                           Enable Recursion
                         </TableHead>
-                        <TableHead className="text-zinc-400">
+                        <TableHead className="text-muted-foreground">
                           Forwarder
                         </TableHead>
-                        <TableHead className="text-zinc-400 w-16" />
+                        <TableHead className="text-muted-foreground w-16" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {recursionScopes.map((scope) => (
                         <TableRow
                           key={scope.Name}
-                          className="border-zinc-800"
+                          className="border-border"
                         >
                           <TableCell className="font-medium">
                             {scope.Name}
@@ -725,20 +725,20 @@ export default function ObjectsPage() {
                               className={
                                 scope.EnableRecursion !== false
                                   ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
-                                  : "bg-zinc-800 text-zinc-400"
+                                  : "bg-muted text-muted-foreground"
                               }
                             >
                               {scope.EnableRecursion !== false ? "Yes" : "No"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-zinc-300">
+                          <TableCell className="text-foreground/80">
                             {scope.Forwarder?.join(", ") || "--"}
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0 text-zinc-400 hover:text-red-400"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
                               onClick={() =>
                                 handleDeleteRecursionScope(scope.Name)
                               }

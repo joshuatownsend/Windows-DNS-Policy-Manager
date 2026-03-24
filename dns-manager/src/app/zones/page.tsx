@@ -46,6 +46,7 @@ import { CreateZoneDialog } from "@/components/zones/create-zone-dialog";
 import { ZoneActions } from "@/components/zones/zone-actions";
 import { exportRecordsCsv } from "@/components/zones/record-export";
 import { RecordImportDialog } from "@/components/zones/record-import";
+import { Globe } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ const RECORD_TYPE_COLORS: Record<string, string> = {
   PTR: "bg-pink-500/20 text-pink-400 border-pink-500/30",
   SRV: "bg-orange-500/20 text-orange-400 border-orange-500/30",
   TXT: "bg-slate-500/20 text-slate-400 border-slate-500/30",
-  SOA: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  SOA: "bg-muted/50 text-muted-foreground border-border",
 };
 
 const ZONE_TYPE_COLORS: Record<string, string> = {
@@ -586,13 +587,13 @@ export default function ZonesPage() {
   return (
     <div className="flex h-full gap-4 p-4">
       {/* ── Left Panel: Zone List ──────────────────────────── */}
-      <Card className="w-1/3 flex flex-col border-zinc-800 bg-zinc-950">
+      <Card className="w-1/3 flex flex-col border-border bg-card">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Zones
               {zones.length > 0 && (
-                <span className="ml-1.5 text-[10px] font-mono text-zinc-600">
+                <span className="ml-1.5 text-[10px] font-mono text-muted-foreground/40">
                   {filteredZones.length === zones.length
                     ? zones.length
                     : `${filteredZones.length}/${zones.length}`}
@@ -618,7 +619,7 @@ export default function ZonesPage() {
             placeholder="Search zones..."
             value={zoneSearch}
             onChange={(e) => setZoneSearch(e.target.value)}
-            className="mt-2 bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+            className="mt-2 bg-secondary border-border text-foreground placeholder:text-muted-foreground/60"
           />
           {/* Zone Filters */}
           <div className="mt-2 flex flex-wrap gap-1">
@@ -630,13 +631,13 @@ export default function ZonesPage() {
                 className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
                   zoneFilters.direction === v
                     ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
-                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                    : "text-muted-foreground/60 border-border hover:text-foreground/80 hover:border-foreground/20"
                 }`}
               >
                 {v === "all" ? "All" : v === "forward" ? "Forward" : "Reverse"}
               </button>
             ))}
-            <span className="w-px h-4 self-center bg-zinc-700" />
+            <span className="w-px h-4 self-center bg-border" />
             {/* Zone Type */}
             {(["all", "Primary", "Secondary", "Stub", "Forwarder"] as const).map((v) => (
               <button
@@ -645,13 +646,13 @@ export default function ZonesPage() {
                 className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
                   zoneFilters.type === v
                     ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
-                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                    : "text-muted-foreground/60 border-border hover:text-foreground/80 hover:border-foreground/20"
                 }`}
               >
                 {v === "all" ? "Any Type" : v}
               </button>
             ))}
-            <span className="w-px h-4 self-center bg-zinc-700" />
+            <span className="w-px h-4 self-center bg-border" />
             {/* AD Integrated */}
             {(["all", "yes", "no"] as const).map((v) => (
               <button
@@ -660,7 +661,7 @@ export default function ZonesPage() {
                 className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
                   zoneFilters.adIntegrated === v
                     ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
-                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                    : "text-muted-foreground/60 border-border hover:text-foreground/80 hover:border-foreground/20"
                 }`}
               >
                 {v === "all" ? "Any AD" : v === "yes" ? "AD-Integrated" : "File-Backed"}
@@ -668,18 +669,26 @@ export default function ZonesPage() {
             ))}
           </div>
         </CardHeader>
-        <Separator className="bg-zinc-800" />
+        <Separator />
         <CardContent className="flex-1 p-0 overflow-hidden">
           <ScrollArea className="h-full">
             {loading ? (
-              <div className="flex items-center justify-center py-12 text-zinc-500">
+              <div className="flex items-center justify-center py-12 text-muted-foreground/60">
                 Loading zones...
               </div>
             ) : filteredZones.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-zinc-500">
-                {bridgeConnected
-                  ? "No zones found"
-                  : "Connect to a server to view zones"}
+              <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                <Globe className="h-8 w-8 mb-3 text-muted-foreground/30" />
+                <p className="text-sm font-medium text-muted-foreground">
+                  {bridgeConnected
+                    ? "No zones match the current filters"
+                    : "Connect to a server to browse zones"}
+                </p>
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  {bridgeConnected
+                    ? "Try adjusting the filters above or creating a new zone."
+                    : "Add a server on the Server tab, then return here."}
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-1 p-2">
@@ -693,13 +702,13 @@ export default function ZonesPage() {
                       className={`w-full text-left px-3 py-2.5 rounded-md transition-colors ${
                         isSelected
                           ? "bg-cyan-500/10 border border-cyan-500/50"
-                          : "hover:bg-zinc-800/50 border border-transparent"
+                          : "hover:bg-muted/50 border border-transparent"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span
                           className={`text-sm font-medium truncate ${
-                            isSelected ? "text-cyan-400" : "text-zinc-200"
+                            isSelected ? "text-cyan-400" : "text-foreground"
                           }`}
                         >
                           {zone.ZoneName}
@@ -709,7 +718,7 @@ export default function ZonesPage() {
                             variant="outline"
                             className={`text-[10px] ${
                               ZONE_TYPE_COLORS[zone.ZoneType] ||
-                              "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                              "bg-muted/50 text-muted-foreground border-border"
                             }`}
                           >
                             {zone.ZoneType}
@@ -756,14 +765,14 @@ export default function ZonesPage() {
             )}
           </ScrollArea>
         </CardContent>
-        <Separator className="bg-zinc-800" />
+        <Separator />
         <div className="p-3">
           <Button
             variant="outline"
             size="sm"
             onClick={loadZones}
             disabled={loading || !bridgeConnected}
-            className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            className="w-full border-border text-foreground/80 hover:bg-muted"
           >
             {loading ? "Loading..." : "Refresh Zones"}
           </Button>
@@ -773,25 +782,25 @@ export default function ZonesPage() {
       {/* ── Right Panel: Zone Detail ──────────────────────── */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
         {!selectedZone ? (
-          <Card className="flex-1 flex items-center justify-center border-zinc-800 bg-zinc-950">
-            <p className="text-zinc-500">
+          <Card className="flex-1 flex items-center justify-center border-border bg-card">
+            <p className="text-muted-foreground/60">
               Select a zone to view its details and records
             </p>
           </Card>
         ) : (
           <>
             {/* Zone Header */}
-            <Card className="border-zinc-800 bg-zinc-950">
+            <Card className="border-border bg-card">
               <CardContent className="py-4">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-zinc-100">
+                  <h2 className="text-lg font-semibold text-foreground">
                     {selectedZone.ZoneName}
                   </h2>
                   <Badge
                     variant="outline"
                     className={
                       ZONE_TYPE_COLORS[selectedZone.ZoneType] ||
-                      "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                      "bg-muted/50 text-muted-foreground border-border"
                     }
                   >
                     {selectedZone.ZoneType}
@@ -822,7 +831,7 @@ export default function ZonesPage() {
                   )}
                 </div>
                 {selectedZone.ReplicationScope && (
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-xs text-muted-foreground/60 mt-1">
                     Replication: {selectedZone.ReplicationScope}
                   </p>
                 )}
@@ -831,32 +840,32 @@ export default function ZonesPage() {
 
             {/* Settings Section */}
             <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <Card className="border-zinc-800 bg-zinc-950">
+              <Card className="border-border bg-card">
                 <CollapsibleTrigger>
-                  <CardHeader className="cursor-pointer hover:bg-zinc-900/50 transition-colors py-3">
+                  <CardHeader className="cursor-pointer hover:bg-secondary/50 transition-colors py-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium text-zinc-400">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
                         Zone Settings
                       </CardTitle>
-                      <span className="text-xs text-zinc-600">
+                      <span className="text-xs text-muted-foreground/40">
                         {settingsOpen ? "Collapse" : "Expand"}
                       </span>
                     </div>
                   </CardHeader>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <Separator className="bg-zinc-800" />
+                  <Separator />
                   <CardContent className="pt-4 pb-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">
+                        <Label className="text-xs text-muted-foreground">
                           Dynamic Update
                         </Label>
                         <Select
                           value={dynamicUpdate}
                           onValueChange={(v) => { if (v) setDynamicUpdate(v); }}
                         >
-                          <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                          <SelectTrigger className="bg-secondary border-border text-foreground">
                             <SelectValue placeholder="Select..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -873,17 +882,17 @@ export default function ZonesPage() {
 
                       <div className="flex items-end gap-3">
                         <div className="space-y-2">
-                          <Label className="text-xs text-zinc-400">
+                          <Label className="text-xs text-muted-foreground">
                             Aging / Scavenging
                           </Label>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setAging(!aging)}
-                            className={`border-zinc-700 ${
+                            className={`border-border ${
                               aging
                                 ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
-                                : "text-zinc-400"
+                                : "text-muted-foreground"
                             }`}
                           >
                             {aging ? "Enabled" : "Disabled"}
@@ -892,7 +901,7 @@ export default function ZonesPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">
+                        <Label className="text-xs text-muted-foreground">
                           Refresh Interval
                         </Label>
                         <Input
@@ -901,12 +910,12 @@ export default function ZonesPage() {
                             setRefreshInterval(e.target.value)
                           }
                           placeholder="7.00:00:00"
-                          className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                          className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">
+                        <Label className="text-xs text-muted-foreground">
                           No-Refresh Interval
                         </Label>
                         <Input
@@ -915,7 +924,7 @@ export default function ZonesPage() {
                             setNoRefreshInterval(e.target.value)
                           }
                           placeholder="7.00:00:00"
-                          className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                          className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                         />
                       </div>
                     </div>
@@ -938,13 +947,13 @@ export default function ZonesPage() {
             </Collapsible>
 
             {/* Records Section */}
-            <Card className="flex-1 flex flex-col border-zinc-800 bg-zinc-950 min-h-0">
+            <Card className="flex-1 flex flex-col border-border bg-card min-h-0">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-zinc-400">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
                     Records
                     {zoneRecords.length > 0 && (
-                      <span className="ml-2 text-zinc-600">
+                      <span className="ml-2 text-muted-foreground/40">
                         ({recordPage * PAGE_SIZE + 1}-{Math.min((recordPage + 1) * PAGE_SIZE, filteredRecords.length)} of {filteredRecords.length}
                         {filteredRecords.length !== zoneRecords.length &&
                           ` / ${zoneRecords.length} total`}
@@ -958,7 +967,7 @@ export default function ZonesPage() {
                       size="sm"
                       onClick={reloadRecords}
                       disabled={recordsLoading}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className="border-border text-foreground/80 hover:bg-muted"
                     >
                       Refresh
                     </Button>
@@ -998,7 +1007,7 @@ export default function ZonesPage() {
                       })
                     }
                   >
-                    <SelectTrigger className="w-[140px] bg-zinc-900 border-zinc-700 text-zinc-100">
+                    <SelectTrigger className="w-[140px] bg-secondary border-border text-foreground">
                       <SelectValue placeholder="All Types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1019,19 +1028,19 @@ export default function ZonesPage() {
                         search: e.target.value,
                       })
                     }
-                    className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/60"
                   />
                 </div>
               </CardHeader>
-              <Separator className="bg-zinc-800" />
+              <Separator />
               <CardContent className="flex-1 p-0 overflow-hidden">
                 <ScrollArea className="h-full">
                   {recordsLoading ? (
-                    <div className="flex items-center justify-center py-12 text-zinc-500">
+                    <div className="flex items-center justify-center py-12 text-muted-foreground/60">
                       Loading records...
                     </div>
                   ) : filteredRecords.length === 0 ? (
-                    <div className="flex items-center justify-center py-12 text-zinc-500">
+                    <div className="flex items-center justify-center py-12 text-muted-foreground/60">
                       {zoneRecords.length === 0
                         ? "No records in this zone"
                         : "No records match the current filter"}
@@ -1039,20 +1048,20 @@ export default function ZonesPage() {
                   ) : (
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-zinc-800 hover:bg-transparent">
-                          <TableHead className="text-zinc-500 text-xs">
+                        <TableRow className="border-border hover:bg-transparent">
+                          <TableHead className="text-muted-foreground/60 text-xs">
                             HostName
                           </TableHead>
-                          <TableHead className="text-zinc-500 text-xs w-[90px]">
+                          <TableHead className="text-muted-foreground/60 text-xs w-[90px]">
                             Type
                           </TableHead>
-                          <TableHead className="text-zinc-500 text-xs">
+                          <TableHead className="text-muted-foreground/60 text-xs">
                             Record Data
                           </TableHead>
-                          <TableHead className="text-zinc-500 text-xs w-[100px]">
+                          <TableHead className="text-muted-foreground/60 text-xs w-[100px]">
                             TTL
                           </TableHead>
-                          <TableHead className="text-zinc-500 text-xs w-[120px] text-right">
+                          <TableHead className="text-muted-foreground/60 text-xs w-[120px] text-right">
                             Actions
                           </TableHead>
                         </TableRow>
@@ -1061,9 +1070,9 @@ export default function ZonesPage() {
                         {paginatedRecords.map((record, idx) => (
                           <TableRow
                             key={`${record.HostName}-${record.RecordType}-${idx}`}
-                            className="border-zinc-800/50 hover:bg-zinc-900/50"
+                            className="border-border/50 hover:bg-secondary/50"
                           >
-                            <TableCell className="text-zinc-200 text-sm font-mono">
+                            <TableCell className="text-foreground text-sm font-mono">
                               {record.HostName}
                             </TableCell>
                             <TableCell>
@@ -1073,16 +1082,16 @@ export default function ZonesPage() {
                                   RECORD_TYPE_COLORS[
                                     record.RecordType
                                   ] ||
-                                  "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                                  "bg-muted/50 text-muted-foreground border-border"
                                 }`}
                               >
                                 {record.RecordType}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-zinc-300 text-sm font-mono max-w-[300px] truncate">
+                            <TableCell className="text-foreground/80 text-sm font-mono max-w-[300px] truncate">
                               {formatRecordData(record)}
                             </TableCell>
-                            <TableCell className="text-zinc-400 text-xs font-mono">
+                            <TableCell className="text-muted-foreground text-xs font-mono">
                               {record.TimeToLive}
                             </TableCell>
                             <TableCell className="text-right">
@@ -1093,7 +1102,7 @@ export default function ZonesPage() {
                                   onClick={() =>
                                     openEditRecord(record)
                                   }
-                                  className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                                 >
                                   Edit
                                 </Button>
@@ -1116,7 +1125,7 @@ export default function ZonesPage() {
 
                 {/* Pagination */}
                 {filteredRecords.length > PAGE_SIZE && (
-                  <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800">
+                  <div className="flex items-center justify-between px-4 py-2 border-t border-border">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1125,7 +1134,7 @@ export default function ZonesPage() {
                     >
                       Previous
                     </Button>
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-muted-foreground">
                       Page {recordPage + 1} of {totalPages}
                     </span>
                     <Button
@@ -1146,12 +1155,12 @@ export default function ZonesPage() {
 
       {/* ── Add/Edit Record Dialog ────────────────────────── */}
       <Dialog open={recordDialogOpen} onOpenChange={setRecordDialogOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100 sm:max-w-[500px]">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
               {editingRecord ? "Edit Record" : "Add Record"}
             </DialogTitle>
-            <DialogDescription className="text-zinc-500">
+            <DialogDescription className="text-muted-foreground/60">
               {editingRecord
                 ? `Editing ${editingRecord.RecordType} record for ${editingRecord.HostName}`
                 : `Add a new DNS record to ${selectedZone?.ZoneName ?? "this zone"}`}
@@ -1161,7 +1170,7 @@ export default function ZonesPage() {
           <div className="space-y-4 py-2">
             {/* Record Type */}
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Record Type</Label>
+              <Label className="text-xs text-muted-foreground">Record Type</Label>
               <Select
                 value={recordForm.recordType}
                 onValueChange={(v) =>
@@ -1169,7 +1178,7 @@ export default function ZonesPage() {
                 }
                 disabled={!!editingRecord}
               >
-                <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                <SelectTrigger className="bg-secondary border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1184,21 +1193,21 @@ export default function ZonesPage() {
 
             {/* HostName */}
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">Host Name</Label>
+              <Label className="text-xs text-muted-foreground">Host Name</Label>
               <Input
                 value={recordForm.hostName}
                 onChange={(e) =>
                   updateFormField("hostName", e.target.value)
                 }
                 placeholder="e.g., www, mail, @"
-                className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
               />
             </div>
 
             {/* Type-specific fields */}
             {recordForm.recordType === "A" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   IPv4 Address
                 </Label>
                 <Input
@@ -1207,14 +1216,14 @@ export default function ZonesPage() {
                     updateFormField("ipv4Address", e.target.value)
                   }
                   placeholder="192.168.1.1"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
 
             {recordForm.recordType === "AAAA" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   IPv6 Address
                 </Label>
                 <Input
@@ -1223,14 +1232,14 @@ export default function ZonesPage() {
                     updateFormField("ipv6Address", e.target.value)
                   }
                   placeholder="2001:db8::1"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
 
             {recordForm.recordType === "CNAME" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   Host Name Alias
                 </Label>
                 <Input
@@ -1239,7 +1248,7 @@ export default function ZonesPage() {
                     updateFormField("hostNameAlias", e.target.value)
                   }
                   placeholder="target.example.com"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
@@ -1247,7 +1256,7 @@ export default function ZonesPage() {
             {recordForm.recordType === "MX" && (
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-2">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     Mail Exchange
                   </Label>
                   <Input
@@ -1256,11 +1265,11 @@ export default function ZonesPage() {
                       updateFormField("mailExchange", e.target.value)
                     }
                     placeholder="mail.example.com"
-                    className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     Preference
                   </Label>
                   <Input
@@ -1269,7 +1278,7 @@ export default function ZonesPage() {
                       updateFormField("preference", e.target.value)
                     }
                     placeholder="10"
-                    className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                   />
                 </div>
               </div>
@@ -1277,7 +1286,7 @@ export default function ZonesPage() {
 
             {recordForm.recordType === "NS" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   Name Server
                 </Label>
                 <Input
@@ -1286,14 +1295,14 @@ export default function ZonesPage() {
                     updateFormField("nameServer", e.target.value)
                   }
                   placeholder="ns1.example.com"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
 
             {recordForm.recordType === "PTR" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   PTR Domain Name
                 </Label>
                 <Input
@@ -1302,7 +1311,7 @@ export default function ZonesPage() {
                     updateFormField("ptrDomainName", e.target.value)
                   }
                   placeholder="host.example.com"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                 />
               </div>
             )}
@@ -1310,7 +1319,7 @@ export default function ZonesPage() {
             {recordForm.recordType === "SRV" && (
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label className="text-xs text-zinc-400">
+                  <Label className="text-xs text-muted-foreground">
                     Domain Name
                   </Label>
                   <Input
@@ -1319,12 +1328,12 @@ export default function ZonesPage() {
                       updateFormField("domainName", e.target.value)
                     }
                     placeholder="sip.example.com"
-                    className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                   />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-2">
-                    <Label className="text-xs text-zinc-400">
+                    <Label className="text-xs text-muted-foreground">
                       Priority
                     </Label>
                     <Input
@@ -1333,11 +1342,11 @@ export default function ZonesPage() {
                         updateFormField("priority", e.target.value)
                       }
                       placeholder="0"
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-zinc-400">
+                    <Label className="text-xs text-muted-foreground">
                       Weight
                     </Label>
                     <Input
@@ -1346,18 +1355,18 @@ export default function ZonesPage() {
                         updateFormField("weight", e.target.value)
                       }
                       placeholder="0"
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-zinc-400">Port</Label>
+                    <Label className="text-xs text-muted-foreground">Port</Label>
                     <Input
                       value={recordForm.port}
                       onChange={(e) =>
                         updateFormField("port", e.target.value)
                       }
                       placeholder="5060"
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                      className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
                     />
                   </div>
                 </div>
@@ -1366,7 +1375,7 @@ export default function ZonesPage() {
 
             {recordForm.recordType === "TXT" && (
               <div className="space-y-2">
-                <Label className="text-xs text-zinc-400">
+                <Label className="text-xs text-muted-foreground">
                   Descriptive Text
                 </Label>
                 <Textarea
@@ -1376,14 +1385,14 @@ export default function ZonesPage() {
                   }
                   placeholder="v=spf1 include:example.com ~all"
                   rows={3}
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 resize-none"
+                  className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40 resize-none"
                 />
               </div>
             )}
 
             {/* TTL */}
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-400">
+              <Label className="text-xs text-muted-foreground">
                 Time to Live (TTL)
               </Label>
               <Input
@@ -1392,7 +1401,7 @@ export default function ZonesPage() {
                   updateFormField("timeToLive", e.target.value)
                 }
                 placeholder="01:00:00"
-                className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
+                className="bg-secondary border-border text-foreground placeholder:text-muted-foreground/40"
               />
             </div>
           </div>
@@ -1401,7 +1410,7 @@ export default function ZonesPage() {
             <Button
               variant="outline"
               onClick={() => setRecordDialogOpen(false)}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="border-border text-foreground/80 hover:bg-muted"
             >
               Cancel
             </Button>

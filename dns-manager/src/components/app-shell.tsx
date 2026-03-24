@@ -1,18 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { ChevronDown } from "lucide-react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
 import { HelpPanel } from "./help-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 import { useStore } from "@/lib/store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const STATUS_DOT: Record<string, string> = {
   online: "bg-emerald-500",
   offline: "bg-red-500",
   error: "bg-amber-500",
-  unknown: "bg-zinc-500",
+  unknown: "bg-muted-foreground/50",
 };
 
 function ServerSwitcher() {
@@ -20,76 +28,54 @@ function ServerSwitcher() {
   const activeServerId = useStore((s) => s.activeServerId);
   const setActiveServerId = useStore((s) => s.setActiveServerId);
   const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration guard
   useEffect(() => { setMounted(true); }, []);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
 
   if (!mounted || servers.length === 0) return null;
 
   const active = servers.find((s) => s.id === activeServerId);
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs hover:bg-secondary/50 transition-colors"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs hover:bg-secondary/50 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Active server: ${active?.name || active?.hostname || "No server"}. Click to switch servers.`}
       >
         <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[active?.status || "unknown"]}`} />
         <span className="font-mono text-foreground/90 max-w-[140px] truncate">
           {active?.name || active?.hostname || "No server"}
         </span>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-muted-foreground">
-          <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+        <ChevronDown className="size-3 text-muted-foreground" />
+      </DropdownMenuTrigger>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[220px] rounded-md border border-border bg-popover shadow-lg py-1">
-          {servers.map((s) => {
-            const isActive = s.id === activeServerId;
-            return (
-              <button
-                key={s.id}
-                onClick={() => {
-                  setActiveServerId(s.id);
-                  setOpen(false);
-                }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors ${
-                  isActive
-                    ? "bg-cyan-500/10 text-cyan-400"
-                    : "text-foreground/80 hover:bg-secondary/50"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status]}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">{s.name || s.hostname}</div>
-                  {s.name && s.name !== s.hostname && (
-                    <div className="text-[10px] text-muted-foreground font-mono truncate">{s.hostname}</div>
-                  )}
-                </div>
-                {s.status === "online" && s.zoneCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground/60 shrink-0">
-                    {s.zoneCount}z
-                  </span>
+      <DropdownMenuContent align="end" className="min-w-[220px]">
+        <DropdownMenuLabel>DNS Servers</DropdownMenuLabel>
+        {servers.map((s) => {
+          const isActive = s.id === activeServerId;
+          return (
+            <DropdownMenuItem
+              key={s.id}
+              className={isActive ? "bg-cyan-500/10 text-cyan-400" : ""}
+              onSelect={() => setActiveServerId(s.id)}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status]}`} />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium truncate text-xs">{s.name || s.hostname}</div>
+                {s.name && s.name !== s.hostname && (
+                  <div className="text-[10px] text-muted-foreground font-mono truncate">{s.hostname}</div>
                 )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              </div>
+              {s.status === "online" && s.zoneCount > 0 && (
+                <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                  {s.zoneCount}z
+                </span>
+              )}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -98,9 +84,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background ops-grid-bg">
+    <div className="min-h-screen bg-background">
       {/* ── Header ──────────────────────────────────────── */}
-      <header className="relative ops-scanline">
+      <header className="relative">
         <div className="mx-auto max-w-[1400px] px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Brand */}
@@ -123,8 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div>
                 <h1
-                  className="text-[15px] font-semibold tracking-wide text-foreground"
-                  style={{ fontFamily: "var(--font-display)" }}
+                  className="text-[15px] font-semibold tracking-wide text-foreground font-display"
                 >
                   DNS POLICY MANAGER
                 </h1>
@@ -135,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Right side: controls */}
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-5" role="group" aria-label="Application controls">
               <ServerSwitcher />
               <div className="w-px h-5 bg-border" />
               <ExecutionToggle />
@@ -145,8 +130,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {/* Help button */}
               <button
                 onClick={() => setHelpOpen(true)}
-                className="group relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-[rgba(136,180,255,0.08)] transition-colors"
-                title="Help (context-sensitive)"
+                className="group relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                aria-label="Open context-sensitive help"
               >
                 <svg
                   width="16"

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Tab navigation** — redesigned from underline-indicator with numeric prefixes to pill-style active tabs with descriptive labels (e.g., "DNS Objects", "Create Policy", "Backup & Import")
+- **Bridge status indicator** — replaced animated beacon/flatline pulse with static colored dot for clarity
+- **Header** — simplified by removing scanline overlay, dot-grid background, noise texture, and glowing divider
+- **Card component** — added `accent` prop for left-edge cyan accent bar on section-level cards
+- **Server switcher** — refactored from hand-rolled dropdown to shadcn DropdownMenu for proper keyboard navigation and ARIA support
+- **Design tokens** — eliminated all 225 hard-coded `zinc-*` Tailwind classes across 8 files, replacing with semantic design tokens (`bg-card`, `bg-secondary`, `border-border`, `text-muted-foreground`, etc.). Also replaced hard-coded hex/rgba values in Toaster, help panel, and app shell
+- **Execution toggle** — switching to Live mode now requires explicit confirmation dialog naming the target server and warning that DNS changes take effect immediately
+
+### Added
+
+- **Accessibility** — `prefers-reduced-motion` media query disables all animations for users who opt out
+- **ARIA coverage** — added `role="status"` and `aria-live="polite"` to bridge status, `aria-label` to execution toggle, help button, and server switcher
+- **Design context** — `.impeccable.md` and `.github/copilot-instructions.md` codify the design system for AI assistants
+- **Empty states** — improved empty states on Server (no servers, not connected), Zones (no zones, not connected), and Policies (bridge offline, no policies) pages with contextual guidance, clearer copy, and next-step suggestions
+
+### Removed
+
+- Scanline overlay, noise texture (z-index 9999), dot-grid background, beacon/flatline animations, stagger animations, glow effects, tab-indicator pseudo-elements, and numeric tab prefixes
+
 ### Added
 
 - **MCP Server** (`mcp-server/`) — Model Context Protocol server for AI agent integration:

@@ -18,8 +18,7 @@ export default function HelpPage() {
       {/* Sidebar */}
       <nav className="w-48 shrink-0 space-y-0.5 pt-1">
         <div
-          className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground mb-3 px-2"
-          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground mb-3 px-2 font-display"
         >
           HELP DOCS
         </div>
