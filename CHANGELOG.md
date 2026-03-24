@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Blocklists tab** (position 06) — First-class RPZ/blocklist management:
+  - **Quick Block** — single-domain block with DENY/IGNORE action in one click
+  - **Bulk Import** — drag-and-drop .txt file import for mass domain blocking with progress bar
+  - **Active Block Policies** — searchable table of all DENY/IGNORE policies with one-click delete
+  - **Global Query Block List** — view/add/remove entries from the server's built-in global block list (`Get-DnsServerGlobalQueryBlockList`)
+  - Moved from Backup tab to dedicated tab as a primary workflow
+- **Export Server Configuration** — full `Get-DnsServer` export as JSON on the Backup tab
+- **Export DNS Zones** — single zone or bulk export of all primary zones via `Export-DnsServerZone`
+- **AD-integrated backup note** — info banner explaining Microsoft's preferred system state backup method
+- **Zone filters** — filter by Forward/Reverse, zone type (Primary/Secondary/Stub/Forwarder), and AD-integrated status on the Zones tab
+
 ### Fixed
 
 - **Saved/session credentials with remote DNS servers** — DNS Server cmdlets don't accept `-Credential` directly. Bridge now creates a `CimSession` with DCOM protocol for alternate credentials, which all DNS Server cmdlets accept. Previously, any operation using saved or session credentials on a remote server would fail with "A parameter cannot be found that matches parameter name 'Credential'."

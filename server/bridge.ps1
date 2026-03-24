@@ -3516,6 +3516,87 @@ function Handle-DeletePolicy {
     }
 }
 
+function Handle-ExportServerConfig {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $dnsServer = Get-DnsServer @p -ErrorAction Stop
+
+        # Flatten each section to plain objects for JSON transport
+        $config = @{
+            ServerSetting     = ConvertTo-PlainObject $dnsServer.ServerSetting
+            ServerCache       = ConvertTo-PlainObject $dnsServer.ServerCache
+            ServerRecursion   = ConvertTo-PlainObject $dnsServer.ServerRecursion
+            ServerDiagnostics = ConvertTo-PlainObject $dnsServer.ServerDiagnostics
+            ServerScavenging  = ConvertTo-PlainObject $dnsServer.ServerScavenging
+            ServerEdns        = ConvertTo-PlainObject $dnsServer.ServerEdns
+            ServerGlobalQueryBlockList = ConvertTo-PlainObject $dnsServer.ServerGlobalQueryBlockList
+        }
+
+        # Forwarders — flatten IPs explicitly
+        if ($dnsServer.ServerForwarder) {
+            $config['ServerForwarder'] = @{
+                IPAddress   = @($dnsServer.ServerForwarder.IPAddress | ForEach-Object { "$_" })
+                UseRootHint = [bool]$dnsServer.ServerForwarder.UseRootHint
+                Timeout     = $dnsServer.ServerForwarder.Timeout
+            }
+        }
+
+        # Zone list
+        $config['Zones'] = @(Get-DnsServerZone @p -ErrorAction Stop |
+            Where-Object { -not $_.IsAutoCreated } |
+            Select-Object ZoneName, ZoneType, IsReverseLookupZone, IsDsIntegrated, IsSigned |
+            ForEach-Object { ConvertTo-PlainObject $_ })
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            config  = $config
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ExportAllZones {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $zones = @(Get-DnsServerZone @p -ErrorAction Stop |
+            Where-Object { -not $_.IsAutoCreated -and $_.ZoneType -eq 'Primary' })
+
+        $results = @()
+        foreach ($zone in $zones) {
+            $zoneName = $zone.ZoneName
+            $fileName = "$zoneName.dns"
+            try {
+                $exportParams = @{ Name = $zoneName; FileName = $fileName }
+                foreach ($key in $p.Keys) { $exportParams[$key] = $p[$key] }
+                Export-DnsServerZone @exportParams -ErrorAction Stop
+                $results += @{ zoneName = $zoneName; fileName = $fileName; success = $true }
+            } catch {
+                $results += @{ zoneName = $zoneName; success = $false; error = $_.Exception.Message }
+            }
+        }
+
+        $succeeded = @($results | Where-Object { $_.success }).Count
+        $failed    = @($results | Where-Object { -not $_.success }).Count
+
+        Send-Response -Response $Response -Body @{
+            success  = $true
+            results  = $results
+            summary  = @{ total = $zones.Count; succeeded = $succeeded; failed = $failed }
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 function Handle-Backup {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -3951,6 +4032,16 @@ function Route-Request {
                 } else {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
                 }
+            }
+            '^/api/export/serverconfig$' {
+                if ($method -eq 'GET') {
+                    Handle-ExportServerConfig -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/export/allzones$' {
+                if ($method -eq 'POST') {
+                    Handle-ExportAllZones -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
             '^/api/backup$' {
                 if ($method -eq 'POST') {

@@ -29,7 +29,7 @@ The app works in two modes: **offline** (frontend only — generates PowerShell 
 
 Next.js App Router with TypeScript, Tailwind CSS v4, and shadcn/ui components.
 
-- **Routing**: File-based via `src/app/{tab}/page.tsx`. 9 tab routes: server, objects, zones, policies, create, wizards, dnssec, resolvers, backup, powershell.
+- **Routing**: File-based via `src/app/{tab}/page.tsx`. 10 tab routes: server, objects, zones, policies, create, blocklists, wizards, dnssec, resolvers, backup, powershell.
 - **State**: Zustand store (`src/lib/store.ts`) with `persist` middleware for server registry in localStorage. All state is typed.
 - **API client**: `src/lib/api.ts` — single typed fetch wrapper with shared query-string builder. All 39 methods. Proxied through Next.js rewrites (`/api/*` → bridge at `:8650`).
 - **Types**: `src/lib/types.ts` — shared interfaces for Server, Zone, DnsRecord, Policy, WizardState, etc.
@@ -54,7 +54,7 @@ All DNS cmdlet calls use **splatted parameters** (`@splatParams`) to prevent com
 
 ## Tabs and Features
 
-The UI has 10 tabs: Server, DNS Objects, Zones, Policies, Create Policy, Wizards, DNSSEC, Resolvers, Backup & Import, PowerShell. The root `/` redirects to `/server`.
+The UI has 11 tabs: Server, DNS Objects, Zones, Policies, Create Policy, Blocklists, Wizards, DNSSEC, Resolvers, Backup & Import, PowerShell. The root `/` redirects to `/server`.
 
 ## TODO
 - If I give you a TODO, save it to TODO.md in our repo.

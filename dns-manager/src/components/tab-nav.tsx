@@ -10,11 +10,12 @@ const tabs = [
   { href: "/zones", label: "Zones", shortcut: "03" },
   { href: "/policies", label: "Policies", shortcut: "04" },
   { href: "/create", label: "Create", shortcut: "05" },
-  { href: "/wizards", label: "Wizards", shortcut: "06" },
-  { href: "/dnssec", label: "DNSSEC", shortcut: "07" },
-  { href: "/resolvers", label: "Resolvers", shortcut: "08" },
-  { href: "/backup", label: "Backup", shortcut: "09" },
-  { href: "/powershell", label: "PowerShell", shortcut: "10" },
+  { href: "/blocklists", label: "Blocklists", shortcut: "06" },
+  { href: "/wizards", label: "Wizards", shortcut: "07" },
+  { href: "/dnssec", label: "DNSSEC", shortcut: "08" },
+  { href: "/resolvers", label: "Resolvers", shortcut: "09" },
+  { href: "/backup", label: "Backup", shortcut: "10" },
+  { href: "/powershell", label: "PowerShell", shortcut: "11" },
 ] as const;
 
 export function TabNav() {

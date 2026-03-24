@@ -77,7 +77,7 @@ export default function DnssecPage() {
   useEffect(() => {
     if (!bridgeConnected) return;
     const p = sp();
-    api.listZones(p.server).then((r) => {
+    api.listZones(p.server, p.serverId, p.credentialMode).then((r) => {
       if (r.success) setZones((r as any).zones || []);
     });
   }, [bridgeConnected, setZones]);
