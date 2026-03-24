@@ -50,8 +50,21 @@ async function request(
 
   try {
     const res = await fetch(url, { signal: controller.signal });
-    const body = await res.json();
-    return body;
+    if (!res.ok) {
+      let detail: string;
+      try {
+        detail = await res.text();
+      } catch {
+        detail = res.statusText;
+      }
+      return { success: false, error: `Bridge returned ${res.status}: ${detail}` };
+    }
+    try {
+      return await res.json();
+    } catch {
+      const text = await res.text();
+      return { success: false, error: `Bridge returned non-JSON response: ${text.slice(0, 200)}` };
+    }
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       return { success: false, error: `Request timed out after ${timeout}ms` };

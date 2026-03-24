@@ -4,13 +4,13 @@
     Launches the DNS Policy Manager bridge and opens the web UI.
 .DESCRIPTION
     Starts bridge.ps1 in background, waits for health check, then starts the Next.js frontend.
-    Optionally builds/starts the MCP server for AI agent integration.
+    Optionally builds the MCP server and prints a registration command for AI agent integration.
 .PARAMETER Port
     Bridge port (default 8650).
 .PARAMETER NoBrowser
     Skip opening browser.
 .PARAMETER MCP
-    Build and register the MCP server for AI agent integration (Claude Code, Cursor, etc.).
+    Build the MCP server and output a 'claude mcp add ...' registration command for AI agent integration (Claude Code, Cursor, etc.).
 #>
 
 param(
@@ -24,6 +24,40 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
 $frontendDir = Join-Path $scriptDir 'dns-manager'
 
+function Invoke-McpBuild {
+    param([string]$McpDir, [int]$BridgePort)
+    if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
+        Write-Host '  MCP server not found at mcp-server/.' -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-Path (Join-Path $McpDir 'node_modules'))) {
+        Write-Host '  Installing MCP server dependencies...' -ForegroundColor Yellow
+        Push-Location $McpDir
+        npm install --silent 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Host '  npm install failed. Check network and try again.' -ForegroundColor Red
+            return
+        }
+        Pop-Location
+    }
+    if (-not (Test-Path (Join-Path $McpDir 'dist\index.js'))) {
+        Write-Host '  Building MCP server...' -ForegroundColor Yellow
+        Push-Location $McpDir
+        npx tsc 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Host '  TypeScript build failed. Run "npx tsc" in mcp-server/ for details.' -ForegroundColor Red
+            return
+        }
+        Pop-Location
+    }
+    $mcpEntry = Join-Path $McpDir 'dist\index.js'
+    Write-Host "  MCP server built: $mcpEntry" -ForegroundColor Green
+    Write-Host '  Register with Claude Code:' -ForegroundColor Cyan
+    Write-Host "    claude mcp add dns-policy-manager -e BRIDGE_URL=http://127.0.0.1:${BridgePort} -- node `"$mcpEntry`"" -ForegroundColor DarkGray
+}
+
 Write-Host ''
 Write-Host '  DNS Policy Manager Launcher' -ForegroundColor Cyan
 Write-Host '  ──────────────────────────────' -ForegroundColor DarkGray
@@ -36,6 +70,9 @@ try {
         if (-not $NoBrowser) {
             Start-Process 'http://localhost:10010'
             Write-Host '  Browser opened.' -ForegroundColor Green
+        }
+        if ($MCP) {
+            Invoke-McpBuild -McpDir (Join-Path $scriptDir 'mcp-server') -BridgePort $Port
         }
         return
     }
@@ -141,28 +178,7 @@ if ($ready) {
 
     # MCP Server (optional)
     if ($MCP) {
-        $mcpDir = Join-Path $scriptDir 'mcp-server'
-        if (Test-Path (Join-Path $mcpDir 'package.json')) {
-            # Install + build if needed
-            if (-not (Test-Path (Join-Path $mcpDir 'node_modules'))) {
-                Write-Host '  Installing MCP server dependencies...' -ForegroundColor Yellow
-                Push-Location $mcpDir
-                npm install --silent 2>&1 | Out-Null
-                Pop-Location
-            }
-            if (-not (Test-Path (Join-Path $mcpDir 'dist\index.js'))) {
-                Write-Host '  Building MCP server...' -ForegroundColor Yellow
-                Push-Location $mcpDir
-                npx tsc 2>&1 | Out-Null
-                Pop-Location
-            }
-            $mcpEntry = Join-Path $mcpDir 'dist\index.js'
-            Write-Host "  MCP server built: $mcpEntry" -ForegroundColor Green
-            Write-Host '  Register with Claude Code:' -ForegroundColor Cyan
-            Write-Host "    claude mcp add dns-policy-manager -e BRIDGE_URL=http://127.0.0.1:${Port} -- node `"$mcpEntry`"" -ForegroundColor DarkGray
-        } else {
-            Write-Host '  MCP server not found at mcp-server/.' -ForegroundColor Yellow
-        }
+        Invoke-McpBuild -McpDir (Join-Path $scriptDir 'mcp-server') -BridgePort $Port
     }
 } else {
     Write-Host '  Bridge failed to start.' -ForegroundColor Red

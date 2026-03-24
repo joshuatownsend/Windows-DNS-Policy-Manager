@@ -19,6 +19,11 @@ const SCENARIOS = [
 
 type ScenarioId = (typeof SCENARIOS)[number];
 
+/** Escape double quotes and backticks for safe PowerShell double-quoted strings */
+function psEscape(value: string): string {
+  return value.replace(/[`"]/g, (ch) => "`" + ch).replace(/[\r\n]+/g, " ");
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function generateCommands(
   scenarioId: string,
@@ -27,8 +32,20 @@ function generateCommands(
 ): string {
   const serverParam =
     serverHostname && serverHostname !== "localhost"
-      ? ` -ComputerName "${serverHostname}"`
+      ? ` -ComputerName "${psEscape(serverHostname)}"`
       : "";
+  // Sanitize all string values in data to prevent PowerShell injection via quotes/backticks
+  function sanitizeData(obj: any): any {
+    if (typeof obj === "string") return psEscape(obj);
+    if (Array.isArray(obj)) return obj.map(sanitizeData);
+    if (obj && typeof obj === "object") {
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = sanitizeData(v);
+      return out;
+    }
+    return obj;
+  }
+  data = sanitizeData(data);
   const cmds: string[] = [];
 
   switch (scenarioId) {
@@ -341,13 +358,12 @@ Example data for 'geolocation': { "zone": "contoso.com", "recordName": "www", "r
 Example data for 'loadbalancing': { "zone": "contoso.com", "backends": [{ "name": "DC1", "ip": "10.0.0.1", "weight": 3 }, { "name": "DC2", "ip": "10.0.0.2", "weight": 1 }] }`,
     {
       scenario: z.enum(SCENARIOS).describe("The policy scenario to generate commands for"),
-      data: z.string().describe("JSON object with scenario-specific parameters (see tool description for examples)"),
+      data: z.record(z.unknown()).describe("Object with scenario-specific parameters (see tool description for examples)"),
       serverHostname: z.string().optional().describe("Target DNS server hostname for -ComputerName parameter"),
     },
-    async ({ scenario, data: dataStr, serverHostname }) => {
+    async ({ scenario, data, serverHostname }) => {
       try {
-        const data = JSON.parse(dataStr);
-        const commands = generateCommands(scenario, data, serverHostname);
+        const commands = generateCommands(scenario, data as Record<string, any>, serverHostname);
         if (!commands.trim()) {
           return { content: [{ type: "text", text: "No commands generated — check scenario parameters." }] };
         }
