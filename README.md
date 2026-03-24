@@ -1,6 +1,6 @@
 # Windows DNS Policy Manager
 
-A browser-based GUI for creating and managing Windows Server DNS Policies. Built with Next.js, TypeScript, and shadcn/ui. Connects to a live DNS server via the included PowerShell bridge for real-time policy management.
+A browser-based GUI for creating and managing Windows Server DNS Policies. Built with Next.js, TypeScript, and shadcn/ui. Connects to a live DNS server via the included PowerShell bridge for real-time policy management. Includes an MCP server for AI agent integration (Claude Code, Cursor, VS Code).
 
 ## Features
 
@@ -20,6 +20,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 - **Backup & export** — policy JSON backup/restore, server configuration export (Get-DnsServer as JSON), DNS zone export (single or all primary zones via Export-DnsServerZone), AD-integrated backup info
 - **Context-sensitive help** with slide-over panel and full-page popout
 - **20 Playwright E2E tests** with mock bridge, integrated into CI
+- **MCP server** — 31 read-only tools for AI agents via Model Context Protocol (zones, records, policies, server config, DNSSEC, RRL, scavenging, and more), plus offline PowerShell command generation
 - **Docker-ready** with multi-stage Alpine image (221 MB)
 - Keyboard-accessible tab navigation and ARIA attributes
 
@@ -56,6 +57,79 @@ Then open [http://localhost:10010](http://localhost:10010).
 ### Offline mode
 
 If the bridge isn't running, the app falls back to command generation only — build policies visually and copy the generated PowerShell commands.
+
+## MCP Server (AI Agent Integration)
+
+The MCP server lets AI agents query your DNS servers through 31 read-only tools via the [Model Context Protocol](https://modelcontextprotocol.io). It connects to the same PowerShell bridge used by the web UI.
+
+### Setup
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+Or use the launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Start-DNSPolicyManager.ps1 -MCP
+```
+
+### Register with Claude Code
+
+```bash
+claude mcp add dns-policy-manager -- node /path/to/mcp-server/dist/index.js
+```
+
+With environment variables for a specific server:
+
+```bash
+claude mcp add dns-policy-manager \
+  -e BRIDGE_URL=http://127.0.0.1:8650 \
+  -e DNS_DEFAULT_SERVER=dc01.contoso.com \
+  -e DNS_CREDENTIAL_MODE=currentUser \
+  -- node /path/to/mcp-server/dist/index.js
+```
+
+### Configuration
+
+All configuration is via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BRIDGE_URL` | `http://127.0.0.1:8650` | PowerShell bridge URL |
+| `DNS_DEFAULT_SERVER` | *(none)* | Default DNS server hostname |
+| `DNS_SERVER_ID` | *(none)* | Server ID for credential lookup |
+| `DNS_CREDENTIAL_MODE` | `currentUser` | Auth mode: `currentUser` or `savedCredential` |
+
+### Available Tools (31)
+
+| Category | Tools |
+|----------|-------|
+| **Zones** | `dns_list_zones`, `dns_get_zone_details`, `dns_get_zone_records`, `dns_get_zone_aging`, `dns_get_zone_delegations` |
+| **Policies** | `dns_list_policies`, `dns_list_transfer_policies` |
+| **Server Config** | `dns_get_server_settings`, `dns_get_forwarders`, `dns_get_cache_settings`, `dns_get_recursion_settings`, `dns_get_blocklist`, `dns_get_diagnostics`, `dns_get_statistics`, `dns_get_rrl`, `dns_get_rrl_exceptions`, `dns_get_scavenging`, `dns_get_root_hints`, `dns_get_edns`, `dns_get_encryption`, `dns_get_global_name_zone`, `dns_export_server_config` |
+| **DNS Objects** | `dns_list_subnets`, `dns_list_zone_scopes`, `dns_list_recursion_scopes` |
+| **DNSSEC** | `dns_get_dnssec_settings`, `dns_get_signing_keys`, `dns_get_trust_anchors`, `dns_get_trust_points` |
+| **Offline** | `dns_generate_policy_commands` (works without bridge) |
+| **Health** | `dns_check_health` |
+
+### Authentication
+
+The MCP server supports two credential modes:
+
+- **`currentUser`** (default) — uses Kerberos/NTLM from the logged-in user. No setup needed.
+- **`savedCredential`** — uses DPAPI-encrypted credentials stored via the web UI. Set `DNS_SERVER_ID` to the server ID configured in the GUI.
+
+Session credentials (username/password) are intentionally not supported in the MCP server — AI agents should not handle raw passwords.
+
+### Security
+
+- All tools are **read-only** — no write operations on DNS servers
+- The bridge's `/api/execute` endpoint (arbitrary PowerShell) is **not exposed** through MCP
+- Generated PowerShell commands (offline tool) sanitize all input against injection (`$`, `` ` ``, `"`)
+- The bridge must be running for live queries; the offline command generator works independently
 
 ## Running with Docker
 
@@ -127,11 +201,11 @@ docker compose logs -f frontend   # View logs
 Browser (:10010)                         PowerShell Bridge (:8650)
 ─────────────────                        ──────────────────────────
   Next.js frontend        ──HTTP──►      [System.Net.HttpListener]
-  /api/* proxy to bridge                        │
-                                          DNS cmdlets (splatted)
-                                          Get/Add/Remove/Set-DnsServer*
                                                 │
-                                          Returns JSON
+AI Agent (stdio)                          DNS cmdlets (splatted)
+────────────────                          Get/Add/Remove/Set-DnsServer*
+  MCP Server              ──HTTP──►             │
+  31 read-only tools                      Returns JSON
 ```
 
 **Frontend** (`dns-manager/`):
@@ -196,11 +270,23 @@ Browser (:10010)                         PowerShell Bridge (:8650)
 ## Project Structure
 
 ```
-Start-DNSPolicyManager.ps1        Launcher: starts bridge + frontend
+Start-DNSPolicyManager.ps1        Launcher: starts bridge + frontend (+ MCP with -MCP flag)
 docker-compose.yml                Docker Compose for containerized deployment
 server/
   bridge.ps1                      PowerShell HTTP bridge (localhost:8650)
   start.bat                       Double-click launcher for bridge only
+mcp-server/                       MCP server for AI agents
+  src/
+    index.ts                      Entry point, stdio transport
+    bridge-client.ts              HTTP client for bridge REST API
+    tools/
+      shared.ts                   Shared Zod schemas (ServerParamsSchema)
+      zones.ts                    Zone query tools (5)
+      policies.ts                 Policy query tools (2)
+      server-config.ts            Server config query tools (15)
+      objects.ts                  DNS object query tools (3)
+      security.ts                 DNSSEC query tools (4)
+      command-gen.ts              Offline PowerShell command generation (1)
 dns-manager/                      Next.js frontend
   Dockerfile                      Multi-stage Alpine build (standalone output)
   src/
@@ -232,8 +318,6 @@ dns-manager/                      Next.js frontend
       command-generator.ts        PowerShell command generation
   public/help/                    Help documentation (Markdown)
 docs/help/                        Source help documentation
-archive/
-  vanilla-frontend/               Original vanilla JS/HTML/CSS (pre-migration)
 ```
 
 ## DnsServer Module Coverage
