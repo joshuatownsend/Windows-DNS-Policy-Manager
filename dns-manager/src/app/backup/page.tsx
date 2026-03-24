@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { downloadJson } from "@/lib/utils";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -22,40 +23,13 @@ import {
   Download,
   Upload,
   FileText,
-  ShieldAlert,
   Loader2,
+  Server,
+  Globe,
+  Info,
 } from "lucide-react";
 
-import type { BackupData, PolicyAction } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
-
-function sanitizeDomainName(domain: string): string {
-  return domain.replace(/[^a-zA-Z0-9.-]/g, "_").replace(/\./g, "_");
-}
-
-function parseBlocklist(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"));
-}
+import type { BackupData } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -72,6 +46,10 @@ export default function BackupPage() {
   const [includeZone, setIncludeZone] = useState(true);
   const [includeServer, setIncludeServer] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportingConfig, setExportingConfig] = useState(false);
+  const [exportingAllZones, setExportingAllZones] = useState(false);
+  const [exportingZone, setExportingZone] = useState(false);
+  const [singleZoneName, setSingleZoneName] = useState("");
 
   // ── Import state ──
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -80,15 +58,6 @@ export default function BackupPage() {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [dragOverImport, setDragOverImport] = useState(false);
 
-  // ── Blocklist state ──
-  const blocklistFileRef = useRef<HTMLInputElement>(null);
-  const [blocklistDomains, setBlocklistDomains] = useState<string[]>([]);
-  const [blocklistAction, setBlocklistAction] = useState<PolicyAction>("DENY");
-  const [blocklistZone, setBlocklistZone] = useState("");
-  const [blocklistStartOrder, setBlocklistStartOrder] = useState(1);
-  const [blocklistImporting, setBlocklistImporting] = useState(false);
-  const [blocklistProgress, setBlocklistProgress] = useState({ done: 0, total: 0 });
-  const [dragOverBlocklist, setDragOverBlocklist] = useState(false);
 
   // ------------------------------------------------------------------
   // Export
@@ -111,6 +80,75 @@ export default function BackupPage() {
       toast.error("Export failed: unexpected error");
     } finally {
       setExporting(false);
+    }
+  }
+
+  function getActiveServerParams() {
+    const active = servers.find((s) => s.id === useStore.getState().activeServerId);
+    if (!active) return { server: exportServer || "localhost" };
+    return { server: active.hostname, serverId: active.id, credentialMode: active.credentialMode };
+  }
+
+  async function handleExportServerConfig() {
+    const p = getActiveServerParams();
+    setExportingConfig(true);
+    try {
+      const res = await api.exportServerConfig(p.server, p.serverId, p.credentialMode);
+      if (res.success && (res as Record<string, unknown>).config) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadJson((res as Record<string, unknown>).config, `dns-server-config-${p.server}-${timestamp}.json`);
+        toast.success("Server configuration exported");
+      } else {
+        toast.error("Export failed: " + (res.error ?? "Unknown error"));
+      }
+    } catch {
+      toast.error("Export failed: unexpected error");
+    } finally {
+      setExportingConfig(false);
+    }
+  }
+
+  async function handleExportAllZones() {
+    const p = getActiveServerParams();
+    setExportingAllZones(true);
+    try {
+      const res = await api.exportAllZones(p.server, p.serverId, p.credentialMode);
+      const r = res as Record<string, unknown>;
+      if (res.success && r.summary) {
+        const summary = r.summary as { total: number; succeeded: number; failed: number };
+        if (summary.failed === 0) {
+          toast.success(`All ${summary.succeeded} zones exported to server's DNS directory`);
+        } else {
+          toast.warning(`${summary.succeeded} exported, ${summary.failed} failed`);
+        }
+        // Download the results summary
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadJson({ results: r.results, summary }, `dns-zone-export-${p.server}-${timestamp}.json`);
+      } else {
+        toast.error("Export failed: " + (res.error ?? "Unknown error"));
+      }
+    } catch {
+      toast.error("Export failed: unexpected error");
+    } finally {
+      setExportingAllZones(false);
+    }
+  }
+
+  async function handleExportSingleZone() {
+    if (!singleZoneName.trim()) { toast.error("Enter a zone name"); return; }
+    const p = getActiveServerParams();
+    setExportingZone(true);
+    try {
+      const res = await api.exportZone(singleZoneName.trim(), undefined, p.server, p.serverId, p.credentialMode);
+      if (res.success) {
+        toast.success(`Zone "${singleZoneName}" exported to server's DNS directory as ${(res as Record<string, unknown>).fileName || singleZoneName + ".dns"}`);
+      } else {
+        toast.error("Export failed: " + (res.error ?? "Unknown error"));
+      }
+    } catch {
+      toast.error("Export failed: unexpected error");
+    } finally {
+      setExportingZone(false);
     }
   }
 
@@ -199,105 +237,6 @@ export default function BackupPage() {
   }
 
   // ------------------------------------------------------------------
-  // Blocklist
-  // ------------------------------------------------------------------
-
-  const handleBlocklistFileLoad = useCallback((file: File) => {
-    if (!file.name.endsWith(".txt")) {
-      toast.error("Please select a .txt file");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const domains = parseBlocklist(text);
-      if (domains.length === 0) {
-        toast.error("No domains found in file");
-        return;
-      }
-      setBlocklistDomains(domains);
-      toast.success(`Loaded ${domains.length} domains`);
-    };
-    reader.readAsText(file);
-  }, []);
-
-  function handleBlocklistFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) handleBlocklistFileLoad(file);
-  }
-
-  function handleBlocklistDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOverBlocklist(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleBlocklistFileLoad(file);
-  }
-
-  async function handleBlocklistImport() {
-    if (!blocklistZone.trim()) {
-      toast.error("Zone name is required");
-      return;
-    }
-    if (blocklistDomains.length === 0) {
-      toast.error("No domains loaded");
-      return;
-    }
-
-    setBlocklistImporting(true);
-    setBlocklistProgress({ done: 0, total: blocklistDomains.length });
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < blocklistDomains.length; i++) {
-      const domain = blocklistDomains[i];
-      const sanitized = sanitizeDomainName(domain);
-      const policyData: Record<string, unknown> = {
-        name: `Block_${sanitized}`,
-        action: blocklistAction,
-        fqdn: `EQ,${domain}`,
-        zoneName: blocklistZone.trim(),
-        processingOrder: String(blocklistStartOrder + i),
-      };
-
-      const timestamp = new Date().toLocaleTimeString();
-      const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${blocklistAction} -Fqdn "EQ,${domain}" -ZoneName "${blocklistZone.trim()}" -ProcessingOrder ${blocklistStartOrder + i}`;
-      addPsOutput(`[${timestamp}] ${command}`);
-
-      if (executionMode === "execute" && bridgeConnected) {
-        try {
-          const res = await api.addPolicy(policyData);
-          if (res.success) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        } catch {
-          failCount++;
-        }
-      } else {
-        successCount++;
-      }
-      setBlocklistProgress({ done: i + 1, total: blocklistDomains.length });
-    }
-
-    setBlocklistImporting(false);
-
-    if (executionMode === "execute" && bridgeConnected) {
-      if (failCount === 0) {
-        toast.success(`Successfully created ${successCount} block policies`);
-      } else {
-        toast.warning(
-          `Blocklist import: ${successCount} succeeded, ${failCount} failed`
-        );
-      }
-    } else {
-      toast.success(
-        `Generated ${blocklistDomains.length} PowerShell commands. Check the PowerShell tab.`
-      );
-    }
-  }
-
   // ------------------------------------------------------------------
   // Import policy count
   // ------------------------------------------------------------------
@@ -317,10 +256,118 @@ export default function BackupPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Backup & Import</h1>
         <p className="text-sm text-zinc-400 mt-1">
-          Export, import, and restore DNS policies. Import blocklists to create
-          bulk deny/ignore policies.
+          Export DNS server configuration, zones, and policies. Import policy
+          backups and blocklists.
         </p>
       </div>
+
+      {/* ────────────────── AD-Integrated Note ────────────────── */}
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 flex gap-3">
+        <Info className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-200/80">
+          <span className="font-medium text-blue-300">Active Directory-integrated zones:</span>{" "}
+          Microsoft&apos;s preferred and most comprehensive backup method for AD-integrated DNS
+          zones is a <span className="font-medium text-blue-200">full system state backup</span> (via
+          Windows Server Backup or <code className="text-blue-300/80">wbadmin start systemstatebackup</code>),
+          which backs up the entire Active Directory database including all DNS zone data.
+          The exports below are supplementary and useful for configuration auditing, migration,
+          and disaster recovery reference.
+        </div>
+      </div>
+
+      {/* ────────────────── Export Server Config ────────────── */}
+      <Card className="border-zinc-800 bg-zinc-950">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Server className="h-5 w-5 text-cyan-400" />
+            Export Server Configuration
+          </CardTitle>
+          <CardDescription>
+            Export the complete DNS server configuration (settings, cache, recursion,
+            forwarders, diagnostics, scavenging, EDNS, block list) as JSON. Equivalent to{" "}
+            <code className="text-zinc-400">Get-DnsServer</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleExportServerConfig}
+            disabled={exportingConfig || !bridgeConnected}
+          >
+            {exportingConfig ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Export Server Config
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ────────────────── Export Zones ────────────────────── */}
+      <Card className="border-zinc-800 bg-zinc-950">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Globe className="h-5 w-5 text-cyan-400" />
+            Export DNS Zones
+          </CardTitle>
+          <CardDescription>
+            Export zone files to the server&apos;s DNS directory using{" "}
+            <code className="text-zinc-400">Export-DnsServerZone</code>. Files are written
+            to <code className="text-zinc-400">%SystemRoot%\System32\dns\</code> on the
+            target server.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5 flex-1 min-w-[200px]">
+              <Label className="text-xs text-zinc-400">Single Zone</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. contoso.com"
+                  value={singleZoneName}
+                  onChange={(e) => setSingleZoneName(e.target.value)}
+                  className="bg-zinc-900 border-zinc-700"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleExportSingleZone}
+                  disabled={exportingZone || !bridgeConnected || !singleZoneName.trim()}
+                >
+                  {exportingZone ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Export Zone
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <Separator className="bg-zinc-800" />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-zinc-300">Export All Primary Zones</p>
+              <p className="text-xs text-zinc-500">
+                Exports all non-autocreated primary zones to individual zone files on the server.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleExportAllZones}
+              disabled={exportingAllZones || !bridgeConnected}
+            >
+              {exportingAllZones ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Export All Zones
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ────────────────── Export Policies ────────────────── */}
       <Card className="border-zinc-800 bg-zinc-950">
@@ -508,175 +555,6 @@ export default function BackupPage() {
         </CardContent>
       </Card>
 
-      {/* ────────────────── Blocklist Import ────────────────── */}
-      <Card className="border-zinc-800 bg-zinc-950">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <ShieldAlert className="h-5 w-5 text-cyan-400" />
-            Blocklist Import
-          </CardTitle>
-          <CardDescription>
-            Import a text file of domains to create bulk block/ignore policies.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-zinc-500">
-            One domain per line. Lines starting with <code className="text-zinc-400">#</code> are
-            treated as comments and ignored.
-          </p>
-
-          {/* Drop zone */}
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
-              dragOverBlocklist
-                ? "border-cyan-500 bg-cyan-950/20"
-                : "border-zinc-700 hover:border-zinc-500"
-            }`}
-            onClick={() => blocklistFileRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOverBlocklist(true);
-            }}
-            onDragLeave={() => setDragOverBlocklist(false)}
-            onDrop={handleBlocklistDrop}
-          >
-            <FileText className="h-10 w-10 mx-auto mb-3 text-zinc-500" />
-            <p className="text-sm text-zinc-400">
-              Drag & drop a <span className="text-zinc-200">.txt</span>{" "}
-              blocklist file here, or click to browse
-            </p>
-            <input
-              ref={blocklistFileRef}
-              type="file"
-              accept=".txt"
-              className="hidden"
-              onChange={handleBlocklistFileChange}
-            />
-          </div>
-
-          {/* Preview */}
-          {blocklistDomains.length > 0 && (
-            <>
-              <Separator className="bg-zinc-800" />
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-zinc-200">
-                    Domains Loaded
-                  </h3>
-                  <Badge variant="secondary">{blocklistDomains.length}</Badge>
-                </div>
-                <ScrollArea className="h-40 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-                  <div className="space-y-1 font-mono text-xs text-zinc-400">
-                    {blocklistDomains.slice(0, 10).map((domain, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="text-zinc-600 w-6 text-right">
-                          {i + 1}.
-                        </span>
-                        <span>{domain}</span>
-                      </div>
-                    ))}
-                    {blocklistDomains.length > 10 && (
-                      <div className="text-zinc-600 pt-1">
-                        ... and {blocklistDomains.length - 10} more
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
-            </>
-          )}
-
-          {/* Settings */}
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1.5 min-w-[140px]">
-              <Label className="text-xs text-zinc-400">Action</Label>
-              <Select
-                value={blocklistAction}
-                onValueChange={(v) => { if (v) setBlocklistAction(v as PolicyAction); }}
-              >
-                <SelectTrigger className="bg-zinc-900 border-zinc-700">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DENY">DENY</SelectItem>
-                  <SelectItem value="IGNORE">IGNORE</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5 min-w-[200px]">
-              <Label className="text-xs text-zinc-400">
-                Zone Name <span className="text-red-400">*</span>
-              </Label>
-              <Input
-                placeholder="e.g. contoso.com"
-                value={blocklistZone}
-                onChange={(e) => setBlocklistZone(e.target.value)}
-                className="bg-zinc-900 border-zinc-700"
-              />
-            </div>
-
-            <div className="space-y-1.5 w-40">
-              <Label className="text-xs text-zinc-400">
-                Processing Order Start
-              </Label>
-              <Input
-                type="number"
-                min={1}
-                value={blocklistStartOrder}
-                onChange={(e) =>
-                  setBlocklistStartOrder(parseInt(e.target.value, 10) || 1)
-                }
-                className="bg-zinc-900 border-zinc-700"
-              />
-            </div>
-
-            <Button
-              onClick={handleBlocklistImport}
-              disabled={
-                blocklistImporting ||
-                blocklistDomains.length === 0 ||
-                !blocklistZone.trim()
-              }
-            >
-              {blocklistImporting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <ShieldAlert className="h-4 w-4 mr-2" />
-              )}
-              Import Blocklist
-            </Button>
-          </div>
-
-          {/* Progress */}
-          {blocklistImporting && (
-            <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <div className="w-40 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-cyan-500 transition-all duration-300"
-                  style={{
-                    width: `${
-                      blocklistProgress.total > 0
-                        ? (blocklistProgress.done / blocklistProgress.total) * 100
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-              <span>
-                {blocklistProgress.done}/{blocklistProgress.total}
-              </span>
-            </div>
-          )}
-
-          {executionMode !== "execute" && blocklistDomains.length > 0 && (
-            <p className="text-xs text-yellow-400">
-              Execution mode is set to &quot;Generate&quot;. Commands will be
-              shown in the PowerShell tab instead of being executed.
-            </p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

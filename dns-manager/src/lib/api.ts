@@ -4,12 +4,16 @@ import type {
   CredentialMode,
 } from "./types";
 
-const REQUEST_TIMEOUT = 15000;
+const REQUEST_TIMEOUT = 30000;
+// All requests go directly to the bridge to avoid the Next.js dev proxy's ~15s timeout.
+// The bridge has CORS headers so direct calls work from the browser.
+const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://127.0.0.1:8650";
 
 async function request<T = unknown>(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  timeout?: number
 ): Promise<ApiResponse<T> & Record<string, unknown>> {
   const opts: RequestInit = {
     method,
@@ -22,10 +26,11 @@ async function request<T = unknown>(
 
   const controller = new AbortController();
   opts.signal = controller.signal;
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const timeoutId = setTimeout(() => controller.abort(), timeout || REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(path, opts);
+    const url = `${BRIDGE_URL}${path}`;
+    const res = await fetch(url, opts);
     clearTimeout(timeoutId);
     try {
       return await res.json();
@@ -84,8 +89,8 @@ export const api = {
     }),
 
   // Zones
-  listZones: (server?: string) =>
-    request("GET", "/api/zones" + qs({ server })),
+  listZones: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/zones" + serverParams(server, serverId, credentialMode)),
 
   getZoneDetails: (
     zoneName: string,
@@ -140,8 +145,8 @@ export const api = {
     ),
 
   // Policies
-  listPolicies: (server?: string, zone?: string) =>
-    request("GET", "/api/policies" + qs({ server, zone })),
+  listPolicies: (server?: string, zone?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/policies" + qs({ server, zone, serverId, credentialMode })),
 
   addPolicy: (policy: Record<string, unknown>) =>
     request("POST", "/api/policies", policy),
@@ -149,11 +154,13 @@ export const api = {
   removePolicy: (
     name: string,
     server?: string,
-    zone?: string
+    zone?: string,
+    serverId?: string,
+    credentialMode?: string,
   ) =>
     request(
       "DELETE",
-      `/api/policies/${encodeURIComponent(name)}${qs({ server, zone })}`
+      `/api/policies/${encodeURIComponent(name)}${qs({ server, zone, serverId, credentialMode })}`
     ),
 
   setPolicyState: (
@@ -369,6 +376,12 @@ export const api = {
   setServerSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
 
+  startResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/resolvers" + serverParams(server, serverId, credentialMode)),
+
+  pollResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode)),
+
   getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
 
@@ -483,7 +496,7 @@ export const api = {
 
   // Niche: Root Hints, EDNS, DS Settings, Global Name Zone, Zone Delegations
   getRootHints: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/roothints" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/roothints" + serverParams(server, serverId, credentialMode), undefined, 45000),
 
   getEDns: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/edns" + serverParams(server, serverId, credentialMode)),
@@ -504,8 +517,11 @@ export const api = {
     request("GET", `/api/zones/${encodeURIComponent(zoneName)}/delegations${serverParams(server, serverId, credentialMode)}`),
 
   // BPA
-  runBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+  startBpa: (server?: string, serverId?: string, credentialMode?: string) =>
     request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
+
+  pollBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
 
   // Encryption Protocol (DoH/DoT — Server 2025+)
   getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>
@@ -514,13 +530,19 @@ export const api = {
   setEncryptionProtocol: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/encryption" + serverParams(server, serverId, credentialMode), data),
 
-  // Backup
+  // Backup & Export
   backup: (server: string, includeZone = true, includeServer = true) =>
     request("POST", "/api/backup", {
       server: server || "localhost",
       includeZone,
       includeServer,
     }),
+
+  exportServerConfig: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/export/serverconfig" + serverParams(server, serverId, credentialMode), undefined, 45000),
+
+  exportAllZones: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/export/allzones" + serverParams(server, serverId, credentialMode), undefined, 60000),
 
   // Execute
   execute: (command: string) =>

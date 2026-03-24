@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Blocklists tab** (position 06) — First-class RPZ/blocklist management:
+  - **Quick Block** — single-domain block with DENY/IGNORE action in one click
+  - **Bulk Import** — drag-and-drop .txt file import for mass domain blocking with progress bar
+  - **Active Block Policies** — searchable table of all DENY/IGNORE policies with one-click delete
+  - **Global Query Block List** — view/add/remove entries from the server's built-in global block list (`Get-DnsServerGlobalQueryBlockList`)
+  - Moved from Backup tab to dedicated tab as a primary workflow
+- **Export Server Configuration** — full `Get-DnsServer` export as JSON on the Backup tab
+- **Export DNS Zones** — single zone or bulk export of all primary zones via `Export-DnsServerZone`
+- **AD-integrated backup note** — info banner explaining Microsoft's preferred system state backup method
+- **Zone filters** — filter by Forward/Reverse, zone type (Primary/Secondary/Stub/Forwarder), and AD-integrated status on the Zones tab
+
+### Fixed
+
+- **Saved/session credentials with remote DNS servers** — DNS Server cmdlets don't accept `-Credential` directly. Bridge now creates a `CimSession` with DCOM protocol for alternate credentials, which all DNS Server cmdlets accept. Previously, any operation using saved or session credentials on a remote server would fail with "A parameter cannot be found that matches parameter name 'Credential'."
+- **PowerShell 5.1 compatibility** — Replaced `??` null-coalescing operators (PowerShell 7+) with `if/else` expressions throughout bridge.ps1.
+- **BPA no longer blocks the bridge** — BPA now runs as a background job (`Start-Job`) with frontend polling every 3s. Previously, the single-threaded bridge became unresponsive for the entire duration of a BPA scan (1-3 minutes).
+- **Bridge resilience** — Main listener loop now catches errors that escape individual handlers, preventing bridge crashes.
+- **Long-running API calls bypass Next.js proxy** — Resolvers and BPA endpoints call the bridge directly to avoid the ~15s dev-mode proxy timeout.
+
+### Added
+
+- **Resolvers & Topology tab** — New tab displaying DNS resolver configuration per server. Shows IP stack DNS servers (per network adapter, IPv4/IPv6) and DNS Server forwarder configuration side by side. Highlights discrepancies between the two. Includes a Mermaid-rendered topology diagram with color-coded edges: cyan for IP stack connections, amber for forwarders, dashed for agreement. Well-known resolvers (Google, Cloudflare, Quad9, etc.) are auto-labeled.
 - **Policy processing order editor** — Reorder dialog on the Policies tab with up/down arrows to rearrange policy evaluation order. Shows before/after order numbers, saves only changed policies. Uses extended `PUT /api/policies/{name}/state` endpoint that now accepts `processingOrder`.
 - **DNS Best Practices Analyzer** — Run the Windows BPA model for the DNS Server role from the Server tab. Results categorized by severity (Error/Warning/Information) with expandable findings showing problem, impact, and resolution. Handles BPA unavailability gracefully.
 - **DNS over HTTPS/TLS (DoH/DoT) panel** — View and configure encryption protocol settings on Windows Server 2025+. Graceful fallback on older server versions with "not available" message.

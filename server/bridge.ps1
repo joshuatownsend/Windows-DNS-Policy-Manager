@@ -39,6 +39,38 @@ function ConvertTo-JsonSafe {
     $InputObject | ConvertTo-Json -Depth 10 -Compress
 }
 
+function ConvertTo-PlainValue {
+    # Convert a single value to a JSON-safe primitive.
+    param($Val)
+    if ($null -eq $Val) { return $null }
+    if ($Val -is [string]) { return $Val }
+    if ($Val -is [bool]) { return $Val }
+    if ($Val -is [TimeSpan]) { return $Val.ToString() }
+    if ($Val -is [DateTime]) { return $Val.ToString('o') }
+    if ($Val -is [int] -or $Val -is [long] -or $Val -is [double] -or $Val -is [decimal] -or $Val -is [float]) { return $Val }
+    if ($Val -is [enum]) { return $Val.ToString() }
+    # Other ValueTypes (e.g. IPAddress is NOT a ValueType, but structs are)
+    if ($Val -is [ValueType]) { return $Val.ToString() }
+    # Arrays / collections — flatten each element
+    if ($Val -is [System.Collections.IEnumerable]) {
+        return @($Val | ForEach-Object { ConvertTo-PlainValue $_ })
+    }
+    # Everything else (IPAddress, CimInstance, etc.) — stringify
+    return "$Val"
+}
+
+function ConvertTo-PlainObject {
+    # Flatten a CIM/PSObject to a hashtable with only JSON-safe values.
+    # Prevents [object Object] when CIM instances cross runspace/job boundaries.
+    param($InputObject)
+    if ($null -eq $InputObject) { return $null }
+    $out = @{}
+    foreach ($prop in $InputObject.PSObject.Properties) {
+        $out[$prop.Name] = ConvertTo-PlainValue $prop.Value
+    }
+    return $out
+}
+
 function Send-Response {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -48,17 +80,22 @@ function Send-Response {
     $json = ConvertTo-JsonSafe $Body
     $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
 
-    $Response.StatusCode = $StatusCode
-    $Response.ContentType = 'application/json; charset=utf-8'
-    $Response.ContentLength64 = $buffer.Length
+    try {
+        $Response.StatusCode = $StatusCode
+        $Response.ContentType = 'application/json; charset=utf-8'
+        $Response.ContentLength64 = $buffer.Length
 
-    # CORS headers - safe because localhost-only
-    $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+        # CORS headers - safe because localhost-only
+        $Response.Headers.Add('Access-Control-Allow-Origin', '*')
+        $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
 
-    $Response.OutputStream.Write($buffer, 0, $buffer.Length)
-    $Response.OutputStream.Close()
+        $Response.OutputStream.Write($buffer, 0, $buffer.Length)
+        $Response.OutputStream.Close()
+    } catch {
+        # Client may have disconnected (e.g., timeout). Log and move on.
+        Write-Log "Send-Response failed (client likely disconnected): $($_.Exception.Message)" 'WARN'
+    }
 }
 
 function Send-Preflight {
@@ -105,6 +142,28 @@ function Test-DnsModule {
     }
 }
 
+# ── Security Helpers ─────────────────────────────────────────────────────────
+
+function Assert-SafeId {
+    # Validate that an ID contains only safe characters (alphanumeric, hyphens, underscores, dots).
+    # Prevents path traversal via serverId or similar parameters.
+    param([string]$Id, [string]$ParamName = 'id')
+    if ($Id -notmatch '^[a-zA-Z0-9._-]+$') {
+        throw "Invalid $ParamName : contains disallowed characters"
+    }
+    return $Id
+}
+
+function Assert-SafeFileName {
+    # Strip path components, leaving only the filename. Prevents path traversal via fileName params.
+    param([string]$FileName)
+    $safe = [System.IO.Path]::GetFileName($FileName)
+    if (-not $safe -or $safe -ne $FileName) {
+        throw "Invalid file name: path traversal not allowed"
+    }
+    return $safe
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
 $script:SessionCredentials = @{}
@@ -118,10 +177,13 @@ function Resolve-ServerCredential {
     )
 
     $params = @{}
-    if ($Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME) {
-        $params['ComputerName'] = $Hostname
-    }
+    $isRemote = $Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME
 
+    # Validate serverId to prevent path traversal
+    if ($ServerId) { $null = Assert-SafeId -Id $ServerId -ParamName 'serverId' }
+
+    # Resolve the PSCredential object (if any)
+    $cred = $null
     switch ($CredentialMode) {
         'savedCredential' {
             $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
@@ -131,17 +193,57 @@ function Resolve-ServerCredential {
             $credData = Get-Content $credFile -Raw | ConvertFrom-Json
             $securePass = $credData.Password | ConvertTo-SecureString
             $cred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-            $params['Credential'] = $cred
         }
         'session' {
             if ($script:SessionCredentials.ContainsKey($ServerId)) {
-                $params['Credential'] = $script:SessionCredentials[$ServerId]
+                $cred = $script:SessionCredentials[$ServerId]
             }
         }
         # 'currentUser' — no credential needed, Kerberos/NTLM handles auth
     }
 
+    if ($isRemote -and $cred) {
+        # DNS Server cmdlets don't accept -Credential; they need -CimSession.
+        # Create a CIM session with the credential for splatting to DNS cmdlets.
+        $so = New-CimSessionOption -Protocol Dcom
+        $session = New-CimSession -ComputerName $Hostname -Credential $cred -SessionOption $so -ErrorAction Stop
+        $params['CimSession'] = $session
+    } elseif ($isRemote) {
+        $params['ComputerName'] = $Hostname
+    }
+
     return $params
+}
+
+function Resolve-BackgroundJobCredential {
+    # Extract hostname + credential from resolved params for use with Invoke-Command
+    # in background jobs (CimSession can't cross job boundaries).
+    param(
+        [hashtable]$ResolvedParams,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    $remoteHost = $null
+    $remoteCred = $null
+    if ($ResolvedParams.ContainsKey('CimSession')) {
+        $remoteHost = $ResolvedParams['CimSession'].ComputerName
+        $qs = $Request.QueryString
+        $sid = $qs['serverId']
+        $cm  = $qs['credentialMode']
+        if ($sid) { $null = Assert-SafeId -Id $sid -ParamName 'serverId' }
+        if ($cm -eq 'savedCredential' -and $sid) {
+            $credFile = Join-Path $script:CredStorePath "$sid.cred"
+            if (Test-Path $credFile) {
+                $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+                $securePass = $credData.Password | ConvertTo-SecureString
+                $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
+            }
+        } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
+            $remoteCred = $script:SessionCredentials[$sid]
+        }
+    } elseif ($ResolvedParams.ContainsKey('ComputerName')) {
+        $remoteHost = $ResolvedParams['ComputerName']
+    }
+    return @{ Host = $remoteHost; Credential = $remoteCred }
 }
 
 function Handle-StoreCredential {
@@ -158,6 +260,8 @@ function Handle-StoreCredential {
             } -StatusCode 400
             return
         }
+
+        $null = Assert-SafeId -Id $Body.serverId -ParamName 'serverId'
 
         # Ensure credential store directory exists
         if (-not (Test-Path $script:CredStorePath)) {
@@ -204,6 +308,7 @@ function Handle-CheckCredential {
         return
     }
 
+    $null = Assert-SafeId -Id $serverId -ParamName 'serverId'
     $credFile = Join-Path $script:CredStorePath "$serverId.cred"
     $exists = Test-Path $credFile
 
@@ -219,6 +324,7 @@ function Handle-DeleteCredential {
         [string]$ServerId
     )
 
+    $null = Assert-SafeId -Id $ServerId -ParamName 'serverId'
     $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
     if (Test-Path $credFile) {
         Remove-Item $credFile -Force
@@ -1148,8 +1254,8 @@ function Handle-RemoveZoneRecord {
         }
 
         $removeParams = @{ ZoneName = $ZoneName; InputObject = $target; Force = $true }
-        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $removeParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
 
@@ -1231,15 +1337,15 @@ function Handle-UpdateZoneRecord {
 
         # Remove old record
         $removeParams = @{ ZoneName = $ZoneName; InputObject = $oldTarget; Force = $true }
-        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $removeParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
 
         # Step 2: Add new record
         $addParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
-        if ($fetchParams.ContainsKey('ComputerName')) { $addParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $addParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $addParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $addParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         $newRd = $Body.newRecordData
 
@@ -1297,8 +1403,8 @@ function Handle-UpdateZoneRecord {
             Write-Log "Update failed, rolling back: $($_.Exception.Message)" 'WARN'
             try {
                 $rollbackParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
-                if ($fetchParams.ContainsKey('ComputerName')) { $rollbackParams['ComputerName'] = $fetchParams['ComputerName'] }
-                if ($fetchParams.ContainsKey('Credential'))   { $rollbackParams['Credential'] = $fetchParams['Credential'] }
+                if ($fetchParams.ContainsKey('CimSession'))    { $rollbackParams['CimSession'] = $fetchParams['CimSession'] }
+                elseif ($fetchParams.ContainsKey('ComputerName')) { $rollbackParams['ComputerName'] = $fetchParams['ComputerName'] }
 
                 switch ($Body.recordType) {
                     'A' {
@@ -1831,7 +1937,8 @@ function Resolve-ServerConfigParams {
     $serverId = $qs['serverId']
     $credentialMode = $qs['credentialMode']
     if ($serverId) {
-        return Resolve-ServerCredential -ServerId $serverId -CredentialMode ($credentialMode ?? 'currentUser') -Hostname $server
+        $mode = if ($credentialMode) { $credentialMode } else { 'currentUser' }
+        return Resolve-ServerCredential -ServerId $serverId -CredentialMode $mode -Hostname $server
     }
     $params = @{}
     if ($server -and $server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
@@ -1847,10 +1954,10 @@ function Handle-GetServerSettings {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $settings = Get-DnsServerSetting @p -ErrorAction Stop -All
+        $raw = Get-DnsServerSetting @p -ErrorAction Stop -All
         Send-Response -Response $Response -Body @{
             success  = $true
-            settings = $settings
+            settings = (ConvertTo-PlainObject $raw)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -1879,6 +1986,135 @@ function Handle-SetServerSettings {
     }
 }
 
+# Resolvers use a background job to avoid blocking the single-threaded listener.
+# POST /api/server/resolvers starts the job, GET /api/server/resolvers polls for results.
+$script:ResolverJobs = @{}  # keyed by serverId or 'local'
+
+function Handle-StartResolvers {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+
+        # If already running for this server, just acknowledge
+        if ($script:ResolverJobs[$jobKey] -and $script:ResolverJobs[$jobKey].Job.State -eq 'Running') {
+            Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
+
+        $bgCred = Resolve-BackgroundJobCredential -ResolvedParams $p -Request $Request
+        $remoteHost = $bgCred.Host
+        $remoteCred = $bgCred.Credential
+        $cimComputerName = if ($p.ContainsKey('CimSession')) { $p['CimSession'].ComputerName } else { $null }
+
+        $script:ResolverJobs[$jobKey] = @{
+            Job    = Start-Job -ScriptBlock {
+                param($rHost, $rCred, $cimHost)
+                try {
+                    # 1. Get DNS client server addresses
+                    if ($rHost) {
+                        $invokeParams = @{ ComputerName = $rHost; ErrorAction = 'Stop' }
+                        if ($rCred) { $invokeParams['Credential'] = $rCred }
+                        $interfaces = @(Invoke-Command @invokeParams -ScriptBlock {
+                            Get-DnsClientServerAddress -ErrorAction Stop |
+                                Where-Object { $_.AddressFamily -in @(2, 23) -and $_.ServerAddresses.Count -gt 0 } |
+                                Select-Object InterfaceAlias, AddressFamily, ServerAddresses, InterfaceIndex
+                        })
+                    } else {
+                        $interfaces = @(Get-DnsClientServerAddress -ErrorAction Stop |
+                            Where-Object { $_.AddressFamily -in @(2, 23) -and $_.ServerAddresses.Count -gt 0 } |
+                            Select-Object InterfaceAlias, AddressFamily, ServerAddresses, InterfaceIndex)
+                    }
+
+                    # 2. Get DNS Server forwarder configuration
+                    $cimSession = $null
+                    $dnsParams = @{}
+                    try {
+                        if ($cimHost -and $rCred) {
+                            $so = New-CimSessionOption -Protocol Dcom
+                            $cimSession = New-CimSession -ComputerName $cimHost -Credential $rCred -SessionOption $so -ErrorAction Stop
+                            $dnsParams['CimSession'] = $cimSession
+                        } elseif ($rHost) {
+                            $dnsParams['ComputerName'] = $rHost
+                        }
+                        $rawFwd = Get-DnsServerForwarder @dnsParams -ErrorAction Stop
+                        $forwarders = @{
+                            IPAddress   = @($rawFwd.IPAddress | ForEach-Object { "$_" })
+                            UseRootHint = [bool]$rawFwd.UseRootHint
+                            Timeout     = $rawFwd.Timeout
+                        }
+
+                        # 3. Get DNS Server listening addresses
+                        $settings = Get-DnsServerSetting @dnsParams -All -ErrorAction Stop
+                        $listeningAddresses = @($settings.ListeningIPAddress | ForEach-Object { "$_" })
+                    } finally {
+                        if ($cimSession) {
+                            Remove-CimSession -CimSession $cimSession -ErrorAction SilentlyContinue
+                        }
+                    }
+
+                    @{
+                        success            = $true
+                        interfaces         = $interfaces
+                        forwarders         = $forwarders
+                        listeningAddresses = $listeningAddresses
+                    }
+                } catch {
+                    @{ success = $false; error = $_.Exception.Message }
+                }
+            } -ArgumentList $remoteHost, $remoteCred, $cimComputerName
+            Result = $null
+        }
+
+        Send-Response -Response $Response -Body @{ success = $true; status = 'started' }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-PollResolvers {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+        $entry = $script:ResolverJobs[$jobKey]
+
+        if (-not $entry -or -not $entry.Job) {
+            if ($entry -and $entry.Result) {
+                Send-Response -Response $Response -Body $entry.Result
+            } else {
+                Send-Response -Response $Response -Body @{ success = $true; status = 'idle' }
+            }
+            return
+        }
+
+        if ($entry.Job.State -eq 'Running') {
+            Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
+
+        $result = Receive-Job -Job $entry.Job -ErrorAction SilentlyContinue
+        Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
+
+        if ($result) {
+            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $result }
+            Send-Response -Response $Response -Body $result
+        } else {
+            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $null }
+            Send-Response -Response $Response -Body @{ success = $false; error = 'Resolver job returned no results.' } -StatusCode 500
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
 function Handle-GetForwarders {
     param(
         [System.Net.HttpListenerResponse]$Response,
@@ -1886,7 +2122,13 @@ function Handle-GetForwarders {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $forwarders = Get-DnsServerForwarder @p -ErrorAction Stop
+        $raw = Get-DnsServerForwarder @p -ErrorAction Stop
+        # Explicitly flatten — IPAddress objects need .ToString() not recursion
+        $forwarders = @{
+            IPAddress   = @($raw.IPAddress | ForEach-Object { "$_" })
+            UseRootHint = [bool]$raw.UseRootHint
+            Timeout     = $raw.Timeout
+        }
         Send-Response -Response $Response -Body @{
             success    = $true
             forwarders = $forwarders
@@ -1960,7 +2202,7 @@ function Handle-GetCache {
         $cache = Get-DnsServerCache @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{
             success = $true
-            cache   = $cache
+            cache   = (ConvertTo-PlainObject $cache)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -1991,7 +2233,7 @@ function Handle-GetRecursionSettings {
         $recursion = Get-DnsServerRecursion @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{
             success   = $true
-            recursion = $recursion
+            recursion = (ConvertTo-PlainObject $recursion)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2030,7 +2272,7 @@ function Handle-GetBlockList {
         $blocklist = Get-DnsServerGlobalQueryBlockList @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{
             success   = $true
-            blocklist = $blocklist
+            blocklist = (ConvertTo-PlainObject $blocklist)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2066,7 +2308,7 @@ function Handle-GetDiagnostics {
         $diag = Get-DnsServerDiagnostics @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{
             success     = $true
-            diagnostics = $diag
+            diagnostics = (ConvertTo-PlainObject $diag)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2111,7 +2353,7 @@ function Handle-GetStatistics {
         $stats = Get-DnsServerStatistics @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{
             success    = $true
-            statistics = $stats
+            statistics = (ConvertTo-PlainObject $stats)
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2142,7 +2384,7 @@ function Handle-GetRRL {
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $rrl = Get-DnsServerResponseRateLimiting @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; rrl = $rrl }
+        Send-Response -Response $Response -Body @{ success = $true; rrl = (ConvertTo-PlainObject $rrl) }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2231,7 +2473,7 @@ function Handle-GetScavenging {
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $scav = Get-DnsServerScavenging @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; scavenging = $scav }
+        Send-Response -Response $Response -Body @{ success = $true; scavenging = (ConvertTo-PlainObject $scav) }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2279,8 +2521,13 @@ function Handle-TestDnsServer {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $result = Test-DnsServer @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; result = $result }
+        # Test-DnsServer requires -IPAddress and prompts interactively without it.
+        # Use Get-DnsServerSetting as a lightweight connectivity check instead.
+        $settings = Get-DnsServerSetting @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{
+            success = $true
+            result  = @{ ServerName = $settings.ComputerName; IsRunning = $true }
+        }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2288,56 +2535,140 @@ function Handle-TestDnsServer {
 
 # ── BPA & DoH Handlers ────────────────────────────────────────────────────
 
-function Handle-RunBpa {
+# BPA runs in a background job to avoid blocking the single-threaded listener.
+# POST /api/server/bpa starts the job, GET /api/server/bpa polls for results.
+$script:BpaJobs = @{}  # keyed by serverId or 'local'
+
+function Handle-StartBpa {
     param(
         [System.Net.HttpListenerResponse]$Response,
         [System.Net.HttpListenerRequest]$Request
     )
     try {
-        $p = Resolve-ServerConfigParams -Request $Request
-        $modelId = 'Microsoft/Windows/DNSServer'
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
 
-        # Invoke the BPA model
-        try {
-            Invoke-BpaModel -ModelId $modelId @p -ErrorAction Stop | Out-Null
-        } catch {
-            # BPA model may not be available on all systems
+        # If a BPA job is already running for this server, just acknowledge
+        if ($script:BpaJobs[$jobKey] -and $script:BpaJobs[$jobKey].Job -and $script:BpaJobs[$jobKey].Job.State -eq 'Running') {
             Send-Response -Response $Response -Body @{
-                success = $false
-                error   = "BPA model not available: $($_.Exception.Message). Ensure the DNS Server role is installed."
-            } -StatusCode 500
+                success = $true
+                status  = 'running'
+            }
             return
         }
 
-        # Get results
-        $results = @(Get-BpaResult -ModelId $modelId @p -ErrorAction Stop)
+        $p = Resolve-ServerConfigParams -Request $Request
+        $modelId = 'Microsoft/Windows/DNSServer'
 
-        # Categorize
-        $findings = $results | ForEach-Object {
-            @{
-                Severity    = $_.Severity.ToString()
-                Category    = $_.Category.ToString()
-                Title       = $_.Title
-                Problem     = $_.Problem
-                Impact      = $_.Impact
-                Resolution  = $_.Resolution
-                Compliance  = $_.Compliance.ToString()
-                Source      = $_.Source
-                ResultId    = $_.ResultId
+        $bgCred = Resolve-BackgroundJobCredential -ResolvedParams $p -Request $Request
+        $remoteHost = $bgCred.Host
+        $remoteCred = $bgCred.Credential
+
+        # Launch BPA in a background job so the listener stays responsive
+        $script:BpaJobs[$jobKey] = @{ Job = Start-Job -ScriptBlock {
+            param($mid, $rHost, $rCred)
+            try {
+                if ($rHost) {
+                    $invokeParams = @{ ComputerName = $rHost; ErrorAction = 'Stop' }
+                    if ($rCred) { $invokeParams['Credential'] = $rCred }
+                    $findings = Invoke-Command @invokeParams -ScriptBlock {
+                        param($m)
+                        Invoke-BpaModel -ModelId $m -ErrorAction Stop | Out-Null
+                        Get-BpaResult -ModelId $m -ErrorAction Stop | ForEach-Object {
+                            @{
+                                Severity   = $_.Severity.ToString()
+                                Category   = $_.Category.ToString()
+                                Title      = $_.Title
+                                Problem    = $_.Problem
+                                Impact     = $_.Impact
+                                Resolution = $_.Resolution
+                                Compliance = $_.Compliance.ToString()
+                                Source     = $_.Source
+                                ResultId   = $_.ResultId
+                            }
+                        }
+                    } -ArgumentList $m
+                } else {
+                    Invoke-BpaModel -ModelId $mid -ErrorAction Stop | Out-Null
+                    $findings = Get-BpaResult -ModelId $mid -ErrorAction Stop | ForEach-Object {
+                        @{
+                            Severity   = $_.Severity.ToString()
+                            Category   = $_.Category.ToString()
+                            Title      = $_.Title
+                            Problem    = $_.Problem
+                            Impact     = $_.Impact
+                            Resolution = $_.Resolution
+                            Compliance = $_.Compliance.ToString()
+                            Source     = $_.Source
+                            ResultId   = $_.ResultId
+                        }
+                    }
+                }
+                $findings = @($findings)
+                @{
+                    success   = $true
+                    findings  = $findings
+                    summary   = @{
+                        errors      = @($findings | Where-Object { $_.Severity -eq 'Error' }).Count
+                        warnings    = @($findings | Where-Object { $_.Severity -eq 'Warning' }).Count
+                        information = @($findings | Where-Object { $_.Severity -eq 'Information' }).Count
+                    }
+                    scannedAt = (Get-Date -Format 'o')
+                }
+            } catch {
+                @{
+                    success = $false
+                    error   = "BPA failed: $($_.Exception.Message). Ensure the DNS Server role is installed."
+                }
             }
-        }
-
-        $summary = @{
-            errors      = @($findings | Where-Object { $_.Severity -eq 'Error' }).Count
-            warnings    = @($findings | Where-Object { $_.Severity -eq 'Warning' }).Count
-            information = @($findings | Where-Object { $_.Severity -eq 'Information' }).Count
-        }
+        } -ArgumentList $modelId, $remoteHost, $remoteCred; Result = $null }
 
         Send-Response -Response $Response -Body @{
-            success  = $true
-            findings = $findings
-            summary  = $summary
-            scannedAt = (Get-Date -Format 'o')
+            success = $true
+            status  = 'started'
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-PollBpa {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $qs = $Request.QueryString
+        $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+        $entry = $script:BpaJobs[$jobKey]
+
+        if (-not $entry -or -not $entry.Job) {
+            if ($entry -and $entry.Result) {
+                Send-Response -Response $Response -Body $entry.Result
+            } else {
+                Send-Response -Response $Response -Body @{ success = $true; status = 'idle' }
+            }
+            return
+        }
+
+        if ($entry.Job.State -eq 'Running') {
+            Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
+
+        # Job completed — collect result
+        $result = Receive-Job -Job $entry.Job -ErrorAction SilentlyContinue
+        Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
+
+        if ($result) {
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $result }
+            Send-Response -Response $Response -Body $result
+        } else {
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $null }
+            Send-Response -Response $Response -Body @{
+                success = $false
+                error   = 'BPA job completed but returned no results.'
+            } -StatusCode 500
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2350,20 +2681,20 @@ function Handle-GetEncryptionProtocol {
         [System.Net.HttpListenerRequest]$Request
     )
     try {
-        $p = Resolve-ServerConfigParams -Request $Request
-        $proto = Get-DnsServerEncryptionProtocol @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; protocol = $proto }
-    } catch {
-        # Server 2025+ only — graceful fallback
-        if ($_.Exception.Message -match 'not recognized|CommandNotFoundException') {
+        # Server 2025+ only — check cmdlet existence before calling
+        if (-not (Get-Command Get-DnsServerEncryptionProtocol -ErrorAction SilentlyContinue)) {
             Send-Response -Response $Response -Body @{
-                success = $false
-                error   = 'Get-DnsServerEncryptionProtocol is not available on this server version (requires Server 2025+).'
+                success     = $false
+                error       = 'Encryption protocol settings require Windows Server 2025 or later.'
                 unsupported = $true
             }
-        } else {
-            Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+            return
         }
+        $p = Resolve-ServerConfigParams -Request $Request
+        $proto = Get-DnsServerEncryptionProtocol @p -ErrorAction Stop
+        Send-Response -Response $Response -Body @{ success = $true; protocol = (ConvertTo-PlainObject $proto) }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
 }
 
@@ -2623,7 +2954,7 @@ function Handle-GetRootHints {
     param([System.Net.HttpListenerResponse]$Response, [System.Net.HttpListenerRequest]$Request)
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $hints = @(Get-DnsServerRootHint @p -ErrorAction SilentlyContinue)
+        $hints = @(Get-DnsServerRootHint @p -ErrorAction SilentlyContinue | ForEach-Object { ConvertTo-PlainObject $_ })
         Send-Response -Response $Response -Body @{ success = $true; rootHints = $hints }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2635,7 +2966,7 @@ function Handle-GetEDns {
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $edns = Get-DnsServerEDns @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; edns = $edns }
+        Send-Response -Response $Response -Body @{ success = $true; edns = (ConvertTo-PlainObject $edns) }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2662,7 +2993,7 @@ function Handle-GetDsSetting {
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $ds = Get-DnsServerDsSetting @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; dsSetting = $ds }
+        Send-Response -Response $Response -Body @{ success = $true; dsSetting = (ConvertTo-PlainObject $ds) }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2673,7 +3004,7 @@ function Handle-GetGlobalNameZone {
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $gnz = Get-DnsServerGlobalNameZone @p -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true; globalNameZone = $gnz }
+        Send-Response -Response $Response -Body @{ success = $true; globalNameZone = (ConvertTo-PlainObject $gnz) }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2771,7 +3102,8 @@ function Handle-CreateZone {
         $p = @{}
         if ($Body.server) {
             if ($Body.serverId) {
-                $p = Resolve-ServerCredential -ServerId $Body.serverId -CredentialMode ($Body.credentialMode ?? 'currentUser') -Hostname $Body.server
+                $credMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+                $p = Resolve-ServerCredential -ServerId $Body.serverId -CredentialMode $credMode -Hostname $Body.server
             } elseif ($Body.server -ne 'localhost' -and $Body.server -ne $env:COMPUTERNAME) {
                 $p['ComputerName'] = $Body.server
             }
@@ -2792,7 +3124,7 @@ function Handle-CreateZone {
             'Secondary' {
                 $splatParams = @{
                     Name          = $Body.zoneName
-                    ZoneFile      = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                    ZoneFile      = if ($Body.zoneFile) { $Body.zoneFile } else { "$($Body.zoneName).dns" }
                     MasterServers = [string[]]$Body.masterServers
                 }
                 foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
@@ -2807,7 +3139,7 @@ function Handle-CreateZone {
                 if ($Body.replicationScope) {
                     $splatParams['ReplicationScope'] = $Body.replicationScope
                 } else {
-                    $splatParams['ZoneFile'] = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                    $splatParams['ZoneFile'] = if ($Body.zoneFile) { $Body.zoneFile } else { "$($Body.zoneName).dns" }
                 }
                 Add-DnsServerStubZone @splatParams -ErrorAction Stop
             }
@@ -2938,7 +3270,7 @@ function Handle-ExportZone {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $fileName = if ($Body -and $Body.fileName) { $Body.fileName } else { "$ZoneName.dns" }
+        $fileName = if ($Body -and $Body.fileName) { Assert-SafeFileName $Body.fileName } else { "$ZoneName.dns" }
         $splatParams = @{ Name = $ZoneName; FileName = $fileName }
         foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
         Export-DnsServerZone @splatParams -ErrorAction Stop
@@ -3210,6 +3542,87 @@ function Handle-DeletePolicy {
             success = $false
             error   = $_.Exception.Message
         } -StatusCode 500
+    }
+}
+
+function Handle-ExportServerConfig {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $dnsServer = Get-DnsServer @p -ErrorAction Stop
+
+        # Flatten each section to plain objects for JSON transport
+        $config = @{
+            ServerSetting     = ConvertTo-PlainObject $dnsServer.ServerSetting
+            ServerCache       = ConvertTo-PlainObject $dnsServer.ServerCache
+            ServerRecursion   = ConvertTo-PlainObject $dnsServer.ServerRecursion
+            ServerDiagnostics = ConvertTo-PlainObject $dnsServer.ServerDiagnostics
+            ServerScavenging  = ConvertTo-PlainObject $dnsServer.ServerScavenging
+            ServerEdns        = ConvertTo-PlainObject $dnsServer.ServerEdns
+            ServerGlobalQueryBlockList = ConvertTo-PlainObject $dnsServer.ServerGlobalQueryBlockList
+        }
+
+        # Forwarders — flatten IPs explicitly
+        if ($dnsServer.ServerForwarder) {
+            $config['ServerForwarder'] = @{
+                IPAddress   = @($dnsServer.ServerForwarder.IPAddress | ForEach-Object { "$_" })
+                UseRootHint = [bool]$dnsServer.ServerForwarder.UseRootHint
+                Timeout     = $dnsServer.ServerForwarder.Timeout
+            }
+        }
+
+        # Zone list
+        $config['Zones'] = @(Get-DnsServerZone @p -ErrorAction Stop |
+            Where-Object { -not $_.IsAutoCreated } |
+            Select-Object ZoneName, ZoneType, IsReverseLookupZone, IsDsIntegrated, IsSigned |
+            ForEach-Object { ConvertTo-PlainObject $_ })
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            config  = $config
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-ExportAllZones {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+        $zones = @(Get-DnsServerZone @p -ErrorAction Stop |
+            Where-Object { -not $_.IsAutoCreated -and $_.ZoneType -eq 'Primary' })
+
+        $results = @()
+        foreach ($zone in $zones) {
+            $zoneName = $zone.ZoneName
+            $fileName = "$zoneName.dns"
+            try {
+                $exportParams = @{ Name = $zoneName; FileName = $fileName }
+                foreach ($key in $p.Keys) { $exportParams[$key] = $p[$key] }
+                Export-DnsServerZone @exportParams -ErrorAction Stop
+                $results += @{ zoneName = $zoneName; fileName = $fileName; success = $true }
+            } catch {
+                $results += @{ zoneName = $zoneName; success = $false; error = $_.Exception.Message }
+            }
+        }
+
+        $succeeded = @($results | Where-Object { $_.success }).Count
+        $failed    = @($results | Where-Object { -not $_.success }).Count
+
+        Send-Response -Response $Response -Body @{
+            success  = $true
+            results  = $results
+            summary  = @{ total = $zones.Count; succeeded = $succeeded; failed = $failed }
+        }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
 }
 
@@ -3649,6 +4062,16 @@ function Route-Request {
                     Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
                 }
             }
+            '^/api/export/serverconfig$' {
+                if ($method -eq 'GET') {
+                    Handle-ExportServerConfig -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
+            '^/api/export/allzones$' {
+                if ($method -eq 'POST') {
+                    Handle-ExportAllZones -Response $response -Request $request
+                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+            }
             '^/api/backup$' {
                 if ($method -eq 'POST') {
                     $body = Read-RequestBody -Request $request
@@ -3671,6 +4094,13 @@ function Route-Request {
                     'GET'  { Handle-GetServerSettings -Response $response -Request $request }
                     'PUT'  { $body = Read-RequestBody -Request $request; Handle-SetServerSettings -Response $response -Request $request -Body $body }
                     default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/resolvers$' {
+                switch ($method) {
+                    'POST'   { Handle-StartResolvers -Response $response -Request $request }
+                    'GET'    { Handle-PollResolvers -Response $response -Request $request }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }
             '^/api/server/forwarders$' {
@@ -3756,9 +4186,11 @@ function Route-Request {
                 } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
             '^/api/server/bpa$' {
-                if ($method -eq 'POST') {
-                    Handle-RunBpa -Response $response -Request $request
-                } else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                switch ($method) {
+                    'POST' { Handle-StartBpa -Response $response -Request $request }
+                    'GET'  { Handle-PollBpa -Response $response -Request $request }
+                    default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
             }
             '^/api/server/encryption$' {
                 switch ($method) {
@@ -3930,9 +4362,93 @@ try {
     Write-Host '  Press Ctrl+C to stop' -ForegroundColor DarkGray
     Write-Host ''
 
+    # ── Concurrent Request Handling via Runspace Pool ────────────────────────
+    # The main thread accepts connections. Each request is dispatched to a
+    # pooled PowerShell runspace so the listener stays responsive.
+    # All functions are injected into the InitialSessionState so runspaces
+    # can call Route-Request and all handlers. Shared mutable state is
+    # passed via a synchronized hashtable.
+
+    # Collect all functions defined in this session into InitialSessionState
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-)' } | ForEach-Object {
+        $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($_.Name, $_.Definition)
+        $iss.Commands.Add($entry)
+    }
+
+    # Shared state: synchronized hashtable visible to all runspaces
+    $sharedState = [hashtable]::Synchronized(@{
+        SessionCredentials = $script:SessionCredentials
+        CredStorePath      = $script:CredStorePath
+        BpaJobs            = @{}
+        ResolverJobs       = @{}
+    })
+    $iss.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'script:SessionCredentials', $sharedState.SessionCredentials, ''
+        )
+    )
+    $iss.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'script:CredStorePath', $sharedState.CredStorePath, ''
+        )
+    )
+    $iss.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'SharedState', $sharedState, ''
+        )
+    )
+
+    $poolSize = [Math]::Max(4, [Environment]::ProcessorCount * 2)
+    $pool = [RunspaceFactory]::CreateRunspacePool(1, $poolSize, $iss, $Host)
+    $pool.Open()
+    Write-Log "Runspace pool opened (max $poolSize threads)"
+
+    # Track active runspaces for cleanup
+    $activeRunspaces = [System.Collections.Generic.List[object]]::new()
+
     while ($listener.IsListening) {
         $context = $listener.GetContext()
-        Route-Request -Context $context
+
+        # Prune completed runspaces
+        for ($i = $activeRunspaces.Count - 1; $i -ge 0; $i--) {
+            $r = $activeRunspaces[$i]
+            if ($r.Handle.IsCompleted) {
+                try { $r.Shell.EndInvoke($r.Handle) } catch {}
+                $r.Shell.Dispose()
+                $activeRunspaces.RemoveAt($i)
+            }
+        }
+
+        # Dispatch to runspace pool
+        $ps = [PowerShell]::Create()
+        $ps.RunspacePool = $pool
+        $null = $ps.AddScript({
+            param($ctx, $state)
+            # Bind shared state into script scope for handlers
+            $script:SessionCredentials = $state.SessionCredentials
+            $script:CredStorePath      = $state.CredStorePath
+            $script:BpaJobs            = $state.BpaJobs
+            $script:ResolverJobs       = $state.ResolverJobs
+
+            try {
+                Route-Request -Context $ctx
+            } catch {
+                try {
+                    Send-Response -Response $ctx.Response -Body @{
+                        success = $false
+                        error   = "Internal server error: $($_.Exception.Message)"
+                    } -StatusCode 500
+                } catch {}
+            }
+
+            # Write back mutable state
+            $state.BpaJobs      = $script:BpaJobs
+            $state.ResolverJobs = $script:ResolverJobs
+        }).AddArgument($context).AddArgument($sharedState)
+
+        $handle = $ps.BeginInvoke()
+        $activeRunspaces.Add(@{ Shell = $ps; Handle = $handle })
     }
 } catch [System.Net.HttpListenerException] {
     if ($_.Exception.ErrorCode -ne 995) {
@@ -3941,6 +4457,19 @@ try {
     }
 } finally {
     Write-Log 'Shutting down bridge...'
+
+    foreach ($r in $activeRunspaces) {
+        try {
+            if (-not $r.Handle.IsCompleted) { $r.Shell.Stop() }
+            $r.Shell.Dispose()
+        } catch {}
+    }
+
+    if ($pool) {
+        $pool.Close()
+        $pool.Dispose()
+    }
+
     if ($listener.IsListening) {
         $listener.Stop()
     }

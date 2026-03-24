@@ -65,29 +65,27 @@ function ConfigSection({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card className="border-border/50">
-        <CollapsibleTrigger>
-          <CardHeader className="cursor-pointer hover:bg-secondary/30 transition-colors py-3 px-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                <Icon className="h-4 w-4 text-cyan" />
-                <CardTitle className="text-sm font-medium">{title}</CardTitle>
-                {badge && <Badge variant="secondary" className="text-xs">{badge}</Badge>}
-              </div>
-              {onRefresh && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={(e) => { e.stopPropagation(); onRefresh(); }}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger render={<div />} className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1">
+              {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              <Icon className="h-4 w-4 text-cyan" />
+              <CardTitle className="text-sm font-medium">{title}</CardTitle>
+              {badge && <Badge variant="secondary" className="text-xs">{badge}</Badge>}
+            </CollapsibleTrigger>
+            {onRefresh && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+                disabled={loading}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            )}
+          </div>
+        </CardHeader>
         <CollapsibleContent>
           <CardContent className="pt-0 px-4 pb-4">
             {children}

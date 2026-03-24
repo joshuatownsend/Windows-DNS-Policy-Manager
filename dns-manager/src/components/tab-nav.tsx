@@ -10,10 +10,12 @@ const tabs = [
   { href: "/zones", label: "Zones", shortcut: "03" },
   { href: "/policies", label: "Policies", shortcut: "04" },
   { href: "/create", label: "Create", shortcut: "05" },
-  { href: "/wizards", label: "Wizards", shortcut: "06" },
-  { href: "/dnssec", label: "DNSSEC", shortcut: "07" },
-  { href: "/backup", label: "Backup", shortcut: "08" },
-  { href: "/powershell", label: "PowerShell", shortcut: "09" },
+  { href: "/blocklists", label: "Blocklists", shortcut: "06" },
+  { href: "/wizards", label: "Wizards", shortcut: "07" },
+  { href: "/dnssec", label: "DNSSEC", shortcut: "08" },
+  { href: "/resolvers", label: "Resolvers", shortcut: "09" },
+  { href: "/backup", label: "Backup", shortcut: "10" },
+  { href: "/powershell", label: "PowerShell", shortcut: "11" },
 ] as const;
 
 export function TabNav() {
@@ -21,7 +23,7 @@ export function TabNav() {
 
   return (
     <nav
-      className="flex overflow-x-auto stagger-children"
+      className="flex overflow-x-auto scrollbar-none stagger-children border-b border-border"
       role="tablist"
       aria-label="Policy management tabs"
     >
@@ -56,8 +58,8 @@ export function TabNav() {
           </Link>
         );
       })}
-      {/* Trailing spacer fills remaining width with bottom border */}
-      <div className="flex-1 border-b border-border" />
+      {/* Trailing spacer fills remaining width */}
+      <div className="min-w-0 flex-1" />
     </nav>
   );
 }

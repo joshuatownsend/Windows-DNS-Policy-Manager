@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -53,6 +53,15 @@ export function BpaPanel() {
   const [scannedAt, setScannedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   const runBpa = useCallback(async () => {
     const server = getActiveServer();
     const sp = server ? { server: server.hostname, serverId: server.id, credentialMode: server.credentialMode } : {};
@@ -60,20 +69,38 @@ export function BpaPanel() {
     setRunning(true);
     setError(null);
 
-    const result = await api.runBpa(sp.server, sp.serverId, sp.credentialMode);
-
-    if (result.success) {
-      const r = result as any;
-      setFindings(r.findings || []);
-      setSummary(r.summary || { errors: 0, warnings: 0, information: 0 });
-      setScannedAt(r.scannedAt || new Date().toISOString());
-      toast.success("Best Practices analysis complete.");
-    } else {
-      setError(result.error || "BPA failed");
-      toast.error("BPA failed: " + result.error);
+    // Start the BPA job
+    const startResult = await api.startBpa(sp.server, sp.serverId, sp.credentialMode);
+    if (!startResult.success) {
+      setError(startResult.error || "Failed to start BPA");
+      toast.error("BPA failed: " + startResult.error);
+      setRunning(false);
+      return;
     }
 
-    setRunning(false);
+    // Poll for results every 3 seconds
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      const poll = await api.pollBpa(sp.server, sp.serverId, sp.credentialMode);
+      const r = poll as any;
+
+      if (r.status === "running") return; // Still going
+
+      // Done — stop polling
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+
+      if (r.success && r.findings) {
+        setFindings(r.findings || []);
+        setSummary(r.summary || { errors: 0, warnings: 0, information: 0 });
+        setScannedAt(r.scannedAt || new Date().toISOString());
+        toast.success("Best Practices analysis complete.");
+      } else if (!r.success) {
+        setError(r.error || "BPA failed");
+        toast.error("BPA failed: " + (r.error || "Unknown error"));
+      }
+      setRunning(false);
+    }, 3000);
   }, [getActiveServer]);
 
   if (!bridgeConnected) return null;
@@ -129,11 +156,11 @@ export function BpaPanel() {
 
       {findings && findings.length > 0 && (
         <CardContent className="pt-0 px-4 pb-4 space-y-2">
-          {findings.map((f, i) => {
+          {findings.map((f) => {
             const sev = SEVERITY_CONFIG[f.Severity] || SEVERITY_CONFIG.Information;
             const Icon = sev.icon;
             return (
-              <FindingItem key={i} finding={f} Icon={Icon} sev={sev} />
+              <FindingItem key={f.ResultId || f.Title} finding={f} Icon={Icon} sev={sev} />
             );
           })}
         </CardContent>

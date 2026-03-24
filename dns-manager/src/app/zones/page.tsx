@@ -274,6 +274,11 @@ export default function ZonesPage() {
   } = useStore();
 
   const [zoneSearch, setZoneSearch] = useState("");
+  const [zoneFilters, setZoneFilters] = useState<{
+    direction: "all" | "forward" | "reverse";
+    type: "all" | "Primary" | "Secondary" | "Stub" | "Forwarder";
+    adIntegrated: "all" | "yes" | "no";
+  }>({ direction: "all", type: "all", adIntegrated: "all" });
   const [loading, setLoading] = useState(false);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -303,7 +308,7 @@ export default function ZonesPage() {
     const params = getServerParams();
     setLoading(true);
     try {
-      const res = await api.listZones(params.server);
+      const res = await api.listZones(params.server, params.serverId, params.credentialMode);
       if (res.success && Array.isArray(res.zones)) {
         setZones(res.zones as Zone[]);
       } else {
@@ -506,10 +511,30 @@ export default function ZonesPage() {
   // ── Filtered zones ───────────────────────────────────────
 
   const filteredZones = useMemo(() => {
-    if (!zoneSearch.trim()) return zones;
-    const term = zoneSearch.toLowerCase();
-    return zones.filter((z) => z.ZoneName.toLowerCase().includes(term));
-  }, [zones, zoneSearch]);
+    let result = zones;
+    // Text search
+    if (zoneSearch.trim()) {
+      const term = zoneSearch.toLowerCase();
+      result = result.filter((z) => z.ZoneName.toLowerCase().includes(term));
+    }
+    // Direction filter
+    if (zoneFilters.direction === "forward") {
+      result = result.filter((z) => !z.IsReverseLookupZone);
+    } else if (zoneFilters.direction === "reverse") {
+      result = result.filter((z) => z.IsReverseLookupZone);
+    }
+    // Type filter
+    if (zoneFilters.type !== "all") {
+      result = result.filter((z) => z.ZoneType === zoneFilters.type);
+    }
+    // AD-integrated filter
+    if (zoneFilters.adIntegrated === "yes") {
+      result = result.filter((z) => z.IsDsIntegrated);
+    } else if (zoneFilters.adIntegrated === "no") {
+      result = result.filter((z) => !z.IsDsIntegrated);
+    }
+    return result;
+  }, [zones, zoneSearch, zoneFilters]);
 
   // ── Filtered records ─────────────────────────────────────
 
@@ -566,6 +591,24 @@ export default function ZonesPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-zinc-400">
               Zones
+              {zones.length > 0 && (
+                <span className="ml-1.5 text-[10px] font-mono text-zinc-600">
+                  {filteredZones.length === zones.length
+                    ? zones.length
+                    : `${filteredZones.length}/${zones.length}`}
+                </span>
+              )}
+              {(zoneSearch || zoneFilters.direction !== "all" || zoneFilters.type !== "all" || zoneFilters.adIntegrated !== "all") && (
+                <button
+                  onClick={() => {
+                    setZoneSearch("");
+                    setZoneFilters({ direction: "all", type: "all", adIntegrated: "all" });
+                  }}
+                  className="ml-2 text-[10px] text-amber-400 hover:text-amber-300 transition-colors"
+                >
+                  Reset
+                </button>
+              )}
             </CardTitle>
             <Button size="sm" variant="outline" onClick={() => setCreateZoneOpen(true)}>
               Create
@@ -577,6 +620,53 @@ export default function ZonesPage() {
             onChange={(e) => setZoneSearch(e.target.value)}
             className="mt-2 bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
           />
+          {/* Zone Filters */}
+          <div className="mt-2 flex flex-wrap gap-1">
+            {/* Direction */}
+            {(["all", "forward", "reverse"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setZoneFilters((f) => ({ ...f, direction: v }))}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                  zoneFilters.direction === v
+                    ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
+                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                }`}
+              >
+                {v === "all" ? "All" : v === "forward" ? "Forward" : "Reverse"}
+              </button>
+            ))}
+            <span className="w-px h-4 self-center bg-zinc-700" />
+            {/* Zone Type */}
+            {(["all", "Primary", "Secondary", "Stub", "Forwarder"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setZoneFilters((f) => ({ ...f, type: v }))}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                  zoneFilters.type === v
+                    ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
+                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                }`}
+              >
+                {v === "all" ? "Any Type" : v}
+              </button>
+            ))}
+            <span className="w-px h-4 self-center bg-zinc-700" />
+            {/* AD Integrated */}
+            {(["all", "yes", "no"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setZoneFilters((f) => ({ ...f, adIntegrated: v }))}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                  zoneFilters.adIntegrated === v
+                    ? "bg-cyan-500/15 text-cyan-400 border-cyan-500/40"
+                    : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                }`}
+              >
+                {v === "all" ? "Any AD" : v === "yes" ? "AD-Integrated" : "File-Backed"}
+              </button>
+            ))}
+          </div>
         </CardHeader>
         <Separator className="bg-zinc-800" />
         <CardContent className="flex-1 p-0 overflow-hidden">
