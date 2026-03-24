@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { NetworkDnsConfig, ResolverData, Server } from "@/lib/types";
@@ -65,6 +65,16 @@ function sp(server: Server) {
   };
 }
 
+// Normalize forwarder data — IPAddress may be a string, object, or array
+function normalizeForwarders(raw: any): { IPAddress: string[]; UseRootHint?: boolean; Timeout?: number } {
+  if (!raw) return { IPAddress: [] };
+  let ips = raw.IPAddress;
+  if (!ips) ips = [];
+  else if (typeof ips === "string") ips = [ips];
+  else if (!Array.isArray(ips)) ips = [];
+  return { ...raw, IPAddress: ips };
+}
+
 function addressFamilyLabel(af: number) {
   return af === 2 ? "IPv4" : af === 23 ? "IPv6" : `AF${af}`;
 }
@@ -75,15 +85,13 @@ function addressFamilyColor(af: number) {
     : "bg-purple-500/20 text-purple-400 border-purple-500/30";
 }
 
-// Sanitize Mermaid SVG output — strip script tags and event handlers
+// Sanitize Mermaid SVG output — strip script tags and event handlers.
+// Uses text/html parser because Mermaid emits <br/> inside <foreignObject>
+// which is invalid XML and breaks image/svg+xml parsing.
 function sanitizeSvg(svg: string): string {
-  const div = document.createElement("div");
-  div.textContent = ""; // clear
   const parser = new DOMParser();
-  const doc = parser.parseFromString(svg, "image/svg+xml");
-  // Remove all script elements
+  const doc = parser.parseFromString(svg, "text/html");
   doc.querySelectorAll("script").forEach((el) => el.remove());
-  // Remove on* event attributes from all elements
   doc.querySelectorAll("*").forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("on")) {
@@ -91,7 +99,9 @@ function sanitizeSvg(svg: string): string {
       }
     }
   });
-  return new XMLSerializer().serializeToString(doc.documentElement);
+  const svgEl = doc.querySelector("svg");
+  if (!svgEl) return svg;
+  return svgEl.outerHTML;
 }
 
 // Generate Mermaid graph definition from resolver data
@@ -168,26 +178,43 @@ function buildMermaidGraph(allData: ServerResolverData[]): string {
     }
   }
 
-  // Render edges with different styles
+  // Render edges with per-edge color styles via linkStyle index
+  let edgeIndex = 0;
+  const ipStackIndices: number[] = [];
+  const forwarderIndices: number[] = [];
+  const bothIndices: number[] = [];
+
   for (const edge of ipStackEdges) {
     const [src, tgt] = edge.split("->");
     if (forwarderEdges.has(edge)) {
-      // Both IP stack AND forwarder — dashed
       lines.push(`  ${src} -. "IP Stack + Forwarder" .-> ${tgt}`);
+      bothIndices.push(edgeIndex++);
       forwarderEdges.delete(edge);
     } else {
       lines.push(`  ${src} -- "IP Stack" --> ${tgt}`);
+      ipStackIndices.push(edgeIndex++);
     }
   }
   for (const edge of forwarderEdges) {
     const [src, tgt] = edge.split("->");
     lines.push(`  ${src} == "Forwarder" ==> ${tgt}`);
+    forwarderIndices.push(edgeIndex++);
   }
 
-  // Styles
+  // Node styles
   lines.push(`  classDef managed fill:#0e4066,stroke:#22d3ee,stroke-width:2px,color:#e2e8f0`);
   lines.push(`  classDef external fill:#1a1a2e,stroke:#f59e0b,stroke-width:1px,color:#e2e8f0`);
-  lines.push(`  linkStyle default stroke:#94a3b8`);
+
+  // Per-edge color styles
+  if (ipStackIndices.length > 0) {
+    lines.push(`  linkStyle ${ipStackIndices.join(",")} stroke:#22d3ee,stroke-width:2px`);
+  }
+  if (forwarderIndices.length > 0) {
+    lines.push(`  linkStyle ${forwarderIndices.join(",")} stroke:#f59e0b,stroke-width:3px`);
+  }
+  if (bothIndices.length > 0) {
+    lines.push(`  linkStyle ${bothIndices.join(",")} stroke:#34d399,stroke-width:2px`);
+  }
 
   return lines.join("\n");
 }
@@ -201,6 +228,15 @@ export default function ResolversPage() {
   const mermaidRef = useRef<HTMLDivElement>(null);
   const [mermaidError, setMermaidError] = useState<string | null>(null);
 
+  const pollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
+
+  // Clean up polls on unmount
+  useEffect(() => {
+    return () => {
+      pollTimers.current.forEach(clearInterval);
+    };
+  }, []);
+
   const fetchAll = useCallback(async () => {
     const onlineServers = servers.filter((s) => s.status === "online");
     if (onlineServers.length === 0) {
@@ -208,26 +244,65 @@ export default function ResolversPage() {
       return;
     }
 
+    // Clear any existing polls
+    pollTimers.current.forEach(clearInterval);
+    pollTimers.current = [];
+
     setLoading(true);
-    const results: ServerResolverData[] = await Promise.all(
-      onlineServers.map(async (server) => {
+
+    // Start jobs for all servers
+    await Promise.all(
+      onlineServers.map((server) => {
         const p = sp(server);
-        const res = await api.getResolvers(p.server, p.serverId, p.credentialMode);
-        if (res.success) {
-          return {
-            server,
-            data: {
-              interfaces: (res as any).interfaces || [],
-              forwarders: (res as any).forwarders || { IPAddress: [] },
-              listeningAddresses: (res as any).listeningAddresses || [],
-            },
-          };
-        }
-        return { server, data: null, error: (res as any).error || "Failed to fetch" };
+        return api.startResolvers(p.server, p.serverId, p.credentialMode);
       })
     );
-    setResolverData(results);
-    setLoading(false);
+
+    // Poll each server until all complete
+    const pending = new Map(onlineServers.map((s) => [s.id, s]));
+    const results = new Map<string, ServerResolverData>();
+
+    const timer = setInterval(async () => {
+      const checks = [...pending.entries()].map(async ([id, server]) => {
+        const p = sp(server);
+        const res = await api.pollResolvers(p.server, p.serverId, p.credentialMode);
+        const r = res as any;
+
+        if (r.status === "running") return; // Still going
+
+        pending.delete(id);
+        if (r.success && r.interfaces) {
+          results.set(id, {
+            server,
+            data: {
+              interfaces: r.interfaces || [],
+              forwarders: normalizeForwarders(r.forwarders),
+              listeningAddresses: r.listeningAddresses || [],
+            },
+          });
+        } else {
+          results.set(id, {
+            server,
+            data: null,
+            error: r.error || "Failed to fetch",
+          });
+        }
+      });
+
+      await Promise.all(checks);
+
+      // Update UI with whatever we have so far
+      setResolverData(
+        onlineServers.map((s) => results.get(s.id) || { server: s, data: null })
+      );
+
+      if (pending.size === 0) {
+        clearInterval(timer);
+        setLoading(false);
+      }
+    }, 2000);
+
+    pollTimers.current.push(timer);
   }, [servers]);
 
   useEffect(() => {
@@ -285,7 +360,8 @@ export default function ResolversPage() {
         ipStackDns.add(addr);
       }
     }
-    const forwarderIPs = new Set(data.forwarders?.IPAddress || []);
+    const fwdList = Array.isArray(data.forwarders?.IPAddress) ? data.forwarders.IPAddress : [];
+    const forwarderIPs = new Set(fwdList);
 
     const onlyInIpStack = [...ipStackDns].filter((ip) => !forwarderIPs.has(ip));
     const onlyInForwarders = [...forwarderIPs].filter((ip) => !ipStackDns.has(ip));

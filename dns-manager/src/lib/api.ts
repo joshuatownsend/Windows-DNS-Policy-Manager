@@ -5,12 +5,16 @@ import type {
 } from "./types";
 
 const REQUEST_TIMEOUT = 15000;
+// Next.js rewrite proxy has an ~15s timeout in dev mode that cannot be configured.
+// For long-running endpoints, call the bridge directly to bypass the proxy.
+const BRIDGE_DIRECT = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://127.0.0.1:8650";
 
 async function request<T = unknown>(
   method: string,
   path: string,
   body?: unknown,
-  timeout?: number
+  timeout?: number,
+  direct?: boolean
 ): Promise<ApiResponse<T> & Record<string, unknown>> {
   const opts: RequestInit = {
     method,
@@ -26,7 +30,8 @@ async function request<T = unknown>(
   const timeoutId = setTimeout(() => controller.abort(), timeout || REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(path, opts);
+    const url = direct ? `${BRIDGE_DIRECT}${path}` : path;
+    const res = await fetch(url, opts);
     clearTimeout(timeoutId);
     try {
       return await res.json();
@@ -370,8 +375,11 @@ export const api = {
   setServerSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
 
-  getResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode), undefined, 45000),
+  startResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/resolvers" + serverParams(server, serverId, credentialMode), undefined, 15000, true),
+
+  pollResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode), undefined, 15000, true),
 
   getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
@@ -508,8 +516,11 @@ export const api = {
     request("GET", `/api/zones/${encodeURIComponent(zoneName)}/delegations${serverParams(server, serverId, credentialMode)}`),
 
   // BPA
-  runBpa: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode), undefined, 180000),
+  startBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode), undefined, 15000, true),
+
+  pollBpa: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/bpa" + serverParams(server, serverId, credentialMode), undefined, 15000, true),
 
   // Encryption Protocol (DoH/DoT — Server 2025+)
   getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>

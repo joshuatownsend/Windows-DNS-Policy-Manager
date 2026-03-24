@@ -143,6 +143,11 @@ export default function ServerPage() {
   const [testingAll, setTestingAll] = useState(false);
 
   const didInit = useRef(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch — Zustand persist loads from localStorage
+  // after SSR, so server/client HTML differ until mounted.
+  useEffect(() => { setMounted(true); }, []);
 
   // ── Bootstrap default localhost server ────────────────────
   useEffect(() => {
@@ -238,7 +243,10 @@ export default function ServerPage() {
   // ── Test all servers ──────────────────────────────────────
   const testAllServers = useCallback(async () => {
     setTestingAll(true);
-    await Promise.allSettled(servers.map((s) => testServer(s)));
+    // Test servers sequentially to avoid overwhelming the single-threaded bridge
+    for (const s of servers) {
+      await testServer(s);
+    }
     setTestingAll(false);
   }, [servers, testServer]);
 
@@ -392,6 +400,8 @@ export default function ServerPage() {
   const showCredentialFields = form.credentialMode !== "currentUser";
 
   // ── Render ────────────────────────────────────────────────
+  if (!mounted) return null;
+
   return (
     <div className="space-y-6">
       {/* Header */}

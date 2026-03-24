@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - **Saved/session credentials with remote DNS servers** — DNS Server cmdlets don't accept `-Credential` directly. Bridge now creates a `CimSession` with DCOM protocol for alternate credentials, which all DNS Server cmdlets accept. Previously, any operation using saved or session credentials on a remote server would fail with "A parameter cannot be found that matches parameter name 'Credential'."
 - **PowerShell 5.1 compatibility** — Replaced `??` null-coalescing operators (PowerShell 7+) with `if/else` expressions throughout bridge.ps1.
+- **BPA no longer blocks the bridge** — BPA now runs as a background job (`Start-Job`) with frontend polling every 3s. Previously, the single-threaded bridge became unresponsive for the entire duration of a BPA scan (1-3 minutes).
+- **Bridge resilience** — Main listener loop now catches errors that escape individual handlers, preventing bridge crashes.
+- **Long-running API calls bypass Next.js proxy** — Resolvers and BPA endpoints call the bridge directly to avoid the ~15s dev-mode proxy timeout.
 
 ### Added
 
