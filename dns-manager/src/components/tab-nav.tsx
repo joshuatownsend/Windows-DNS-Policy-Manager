@@ -24,8 +24,7 @@ export function TabNav() {
   return (
     <nav
       className="flex items-center gap-1 overflow-x-auto scrollbar-none py-2"
-      role="tablist"
-      aria-label="Policy management tabs"
+      aria-label="Policy management"
     >
       {tabs.map((tab) => {
         const active =
@@ -34,8 +33,7 @@ export function TabNav() {
           <Link
             key={tab.href}
             href={tab.href}
-            role="tab"
-            aria-selected={active}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors min-h-[36px] flex items-center",
               active

@@ -464,12 +464,21 @@ export default function BackupPage() {
                 : "border-border hover:border-foreground/20"
             }`}
             onClick={() => importFileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                importFileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               setDragOverImport(true);
             }}
             onDragLeave={() => setDragOverImport(false)}
             onDrop={handleImportDrop}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload policy backup JSON file"
           >
             <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
             <p className="text-sm text-muted-foreground">

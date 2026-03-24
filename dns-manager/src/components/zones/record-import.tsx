@@ -176,9 +176,18 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
               dragOver ? "border-cyan-500 bg-cyan-950/20" : "border-border hover:border-foreground/20"
             }`}
             onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload DNS records from CSV file"
           >
             <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
             <p className="text-sm text-foreground/80">Drop a CSV file here or click to browse</p>

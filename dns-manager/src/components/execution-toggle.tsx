@@ -17,13 +17,12 @@ export function ExecutionToggle() {
   const bridgeConnected = useStore((s) => s.bridgeConnected);
   const executionMode = useStore((s) => s.executionMode);
   const setExecutionMode = useStore((s) => s.setExecutionMode);
-  const getActiveServer = useStore((s) => s.getActiveServer);
+  const activeServer = useStore((s) => s.getActiveServer());
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!bridgeConnected) return null;
 
   const isLive = executionMode === "execute";
-  const activeServer = getActiveServer();
   const serverName = activeServer?.name || activeServer?.hostname || "the connected server";
 
   function handleToggle(checked: boolean) {
