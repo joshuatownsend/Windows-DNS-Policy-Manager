@@ -9,7 +9,8 @@ const REQUEST_TIMEOUT = 15000;
 async function request<T = unknown>(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  timeout?: number
 ): Promise<ApiResponse<T> & Record<string, unknown>> {
   const opts: RequestInit = {
     method,
@@ -22,7 +23,7 @@ async function request<T = unknown>(
 
   const controller = new AbortController();
   opts.signal = controller.signal;
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const timeoutId = setTimeout(() => controller.abort(), timeout || REQUEST_TIMEOUT);
 
   try {
     const res = await fetch(path, opts);
@@ -370,7 +371,7 @@ export const api = {
     request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
 
   getResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode), undefined, 45000),
 
   getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
@@ -508,7 +509,7 @@ export const api = {
 
   // BPA
   runBpa: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
+    request("POST", "/api/server/bpa" + serverParams(server, serverId, credentialMode), undefined, 180000),
 
   // Encryption Protocol (DoH/DoT — Server 2025+)
   getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>

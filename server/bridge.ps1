@@ -48,17 +48,22 @@ function Send-Response {
     $json = ConvertTo-JsonSafe $Body
     $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
 
-    $Response.StatusCode = $StatusCode
-    $Response.ContentType = 'application/json; charset=utf-8'
-    $Response.ContentLength64 = $buffer.Length
+    try {
+        $Response.StatusCode = $StatusCode
+        $Response.ContentType = 'application/json; charset=utf-8'
+        $Response.ContentLength64 = $buffer.Length
 
-    # CORS headers - safe because localhost-only
-    $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+        # CORS headers - safe because localhost-only
+        $Response.Headers.Add('Access-Control-Allow-Origin', '*')
+        $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
 
-    $Response.OutputStream.Write($buffer, 0, $buffer.Length)
-    $Response.OutputStream.Close()
+        $Response.OutputStream.Write($buffer, 0, $buffer.Length)
+        $Response.OutputStream.Close()
+    } catch {
+        # Client may have disconnected (e.g., timeout). Log and move on.
+        Write-Log "Send-Response failed (client likely disconnected): $($_.Exception.Message)" 'WARN'
+    }
 }
 
 function Send-Preflight {
@@ -2382,45 +2387,87 @@ function Handle-RunBpa {
         $p = Resolve-ServerConfigParams -Request $Request
         $modelId = 'Microsoft/Windows/DNSServer'
 
-        # BPA cmdlets only accept -ComputerName, not -CimSession.
-        # Extract ComputerName from CimSession if present.
-        $bpaParams = @{}
+        # BPA cmdlets don't accept -CimSession or -Credential.
+        # For remote servers we must use Invoke-Command to run BPA locally on the target.
+        $remoteHost = $null
+        $remoteCred = $null
         if ($p.ContainsKey('CimSession')) {
-            $bpaParams['ComputerName'] = $p['CimSession'].ComputerName
+            $remoteHost = $p['CimSession'].ComputerName
+            $qs = $Request.QueryString
+            $sid = $qs['serverId']
+            $cm  = $qs['credentialMode']
+            if ($cm -eq 'savedCredential' -and $sid) {
+                $credFile = Join-Path $script:CredStorePath "$sid.cred"
+                if (Test-Path $credFile) {
+                    $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+                    $securePass = $credData.Password | ConvertTo-SecureString
+                    $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
+                }
+            } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
+                $remoteCred = $script:SessionCredentials[$sid]
+            }
         } elseif ($p.ContainsKey('ComputerName')) {
-            $bpaParams['ComputerName'] = $p['ComputerName']
+            $remoteHost = $p['ComputerName']
         }
 
-        # Invoke the BPA model
-        try {
-            Invoke-BpaModel -ModelId $modelId @bpaParams -ErrorAction Stop | Out-Null
-        } catch {
-            # BPA model may not be available on all systems
-            Send-Response -Response $Response -Body @{
-                success = $false
-                error   = "BPA model not available: $($_.Exception.Message). Ensure the DNS Server role is installed."
-            } -StatusCode 500
-            return
-        }
+        if ($remoteHost) {
+            # Run BPA on the remote machine via Invoke-Command
+            $invokeParams = @{ ComputerName = $remoteHost; ErrorAction = 'Stop' }
+            if ($remoteCred) { $invokeParams['Credential'] = $remoteCred }
 
-        # Get results
-        $results = @(Get-BpaResult -ModelId $modelId @bpaParams -ErrorAction Stop)
-
-        # Categorize
-        $findings = $results | ForEach-Object {
-            @{
-                Severity    = $_.Severity.ToString()
-                Category    = $_.Category.ToString()
-                Title       = $_.Title
-                Problem     = $_.Problem
-                Impact      = $_.Impact
-                Resolution  = $_.Resolution
-                Compliance  = $_.Compliance.ToString()
-                Source      = $_.Source
-                ResultId    = $_.ResultId
+            try {
+                $findings = Invoke-Command @invokeParams -ScriptBlock {
+                    param($mid)
+                    Invoke-BpaModel -ModelId $mid -ErrorAction Stop | Out-Null
+                    Get-BpaResult -ModelId $mid -ErrorAction Stop | ForEach-Object {
+                        @{
+                            Severity   = $_.Severity.ToString()
+                            Category   = $_.Category.ToString()
+                            Title      = $_.Title
+                            Problem    = $_.Problem
+                            Impact     = $_.Impact
+                            Resolution = $_.Resolution
+                            Compliance = $_.Compliance.ToString()
+                            Source     = $_.Source
+                            ResultId   = $_.ResultId
+                        }
+                    }
+                } -ArgumentList $modelId
+            } catch {
+                Send-Response -Response $Response -Body @{
+                    success = $false
+                    error   = "BPA model not available: $($_.Exception.Message). Ensure the DNS Server role is installed."
+                } -StatusCode 500
+                return
+            }
+        } else {
+            # Local execution
+            try {
+                Invoke-BpaModel -ModelId $modelId -ErrorAction Stop | Out-Null
+            } catch {
+                Send-Response -Response $Response -Body @{
+                    success = $false
+                    error   = "BPA model not available: $($_.Exception.Message). Ensure the DNS Server role is installed."
+                } -StatusCode 500
+                return
+            }
+            $results = @(Get-BpaResult -ModelId $modelId -ErrorAction Stop)
+            $findings = $results | ForEach-Object {
+                @{
+                    Severity    = $_.Severity.ToString()
+                    Category    = $_.Category.ToString()
+                    Title       = $_.Title
+                    Problem     = $_.Problem
+                    Impact      = $_.Impact
+                    Resolution  = $_.Resolution
+                    Compliance  = $_.Compliance.ToString()
+                    Source      = $_.Source
+                    ResultId    = $_.ResultId
+                }
             }
         }
 
+        $findings = @($findings)
         $summary = @{
             errors      = @($findings | Where-Object { $_.Severity -eq 'Error' }).Count
             warnings    = @($findings | Where-Object { $_.Severity -eq 'Warning' }).Count
@@ -2428,9 +2475,9 @@ function Handle-RunBpa {
         }
 
         Send-Response -Response $Response -Body @{
-            success  = $true
-            findings = $findings
-            summary  = $summary
+            success   = $true
+            findings  = $findings
+            summary   = $summary
             scannedAt = (Get-Date -Format 'o')
         }
     } catch {
