@@ -60,7 +60,7 @@ function Invoke-McpBuild {
 
 Write-Host ''
 Write-Host '  DNS Policy Manager Launcher' -ForegroundColor Cyan
-Write-Host '  ──────────────────────────────' -ForegroundColor DarkGray
+Write-Host '  ------------------------------' -ForegroundColor DarkGray
 
 # Check if bridge is already running
 try {
@@ -126,7 +126,7 @@ $startArgs = @{
 }
 
 if (-not $isAdmin) {
-    Write-Host '  Not elevated — requesting Administrator rights for bridge...' -ForegroundColor Yellow
+    Write-Host '  Not elevated - requesting Administrator rights for bridge...' -ForegroundColor Yellow
     $startArgs['Verb'] = 'RunAs'
 }
 
