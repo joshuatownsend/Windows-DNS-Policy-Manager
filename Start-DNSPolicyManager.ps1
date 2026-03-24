@@ -175,9 +175,9 @@ if ($ready) {
     }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {
         Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
-        $devCmd = "cd '$frontendDir'; npm run dev"
-        Start-Process powershell -ArgumentList "-NoProfile -Command `"$devCmd`"" -WindowStyle Normal
-        Start-Sleep -Milliseconds 2000
+        $devCmd = "Set-Location '$frontendDir'; npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
+        Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"$devCmd`"" -WindowStyle Normal
+        Start-Sleep -Milliseconds 3000
     }
 
     if (-not $NoBrowser) {
