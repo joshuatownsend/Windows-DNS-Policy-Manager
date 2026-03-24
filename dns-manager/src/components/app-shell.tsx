@@ -23,6 +23,7 @@ function ServerSwitcher() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration guard
   useEffect(() => { setMounted(true); }, []);
 
   // Close on outside click

@@ -4,17 +4,59 @@
     Launches the DNS Policy Manager bridge and opens the web UI.
 .DESCRIPTION
     Starts bridge.ps1 in background, waits for health check, then starts the Next.js frontend.
+    Optionally builds the MCP server and prints a registration command for AI agent integration.
+.PARAMETER Port
+    Bridge port (default 8650).
+.PARAMETER NoBrowser
+    Skip opening browser.
+.PARAMETER MCP
+    Build the MCP server and output a 'claude mcp add ...' registration command for AI agent integration (Claude Code, Cursor, etc.).
 #>
 
 param(
     [int]$Port = 8650,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$MCP
 )
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
 $frontendDir = Join-Path $scriptDir 'dns-manager'
+
+function Invoke-McpBuild {
+    param([string]$McpDir, [int]$BridgePort)
+    if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
+        Write-Host '  MCP server not found at mcp-server/.' -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-Path (Join-Path $McpDir 'node_modules'))) {
+        Write-Host '  Installing MCP server dependencies...' -ForegroundColor Yellow
+        Push-Location $McpDir
+        npm install --silent 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Host '  npm install failed. Check network and try again.' -ForegroundColor Red
+            return
+        }
+        Pop-Location
+    }
+    if (-not (Test-Path (Join-Path $McpDir 'dist\index.js'))) {
+        Write-Host '  Building MCP server...' -ForegroundColor Yellow
+        Push-Location $McpDir
+        npx tsc 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Host '  TypeScript build failed. Run "npx tsc" in mcp-server/ for details.' -ForegroundColor Red
+            return
+        }
+        Pop-Location
+    }
+    $mcpEntry = Join-Path $McpDir 'dist\index.js'
+    Write-Host "  MCP server built: $mcpEntry" -ForegroundColor Green
+    Write-Host '  Register with Claude Code:' -ForegroundColor Cyan
+    Write-Host "    claude mcp add dns-policy-manager -e BRIDGE_URL=http://127.0.0.1:${BridgePort} -- node `"$mcpEntry`"" -ForegroundColor DarkGray
+}
 
 Write-Host ''
 Write-Host '  DNS Policy Manager Launcher' -ForegroundColor Cyan
@@ -28,6 +70,9 @@ try {
         if (-not $NoBrowser) {
             Start-Process 'http://localhost:10010'
             Write-Host '  Browser opened.' -ForegroundColor Green
+        }
+        if ($MCP) {
+            Invoke-McpBuild -McpDir (Join-Path $scriptDir 'mcp-server') -BridgePort $Port
         }
         return
     }
@@ -130,6 +175,11 @@ if ($ready) {
         Start-Process 'http://localhost:10010'
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
+
+    # MCP Server (optional)
+    if ($MCP) {
+        Invoke-McpBuild -McpDir (Join-Path $scriptDir 'mcp-server') -BridgePort $Port
+    }
 } else {
     Write-Host '  Bridge failed to start.' -ForegroundColor Red
     # Show the log file contents for diagnostics
@@ -154,5 +204,6 @@ if ($ready) {
 
 Write-Host ''
 Write-Host "  API: http://127.0.0.1:${Port}/api/health" -ForegroundColor DarkGray
+Write-Host '  MCP: Start-DNSPolicyManager.ps1 -MCP to build the AI agent server' -ForegroundColor DarkGray
 Write-Host '  Press Ctrl+C in the bridge window to stop.' -ForegroundColor DarkGray
 Write-Host ''

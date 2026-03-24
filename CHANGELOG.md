@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **MCP Server** (`mcp-server/`) — Model Context Protocol server for AI agent integration:
+  - 31 read-only tools exposing DNS zones, records, policies, server config, DNSSEC, RRL, scavenging, and more
+  - Offline `dns_generate_policy_commands` tool produces PowerShell scripts for 8 policy scenarios without the bridge
+  - stdio transport for Claude Code, Cursor, VS Code, and other MCP-compatible AI tools
+  - Connects to the PowerShell bridge REST API — no bridge changes required
+  - Supports `currentUser` (Kerberos) and `savedCredential` (DPAPI) authentication modes
+  - Configurable via env vars: `BRIDGE_URL`, `DNS_DEFAULT_SERVER`, `DNS_SERVER_ID`, `DNS_CREDENTIAL_MODE`
+
 - **Blocklists tab** (position 06) — First-class RPZ/blocklist management:
   - **Quick Block** — single-domain block with DENY/IGNORE action in one click
   - **Bulk Import** — drag-and-drop .txt file import for mass domain blocking with progress bar

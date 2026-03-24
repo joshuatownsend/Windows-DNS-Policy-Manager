@@ -131,8 +131,10 @@ export default function BlocklistsPage() {
 
   useEffect(() => {
     if (!bridgeConnected) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- async data fetch on mount, setState is in the async callbacks */
     loadBlockPolicies();
     loadGlobalBlockList();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [bridgeConnected, loadBlockPolicies, loadGlobalBlockList]);
 
   // ── Quick Block handler ──
