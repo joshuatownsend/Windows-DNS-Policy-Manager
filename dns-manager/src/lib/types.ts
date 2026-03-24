@@ -212,6 +212,19 @@ export interface ForwarderConfig {
   [key: string]: unknown;
 }
 
+export interface NetworkDnsConfig {
+  InterfaceAlias: string;
+  AddressFamily: number; // 2 = IPv4, 23 = IPv6
+  ServerAddresses: string[];
+  InterfaceIndex: number;
+}
+
+export interface ResolverData {
+  interfaces: NetworkDnsConfig[];
+  forwarders: ForwarderConfig;
+  listeningAddresses: string[];
+}
+
 export interface RecursionConfig {
   Enable?: boolean;
   Timeout?: string;

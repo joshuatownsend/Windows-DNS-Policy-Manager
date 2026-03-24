@@ -12,8 +12,9 @@ const tabs = [
   { href: "/create", label: "Create", shortcut: "05" },
   { href: "/wizards", label: "Wizards", shortcut: "06" },
   { href: "/dnssec", label: "DNSSEC", shortcut: "07" },
-  { href: "/backup", label: "Backup", shortcut: "08" },
-  { href: "/powershell", label: "PowerShell", shortcut: "09" },
+  { href: "/resolvers", label: "Resolvers", shortcut: "08" },
+  { href: "/backup", label: "Backup", shortcut: "09" },
+  { href: "/powershell", label: "PowerShell", shortcut: "10" },
 ] as const;
 
 export function TabNav() {

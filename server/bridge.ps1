@@ -118,10 +118,10 @@ function Resolve-ServerCredential {
     )
 
     $params = @{}
-    if ($Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME) {
-        $params['ComputerName'] = $Hostname
-    }
+    $isRemote = $Hostname -and $Hostname -ne 'localhost' -and $Hostname -ne $env:COMPUTERNAME
 
+    # Resolve the PSCredential object (if any)
+    $cred = $null
     switch ($CredentialMode) {
         'savedCredential' {
             $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
@@ -131,14 +131,23 @@ function Resolve-ServerCredential {
             $credData = Get-Content $credFile -Raw | ConvertFrom-Json
             $securePass = $credData.Password | ConvertTo-SecureString
             $cred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-            $params['Credential'] = $cred
         }
         'session' {
             if ($script:SessionCredentials.ContainsKey($ServerId)) {
-                $params['Credential'] = $script:SessionCredentials[$ServerId]
+                $cred = $script:SessionCredentials[$ServerId]
             }
         }
         # 'currentUser' — no credential needed, Kerberos/NTLM handles auth
+    }
+
+    if ($isRemote -and $cred) {
+        # DNS Server cmdlets don't accept -Credential; they need -CimSession.
+        # Create a CIM session with the credential for splatting to DNS cmdlets.
+        $so = New-CimSessionOption -Protocol Dcom
+        $session = New-CimSession -ComputerName $Hostname -Credential $cred -SessionOption $so -ErrorAction Stop
+        $params['CimSession'] = $session
+    } elseif ($isRemote) {
+        $params['ComputerName'] = $Hostname
     }
 
     return $params
@@ -1148,8 +1157,8 @@ function Handle-RemoveZoneRecord {
         }
 
         $removeParams = @{ ZoneName = $ZoneName; InputObject = $target; Force = $true }
-        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $removeParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
 
@@ -1231,15 +1240,15 @@ function Handle-UpdateZoneRecord {
 
         # Remove old record
         $removeParams = @{ ZoneName = $ZoneName; InputObject = $oldTarget; Force = $true }
-        if ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $removeParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $removeParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $removeParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         Remove-DnsServerResourceRecord @removeParams -ErrorAction Stop
 
         # Step 2: Add new record
         $addParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
-        if ($fetchParams.ContainsKey('ComputerName')) { $addParams['ComputerName'] = $fetchParams['ComputerName'] }
-        if ($fetchParams.ContainsKey('Credential'))   { $addParams['Credential'] = $fetchParams['Credential'] }
+        if ($fetchParams.ContainsKey('CimSession'))    { $addParams['CimSession'] = $fetchParams['CimSession'] }
+        elseif ($fetchParams.ContainsKey('ComputerName')) { $addParams['ComputerName'] = $fetchParams['ComputerName'] }
 
         $newRd = $Body.newRecordData
 
@@ -1297,8 +1306,8 @@ function Handle-UpdateZoneRecord {
             Write-Log "Update failed, rolling back: $($_.Exception.Message)" 'WARN'
             try {
                 $rollbackParams = @{ ZoneName = $ZoneName; Name = $Body.recordName }
-                if ($fetchParams.ContainsKey('ComputerName')) { $rollbackParams['ComputerName'] = $fetchParams['ComputerName'] }
-                if ($fetchParams.ContainsKey('Credential'))   { $rollbackParams['Credential'] = $fetchParams['Credential'] }
+                if ($fetchParams.ContainsKey('CimSession'))    { $rollbackParams['CimSession'] = $fetchParams['CimSession'] }
+                elseif ($fetchParams.ContainsKey('ComputerName')) { $rollbackParams['ComputerName'] = $fetchParams['ComputerName'] }
 
                 switch ($Body.recordType) {
                     'A' {
@@ -1831,7 +1840,8 @@ function Resolve-ServerConfigParams {
     $serverId = $qs['serverId']
     $credentialMode = $qs['credentialMode']
     if ($serverId) {
-        return Resolve-ServerCredential -ServerId $serverId -CredentialMode ($credentialMode ?? 'currentUser') -Hostname $server
+        $mode = if ($credentialMode) { $credentialMode } else { 'currentUser' }
+        return Resolve-ServerCredential -ServerId $serverId -CredentialMode $mode -Hostname $server
     }
     $params = @{}
     if ($server -and $server -ne 'localhost' -and $server -ne $env:COMPUTERNAME) {
@@ -1874,6 +1884,74 @@ function Handle-SetServerSettings {
         if ($Body.ListeningIPAddress) { $splatParams['ListeningIPAddress'] = $Body.ListeningIPAddress }
         Set-DnsServerSetting @splatParams -ErrorAction Stop
         Send-Response -Response $Response -Body @{ success = $true }
+    } catch {
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
+    }
+}
+
+function Handle-GetResolvers {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request
+    )
+    try {
+        $p = Resolve-ServerConfigParams -Request $Request
+
+        # 1. Get DNS client server addresses (IP stack DNS config per adapter)
+        #    This cmdlet is local-only, so for remote servers use Invoke-Command.
+        #    Extract hostname/credential from CimSession or ComputerName.
+        $remoteHost = $null
+        $remoteCred = $null
+        if ($p['CimSession']) {
+            $remoteHost = $p['CimSession'].ComputerName
+            # Re-resolve credential for Invoke-Command (CimSession doesn't expose it)
+            $qs = $Request.QueryString
+            $sid = $qs['serverId']
+            $cm  = $qs['credentialMode']
+            if ($cm -eq 'savedCredential' -and $sid) {
+                $credFile = Join-Path $script:CredStorePath "$sid.cred"
+                if (Test-Path $credFile) {
+                    $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+                    $securePass = $credData.Password | ConvertTo-SecureString
+                    $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
+                }
+            } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
+                $remoteCred = $script:SessionCredentials[$sid]
+            }
+        } elseif ($p['ComputerName']) {
+            $remoteHost = $p['ComputerName']
+        }
+
+        if ($remoteHost) {
+            $invokeParams = @{ ComputerName = $remoteHost; ErrorAction = 'Stop' }
+            if ($remoteCred) { $invokeParams['Credential'] = $remoteCred }
+            $interfaces = Invoke-Command @invokeParams -ScriptBlock {
+                Get-DnsClientServerAddress -ErrorAction Stop |
+                    Where-Object { $_.AddressFamily -in @(2, 23) -and $_.ServerAddresses.Count -gt 0 } |
+                    Select-Object InterfaceAlias, AddressFamily, ServerAddresses, InterfaceIndex
+            }
+        } else {
+            $interfaces = Get-DnsClientServerAddress -ErrorAction Stop |
+                Where-Object { $_.AddressFamily -in @(2, 23) -and $_.ServerAddresses.Count -gt 0 } |
+                Select-Object InterfaceAlias, AddressFamily, ServerAddresses, InterfaceIndex
+        }
+
+        # 2. Get DNS Server forwarder configuration
+        $forwarders = Get-DnsServerForwarder @p -ErrorAction Stop
+
+        # 3. Get DNS Server listening addresses
+        $settings = Get-DnsServerSetting @p -All -ErrorAction Stop
+        $listeningAddresses = @()
+        if ($settings.ListeningIPAddress) {
+            $listeningAddresses = @($settings.ListeningIPAddress)
+        }
+
+        Send-Response -Response $Response -Body @{
+            success            = $true
+            interfaces         = @($interfaces)
+            forwarders         = $forwarders
+            listeningAddresses = $listeningAddresses
+        }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -2279,7 +2357,14 @@ function Handle-TestDnsServer {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $result = Test-DnsServer @p -ErrorAction Stop
+        # Test-DnsServer only accepts -ComputerName, not -CimSession
+        $testParams = @{}
+        if ($p.ContainsKey('CimSession')) {
+            $testParams['ComputerName'] = $p['CimSession'].ComputerName
+        } elseif ($p.ContainsKey('ComputerName')) {
+            $testParams['ComputerName'] = $p['ComputerName']
+        }
+        $result = Test-DnsServer @testParams -ErrorAction Stop
         Send-Response -Response $Response -Body @{ success = $true; result = $result }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2297,9 +2382,18 @@ function Handle-RunBpa {
         $p = Resolve-ServerConfigParams -Request $Request
         $modelId = 'Microsoft/Windows/DNSServer'
 
+        # BPA cmdlets only accept -ComputerName, not -CimSession.
+        # Extract ComputerName from CimSession if present.
+        $bpaParams = @{}
+        if ($p.ContainsKey('CimSession')) {
+            $bpaParams['ComputerName'] = $p['CimSession'].ComputerName
+        } elseif ($p.ContainsKey('ComputerName')) {
+            $bpaParams['ComputerName'] = $p['ComputerName']
+        }
+
         # Invoke the BPA model
         try {
-            Invoke-BpaModel -ModelId $modelId @p -ErrorAction Stop | Out-Null
+            Invoke-BpaModel -ModelId $modelId @bpaParams -ErrorAction Stop | Out-Null
         } catch {
             # BPA model may not be available on all systems
             Send-Response -Response $Response -Body @{
@@ -2310,7 +2404,7 @@ function Handle-RunBpa {
         }
 
         # Get results
-        $results = @(Get-BpaResult -ModelId $modelId @p -ErrorAction Stop)
+        $results = @(Get-BpaResult -ModelId $modelId @bpaParams -ErrorAction Stop)
 
         # Categorize
         $findings = $results | ForEach-Object {
@@ -2771,7 +2865,8 @@ function Handle-CreateZone {
         $p = @{}
         if ($Body.server) {
             if ($Body.serverId) {
-                $p = Resolve-ServerCredential -ServerId $Body.serverId -CredentialMode ($Body.credentialMode ?? 'currentUser') -Hostname $Body.server
+                $credMode = if ($Body.credentialMode) { $Body.credentialMode } else { 'currentUser' }
+                $p = Resolve-ServerCredential -ServerId $Body.serverId -CredentialMode $credMode -Hostname $Body.server
             } elseif ($Body.server -ne 'localhost' -and $Body.server -ne $env:COMPUTERNAME) {
                 $p['ComputerName'] = $Body.server
             }
@@ -2792,7 +2887,7 @@ function Handle-CreateZone {
             'Secondary' {
                 $splatParams = @{
                     Name          = $Body.zoneName
-                    ZoneFile      = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                    ZoneFile      = if ($Body.zoneFile) { $Body.zoneFile } else { "$($Body.zoneName).dns" }
                     MasterServers = [string[]]$Body.masterServers
                 }
                 foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
@@ -2807,7 +2902,7 @@ function Handle-CreateZone {
                 if ($Body.replicationScope) {
                     $splatParams['ReplicationScope'] = $Body.replicationScope
                 } else {
-                    $splatParams['ZoneFile'] = ($Body.zoneFile ?? "$($Body.zoneName).dns")
+                    $splatParams['ZoneFile'] = if ($Body.zoneFile) { $Body.zoneFile } else { "$($Body.zoneName).dns" }
                 }
                 Add-DnsServerStubZone @splatParams -ErrorAction Stop
             }
@@ -3671,6 +3766,12 @@ function Route-Request {
                     'GET'  { Handle-GetServerSettings -Response $response -Request $request }
                     'PUT'  { $body = Read-RequestBody -Request $request; Handle-SetServerSettings -Response $response -Request $request -Body $body }
                     default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
+                }
+            }
+            '^/api/server/resolvers$' {
+                switch ($method) {
+                    'GET'    { Handle-GetResolvers -Response $response -Request $request }
+                    default  { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }
             '^/api/server/forwarders$' {

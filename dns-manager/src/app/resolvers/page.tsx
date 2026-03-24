@@ -1,0 +1,554 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
+import type { NetworkDnsConfig, ResolverData, Server } from "@/lib/types";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import {
+  RefreshCw,
+  Network,
+  ArrowRightLeft,
+  AlertTriangle,
+  Globe,
+  Server as ServerIcon,
+} from "lucide-react";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// Well-known public DNS resolvers for labeling
+const KNOWN_RESOLVERS: Record<string, string> = {
+  "8.8.8.8": "Google DNS",
+  "8.8.4.4": "Google DNS",
+  "1.1.1.1": "Cloudflare",
+  "1.0.0.1": "Cloudflare",
+  "9.9.9.9": "Quad9",
+  "149.112.112.112": "Quad9",
+  "208.67.222.222": "OpenDNS",
+  "208.67.220.220": "OpenDNS",
+  "64.6.64.6": "Verisign",
+  "64.6.65.6": "Verisign",
+  "2001:4860:4860::8888": "Google DNS",
+  "2001:4860:4860::8844": "Google DNS",
+  "2606:4700:4700::1111": "Cloudflare",
+  "2606:4700:4700::1001": "Cloudflare",
+};
+
+interface ServerResolverData {
+  server: Server;
+  data: ResolverData | null;
+  error?: string;
+}
+
+function sp(server: Server) {
+  return {
+    server: server.hostname,
+    serverId: server.id,
+    credentialMode: server.credentialMode,
+  };
+}
+
+function addressFamilyLabel(af: number) {
+  return af === 2 ? "IPv4" : af === 23 ? "IPv6" : `AF${af}`;
+}
+
+function addressFamilyColor(af: number) {
+  return af === 2
+    ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+    : "bg-purple-500/20 text-purple-400 border-purple-500/30";
+}
+
+// Sanitize Mermaid SVG output — strip script tags and event handlers
+function sanitizeSvg(svg: string): string {
+  const div = document.createElement("div");
+  div.textContent = ""; // clear
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svg, "image/svg+xml");
+  // Remove all script elements
+  doc.querySelectorAll("script").forEach((el) => el.remove());
+  // Remove on* event attributes from all elements
+  doc.querySelectorAll("*").forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith("on")) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+  return new XMLSerializer().serializeToString(doc.documentElement);
+}
+
+// Generate Mermaid graph definition from resolver data
+function buildMermaidGraph(allData: ServerResolverData[]): string {
+  const lines: string[] = ["graph LR"];
+  const managedIPs = new Set<string>();
+  const nodeIds = new Map<string, string>();
+  let nodeCounter = 0;
+
+  function getNodeId(label: string): string {
+    const key = label.toLowerCase();
+    if (!nodeIds.has(key)) {
+      nodeIds.set(key, `N${nodeCounter++}`);
+    }
+    return nodeIds.get(key)!;
+  }
+
+  // Collect all listening IPs for managed servers
+  for (const entry of allData) {
+    if (!entry.data) continue;
+    for (const ip of entry.data.listeningAddresses) {
+      managedIPs.add(ip);
+    }
+  }
+
+  // Add managed server nodes
+  for (const entry of allData) {
+    const id = getNodeId(entry.server.hostname);
+    const label = entry.server.name || entry.server.hostname;
+    lines.push(`  ${id}["${label}"]:::managed`);
+  }
+
+  // Track edges to detect overlap (both IP stack and forwarder)
+  const ipStackEdges = new Set<string>();
+  const forwarderEdges = new Set<string>();
+
+  for (const entry of allData) {
+    if (!entry.data) continue;
+    const srcId = getNodeId(entry.server.hostname);
+
+    // IP stack DNS edges
+    for (const iface of entry.data.interfaces) {
+      for (const addr of iface.ServerAddresses) {
+        // Skip self-referencing
+        if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
+
+        const targetId = getNodeId(addr);
+        const edgeKey = `${srcId}->${targetId}`;
+        ipStackEdges.add(edgeKey);
+
+        // Add target node if not already a managed server
+        if (!managedIPs.has(addr)) {
+          const knownName = KNOWN_RESOLVERS[addr];
+          const label = knownName ? `${knownName}<br/>${addr}` : addr;
+          lines.push(`  ${targetId}("${label}"):::external`);
+        }
+      }
+    }
+
+    // Forwarder edges
+    const forwarderIPs = entry.data.forwarders?.IPAddress || [];
+    for (const addr of forwarderIPs) {
+      if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
+
+      const targetId = getNodeId(addr);
+      const edgeKey = `${srcId}->${targetId}`;
+      forwarderEdges.add(edgeKey);
+
+      if (!managedIPs.has(addr) && !ipStackEdges.has(edgeKey)) {
+        const knownName = KNOWN_RESOLVERS[addr];
+        const label = knownName ? `${knownName}<br/>${addr}` : addr;
+        lines.push(`  ${targetId}("${label}"):::external`);
+      }
+    }
+  }
+
+  // Render edges with different styles
+  for (const edge of ipStackEdges) {
+    const [src, tgt] = edge.split("->");
+    if (forwarderEdges.has(edge)) {
+      // Both IP stack AND forwarder — dashed
+      lines.push(`  ${src} -. "IP Stack + Forwarder" .-> ${tgt}`);
+      forwarderEdges.delete(edge);
+    } else {
+      lines.push(`  ${src} -- "IP Stack" --> ${tgt}`);
+    }
+  }
+  for (const edge of forwarderEdges) {
+    const [src, tgt] = edge.split("->");
+    lines.push(`  ${src} == "Forwarder" ==> ${tgt}`);
+  }
+
+  // Styles
+  lines.push(`  classDef managed fill:#0e4066,stroke:#22d3ee,stroke-width:2px,color:#e2e8f0`);
+  lines.push(`  classDef external fill:#1a1a2e,stroke:#f59e0b,stroke-width:1px,color:#e2e8f0`);
+  lines.push(`  linkStyle default stroke:#94a3b8`);
+
+  return lines.join("\n");
+}
+
+export default function ResolversPage() {
+  const servers = useStore((s) => s.servers);
+  const bridgeConnected = useStore((s) => s.bridgeConnected);
+
+  const [resolverData, setResolverData] = useState<ServerResolverData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const mermaidRef = useRef<HTMLDivElement>(null);
+  const [mermaidError, setMermaidError] = useState<string | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    const onlineServers = servers.filter((s) => s.status === "online");
+    if (onlineServers.length === 0) {
+      setResolverData([]);
+      return;
+    }
+
+    setLoading(true);
+    const results: ServerResolverData[] = await Promise.all(
+      onlineServers.map(async (server) => {
+        const p = sp(server);
+        const res = await api.getResolvers(p.server, p.serverId, p.credentialMode);
+        if (res.success) {
+          return {
+            server,
+            data: {
+              interfaces: (res as any).interfaces || [],
+              forwarders: (res as any).forwarders || { IPAddress: [] },
+              listeningAddresses: (res as any).listeningAddresses || [],
+            },
+          };
+        }
+        return { server, data: null, error: (res as any).error || "Failed to fetch" };
+      })
+    );
+    setResolverData(results);
+    setLoading(false);
+  }, [servers]);
+
+  useEffect(() => {
+    if (!bridgeConnected) return;
+    fetchAll();
+  }, [bridgeConnected, fetchAll]);
+
+  // Render Mermaid diagram when data changes
+  useEffect(() => {
+    const dataWithResults = resolverData.filter((d) => d.data);
+    if (dataWithResults.length === 0 || !mermaidRef.current) return;
+
+    const graphDef = buildMermaidGraph(dataWithResults);
+
+    (async () => {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "dark",
+          themeVariables: {
+            primaryColor: "#0e4066",
+            primaryBorderColor: "#22d3ee",
+            lineColor: "#94a3b8",
+            textColor: "#e2e8f0",
+            fontSize: "14px",
+          },
+          flowchart: { curve: "basis", padding: 16 },
+          securityLevel: "strict",
+        });
+
+        // Clear previous render
+        if (mermaidRef.current) {
+          mermaidRef.current.textContent = "";
+        }
+
+        const { svg } = await mermaid.render("resolver-diagram", graphDef);
+        if (mermaidRef.current) {
+          // Sanitize Mermaid SVG before inserting into DOM
+          const safeSvg = sanitizeSvg(svg);
+          mermaidRef.current.insertAdjacentHTML("afterbegin", safeSvg);
+          setMermaidError(null);
+        }
+      } catch (err: any) {
+        setMermaidError(err?.message || "Failed to render diagram");
+      }
+    })();
+  }, [resolverData]);
+
+  // Find discrepancies between IP stack and forwarder DNS for a server
+  function findDiscrepancies(data: ResolverData) {
+    const ipStackDns = new Set<string>();
+    for (const iface of data.interfaces) {
+      for (const addr of iface.ServerAddresses) {
+        ipStackDns.add(addr);
+      }
+    }
+    const forwarderIPs = new Set(data.forwarders?.IPAddress || []);
+
+    const onlyInIpStack = [...ipStackDns].filter((ip) => !forwarderIPs.has(ip));
+    const onlyInForwarders = [...forwarderIPs].filter((ip) => !ipStackDns.has(ip));
+
+    return { onlyInIpStack, onlyInForwarders };
+  }
+
+  const onlineCount = resolverData.filter((d) => d.data).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight">
+            Resolvers &amp; Topology
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            DNS resolver configuration and server interconnection diagram
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchAll}
+          disabled={loading || !bridgeConnected}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {!bridgeConnected && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertTriangle className="h-5 w-5 text-amber-400" />
+            <span className="text-sm text-amber-200">
+              Bridge is offline. Connect to a server to view resolver data.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {bridgeConnected && servers.filter((s) => s.status === "online").length === 0 && !loading && (
+        <Card className="border-muted">
+          <CardContent className="flex items-center gap-3 py-8 justify-center">
+            <ServerIcon className="h-5 w-5 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              No online servers. Go to the Server tab to connect.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Topology Diagram */}
+      {onlineCount > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Network className="h-4 w-4 text-cyan" />
+              DNS Topology
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Legend */}
+            <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-0.5 w-6 bg-cyan-400" />
+                IP Stack DNS
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-1 w-6 bg-amber-400" />
+                Forwarder
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-0.5 w-6 border-t-2 border-dashed border-emerald-400" />
+                Both (agreement)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-sm border-2 border-cyan-400 bg-[#0e4066]" />
+                Managed Server
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full border border-amber-400 bg-[#1a1a2e]" />
+                External Resolver
+              </span>
+            </div>
+
+            {mermaidError ? (
+              <div className="rounded border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-300">
+                Diagram error: {mermaidError}
+              </div>
+            ) : (
+              <div
+                ref={mermaidRef}
+                className="overflow-x-auto rounded-lg bg-background/50 p-4 [&_svg]:mx-auto [&_svg]:max-w-full"
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-server cards */}
+      {resolverData.map((entry) => (
+        <Card key={entry.server.id}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ServerIcon className="h-4 w-4 text-cyan" />
+              {entry.server.name || entry.server.hostname}
+              {entry.data?.listeningAddresses && entry.data.listeningAddresses.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  Listening: {entry.data.listeningAddresses.join(", ")}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {entry.error && (
+              <div className="rounded border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
+                {entry.error}
+              </div>
+            )}
+
+            {entry.data && (
+              <>
+                {/* IP Stack DNS Servers */}
+                <div>
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-cyan-300">
+                    <Globe className="h-3.5 w-3.5" />
+                    IP Stack DNS Servers
+                  </h3>
+                  {entry.data.interfaces.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[200px]">Interface</TableHead>
+                          <TableHead className="w-[100px]">Family</TableHead>
+                          <TableHead>DNS Servers</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {entry.data.interfaces.map((iface: NetworkDnsConfig, i: number) => (
+                          <TableRow key={`${iface.InterfaceIndex}-${iface.AddressFamily}-${i}`}>
+                            <TableCell className="font-mono text-xs">
+                              {iface.InterfaceAlias}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={addressFamilyColor(iface.AddressFamily)}
+                              >
+                                {addressFamilyLabel(iface.AddressFamily)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1.5">
+                                {iface.ServerAddresses.map((addr: string) => (
+                                  <Badge
+                                    key={addr}
+                                    variant="outline"
+                                    className="font-mono text-xs"
+                                  >
+                                    {addr}
+                                    {KNOWN_RESOLVERS[addr] && (
+                                      <span className="ml-1 text-muted-foreground">
+                                        ({KNOWN_RESOLVERS[addr]})
+                                      </span>
+                                    )}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No DNS servers configured on network interfaces.
+                    </p>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Forwarders */}
+                <div>
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    DNS Server Forwarders
+                  </h3>
+                  {(entry.data.forwarders?.IPAddress || []).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(entry.data.forwarders.IPAddress || []).map((ip: string) => (
+                        <Badge key={ip} variant="outline" className="font-mono text-xs">
+                          {ip}
+                          {KNOWN_RESOLVERS[ip] && (
+                            <span className="ml-1 text-muted-foreground">
+                              ({KNOWN_RESOLVERS[ip]})
+                            </span>
+                          )}
+                        </Badge>
+                      ))}
+                      <Badge
+                        variant="outline"
+                        className={
+                          entry.data.forwarders.UseRootHint
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                            : "bg-zinc-500/10 text-zinc-400 border-zinc-500/30"
+                        }
+                      >
+                        Root Hints: {entry.data.forwarders.UseRootHint ? "On" : "Off"}
+                      </Badge>
+                      {entry.data.forwarders.Timeout != null && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Timeout: {entry.data.forwarders.Timeout}s
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No forwarders configured.</p>
+                  )}
+                </div>
+
+                {/* Discrepancies */}
+                {(() => {
+                  const disc = findDiscrepancies(entry.data);
+                  if (disc.onlyInIpStack.length === 0 && disc.onlyInForwarders.length === 0) {
+                    return null;
+                  }
+                  return (
+                    <>
+                      <Separator />
+                      <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3">
+                        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Configuration Discrepancies
+                        </h3>
+                        <div className="space-y-1 text-xs text-amber-200/80">
+                          {disc.onlyInIpStack.length > 0 && (
+                            <p>
+                              <span className="font-medium">IP Stack only:</span>{" "}
+                              {disc.onlyInIpStack.join(", ")} — present in adapter DNS but not
+                              in forwarders
+                            </p>
+                          )}
+                          {disc.onlyInForwarders.length > 0 && (
+                            <p>
+                              <span className="font-medium">Forwarders only:</span>{" "}
+                              {disc.onlyInForwarders.join(", ")} — configured as forwarder but
+                              not in any adapter&apos;s DNS
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}

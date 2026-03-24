@@ -369,6 +369,9 @@ export const api = {
   setServerSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
 
+  getResolvers: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode)),
+
   getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
 
