@@ -370,7 +370,7 @@ export const api = {
 
   // Server Configuration
   getServerSettings: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/settings" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/settings" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setServerSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/settings" + serverParams(server, serverId, credentialMode), data),
@@ -382,7 +382,7 @@ export const api = {
     request("GET", "/api/server/resolvers" + serverParams(server, serverId, credentialMode), undefined, 15000, true),
 
   getForwarders: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   addForwarder: (ipAddress: string, server?: string, serverId?: string, credentialMode?: string) =>
     request("POST", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), { ipAddress }),
@@ -394,44 +394,44 @@ export const api = {
     request("PUT", "/api/server/forwarders" + serverParams(server, serverId, credentialMode), data),
 
   getCache: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/cache" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/cache" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   clearCache: (server?: string, serverId?: string, credentialMode?: string) =>
     request("DELETE", "/api/server/cache" + serverParams(server, serverId, credentialMode)),
 
   getRecursionSettings: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/recursion" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/recursion" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setRecursionSettings: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/recursion" + serverParams(server, serverId, credentialMode), data),
 
   getBlockList: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/blocklist" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/blocklist" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setBlockList: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/blocklist" + serverParams(server, serverId, credentialMode), data),
 
   getDiagnostics: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/diagnostics" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/diagnostics" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setDiagnostics: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/diagnostics" + serverParams(server, serverId, credentialMode), data),
 
   getStatistics: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/statistics" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/statistics" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   clearStatistics: (server?: string, serverId?: string, credentialMode?: string) =>
     request("DELETE", "/api/server/statistics" + serverParams(server, serverId, credentialMode)),
 
   // RRL
   getRRL: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/rrl" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/rrl" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setRRL: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/rrl" + serverParams(server, serverId, credentialMode), data),
 
   getRRLExceptions: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/rrl/exceptions" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/rrl/exceptions" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   addRRLException: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("POST", "/api/server/rrl/exceptions" + serverParams(server, serverId, credentialMode), data),
@@ -441,7 +441,7 @@ export const api = {
 
   // Scavenging
   getScavenging: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/scavenging" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/scavenging" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setScavenging: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/scavenging" + serverParams(server, serverId, credentialMode), data),
@@ -495,19 +495,19 @@ export const api = {
 
   // Niche: Root Hints, EDNS, DS Settings, Global Name Zone, Zone Delegations
   getRootHints: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/roothints" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/roothints" + serverParams(server, serverId, credentialMode), undefined, 45000, true),
 
   getEDns: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/edns" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/edns" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setEDns: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/edns" + serverParams(server, serverId, credentialMode), data),
 
   getDsSetting: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/dssetting" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/dssetting" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   getGlobalNameZone: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/globalnamezone" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/globalnamezone" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setGlobalNameZone: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/globalnamezone" + serverParams(server, serverId, credentialMode), data),
@@ -524,7 +524,7 @@ export const api = {
 
   // Encryption Protocol (DoH/DoT — Server 2025+)
   getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/encryption" + serverParams(server, serverId, credentialMode)),
+    request("GET", "/api/server/encryption" + serverParams(server, serverId, credentialMode), undefined, 30000, true),
 
   setEncryptionProtocol: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
     request("PUT", "/api/server/encryption" + serverParams(server, serverId, credentialMode), data),

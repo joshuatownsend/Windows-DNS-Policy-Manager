@@ -22,7 +22,7 @@ export function TabNav() {
 
   return (
     <nav
-      className="flex overflow-x-auto stagger-children"
+      className="flex overflow-x-auto scrollbar-none stagger-children border-b border-border"
       role="tablist"
       aria-label="Policy management tabs"
     >
@@ -57,8 +57,8 @@ export function TabNav() {
           </Link>
         );
       })}
-      {/* Trailing spacer fills remaining width with bottom border */}
-      <div className="flex-1 border-b border-border" />
+      {/* Trailing spacer fills remaining width */}
+      <div className="min-w-0 flex-1" />
     </nav>
   );
 }

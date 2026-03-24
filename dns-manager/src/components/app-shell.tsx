@@ -1,11 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
 import { HelpPanel } from "./help-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
+import { useStore } from "@/lib/store";
+
+function ActiveServerIndicator() {
+  const servers = useStore((s) => s.servers);
+  const activeServerId = useStore((s) => s.activeServerId);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) return null;
+
+  const active = servers.find((s) => s.id === activeServerId);
+  if (!active) return null;
+
+  const statusColor =
+    active.status === "online"
+      ? "bg-emerald-500"
+      : active.status === "offline"
+        ? "bg-red-500"
+        : active.status === "error"
+          ? "bg-amber-500"
+          : "bg-zinc-500";
+
+  return (
+    <div className="flex items-center gap-2.5 px-6 py-1.5 text-xs text-muted-foreground bg-background/50 border-b border-border/40">
+      <span className={`h-1.5 w-1.5 rounded-full ${statusColor} shrink-0`} />
+      <span className="font-mono tracking-wide">
+        {active.name || active.hostname}
+      </span>
+      <span className="text-muted-foreground/50">·</span>
+      <span className="text-muted-foreground/60">{active.hostname}</span>
+      {active.status === "online" && active.zoneCount > 0 && (
+        <>
+          <span className="text-muted-foreground/50">·</span>
+          <span className="text-muted-foreground/60">{active.zoneCount} zone{active.zoneCount !== 1 ? "s" : ""}</span>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
@@ -81,6 +120,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="header-rule" />
       </header>
+
+      {/* ── Active Server Indicator ─────────────────────── */}
+      <div className="mx-auto max-w-[1400px]">
+        <ActiveServerIndicator />
+      </div>
 
       {/* ── Tabs + Content ──────────────────────────────── */}
       <div className="mx-auto max-w-[1400px] px-6 pt-1">

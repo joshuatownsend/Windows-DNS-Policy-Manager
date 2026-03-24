@@ -39,33 +39,34 @@ function ConvertTo-JsonSafe {
     $InputObject | ConvertTo-Json -Depth 10 -Compress
 }
 
+function ConvertTo-PlainValue {
+    # Convert a single value to a JSON-safe primitive.
+    param($Val)
+    if ($null -eq $Val) { return $null }
+    if ($Val -is [string]) { return $Val }
+    if ($Val -is [bool]) { return $Val }
+    if ($Val -is [TimeSpan]) { return $Val.ToString() }
+    if ($Val -is [DateTime]) { return $Val.ToString('o') }
+    if ($Val -is [int] -or $Val -is [long] -or $Val -is [double] -or $Val -is [decimal] -or $Val -is [float]) { return $Val }
+    if ($Val -is [enum]) { return $Val.ToString() }
+    # Other ValueTypes (e.g. IPAddress is NOT a ValueType, but structs are)
+    if ($Val -is [ValueType]) { return $Val.ToString() }
+    # Arrays / collections — flatten each element
+    if ($Val -is [System.Collections.IEnumerable]) {
+        return @($Val | ForEach-Object { ConvertTo-PlainValue $_ })
+    }
+    # Everything else (IPAddress, CimInstance, etc.) — stringify
+    return "$Val"
+}
+
 function ConvertTo-PlainObject {
-    # Flatten a CIM/PSObject to a hashtable with only primitive values.
-    # Prevents [object Object] when CIM instances are serialized via runspaces.
+    # Flatten a CIM/PSObject to a hashtable with only JSON-safe values.
+    # Prevents [object Object] when CIM instances cross runspace/job boundaries.
     param($InputObject)
     if ($null -eq $InputObject) { return $null }
     $out = @{}
     foreach ($prop in $InputObject.PSObject.Properties) {
-        $val = $prop.Value
-        if ($null -eq $val) {
-            $out[$prop.Name] = $null
-        } elseif ($val -is [string]) {
-            $out[$prop.Name] = $val
-        } elseif ($val -is [ValueType]) {
-            $out[$prop.Name] = $val
-        } elseif ($val -is [TimeSpan]) {
-            $out[$prop.Name] = $val.ToString()
-        } elseif ($val -is [System.Collections.IEnumerable]) {
-            $out[$prop.Name] = @($val | ForEach-Object {
-                if ($_ -is [ValueType] -or $_ -is [string]) { $_ }
-                elseif ($null -ne $_.PSObject) { ConvertTo-PlainObject $_ }
-                else { "$_" }
-            })
-        } elseif ($null -ne $val.PSObject -and $val.PSObject.Properties.Count -gt 0) {
-            $out[$prop.Name] = ConvertTo-PlainObject $val
-        } else {
-            $out[$prop.Name] = "$val"
-        }
+        $out[$prop.Name] = ConvertTo-PlainValue $prop.Value
     }
     return $out
 }
@@ -2076,10 +2077,16 @@ function Handle-GetForwarders {
     )
     try {
         $p = Resolve-ServerConfigParams -Request $Request
-        $forwarders = Get-DnsServerForwarder @p -ErrorAction Stop
+        $raw = Get-DnsServerForwarder @p -ErrorAction Stop
+        # Explicitly flatten — IPAddress objects need .ToString() not recursion
+        $forwarders = @{
+            IPAddress   = @($raw.IPAddress | ForEach-Object { "$_" })
+            UseRootHint = [bool]$raw.UseRootHint
+            Timeout     = $raw.Timeout
+        }
         Send-Response -Response $Response -Body @{
             success    = $true
-            forwarders = (ConvertTo-PlainObject $forwarders)
+            forwarders = $forwarders
         }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
@@ -2645,20 +2652,20 @@ function Handle-GetEncryptionProtocol {
         [System.Net.HttpListenerRequest]$Request
     )
     try {
+        # Server 2025+ only — check cmdlet existence before calling
+        if (-not (Get-Command Get-DnsServerEncryptionProtocol -ErrorAction SilentlyContinue)) {
+            Send-Response -Response $Response -Body @{
+                success     = $false
+                error       = 'Encryption protocol settings require Windows Server 2025 or later.'
+                unsupported = $true
+            }
+            return
+        }
         $p = Resolve-ServerConfigParams -Request $Request
         $proto = Get-DnsServerEncryptionProtocol @p -ErrorAction Stop
         Send-Response -Response $Response -Body @{ success = $true; protocol = (ConvertTo-PlainObject $proto) }
     } catch {
-        # Server 2025+ only — graceful fallback
-        if ($_.Exception.Message -match 'not recognized|CommandNotFoundException') {
-            Send-Response -Response $Response -Body @{
-                success = $false
-                error   = 'Get-DnsServerEncryptionProtocol is not available on this server version (requires Server 2025+).'
-                unsupported = $true
-            }
-        } else {
-            Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
-        }
+        Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
 }
 
