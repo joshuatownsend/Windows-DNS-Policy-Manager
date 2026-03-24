@@ -96,10 +96,8 @@ export function ZoneActions({ zoneName, zoneType, onDeleted }: Props) {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="h-7 w-7 p-0" />}>
+          <MoreVertical className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={handleSuspend}>
