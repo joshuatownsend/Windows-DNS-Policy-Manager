@@ -18,22 +18,15 @@ export interface ServerParams {
 }
 
 function buildQuery(params: Record<string, string | undefined>): string {
+  const defaults: Record<string, string> = {
+    server: DEFAULT_SERVER,
+    serverId: DEFAULT_SERVER_ID,
+    credentialMode: DEFAULT_CREDENTIAL_MODE,
+  };
   const qs = new URLSearchParams();
-  const server = params.server || DEFAULT_SERVER;
-  const serverId = params.serverId || DEFAULT_SERVER_ID;
-  const credentialMode = params.credentialMode || DEFAULT_CREDENTIAL_MODE;
-
-  if (server) qs.set("server", server);
-  if (serverId) qs.set("serverId", serverId);
-  if (credentialMode) qs.set("credentialMode", credentialMode);
-
-  // Add any extra params
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && !["server", "serverId", "credentialMode"].includes(k)) {
-      qs.set(k, v);
-    }
+  for (const [k, v] of Object.entries({ ...defaults, ...params })) {
+    if (v) qs.set(k, v);
   }
-
   const str = qs.toString();
   return str ? `?${str}` : "";
 }
@@ -50,20 +43,14 @@ async function request(
 
   try {
     const res = await fetch(url, { signal: controller.signal });
+    const bodyText = await res.text();
     if (!res.ok) {
-      let detail: string;
-      try {
-        detail = await res.text();
-      } catch {
-        detail = res.statusText;
-      }
-      return { success: false, error: `Bridge returned ${res.status}: ${detail}` };
+      return { success: false, error: `Bridge returned ${res.status}: ${bodyText.slice(0, 500)}` };
     }
     try {
-      return await res.json();
+      return JSON.parse(bodyText);
     } catch {
-      const text = await res.text();
-      return { success: false, error: `Bridge returned non-JSON response: ${text.slice(0, 200)}` };
+      return { success: false, error: `Bridge returned non-JSON response: ${bodyText.slice(0, 200)}` };
     }
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {

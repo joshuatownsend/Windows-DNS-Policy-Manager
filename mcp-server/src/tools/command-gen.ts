@@ -78,7 +78,12 @@ function generateCommands(
       const useIf = data.splitMethod === "interface";
       cmds.push(`# Split-Brain DNS (${useIf ? "Server Interface" : "Client Subnet"} method)`);
       cmds.push(`# Zone: ${data.zone}`);
+      if (data.splitAD) cmds.push("# Active Directory integrated");
       cmds.push("");
+      if (data.splitAD) {
+        cmds.push(`Add-DnsServerPrimaryZone -Name "${data.zone}" -ReplicationScope "Domain"${serverParam}`);
+        cmds.push("");
+      }
       let splitCrit: string;
       if (useIf) {
         splitCrit = `-ServerInterfaceIP "EQ,${data.internalInterface || "10.0.0.1"}"`;
@@ -99,6 +104,11 @@ function generateCommands(
       cmds.push(`Add-DnsServerQueryResolutionPolicy -Name "SplitBrainRecursionPolicy" -Action ALLOW -ApplyOnRecursion -RecursionScope "${data.internalRecursionScope || "InternalRecursionScope"}" ${splitCrit} -ProcessingOrder ${order}${serverParam}`);
       cmds.push("");
       cmds.push(`Add-DnsServerQueryResolutionPolicy -Name "SplitBrainZonePolicy" -Action ALLOW ${splitCrit} -ZoneScope "${data.internalScopeName || "internal"},1" -ZoneName "${data.zone}" -ProcessingOrder ${order + 1}${serverParam}`);
+      if (data.splitAD) {
+        cmds.push("");
+        cmds.push("# Note: Zone scopes replicate in AD, but policies do NOT.");
+        cmds.push("# Run policy copy commands on each additional DC.");
+      }
       break;
     }
 

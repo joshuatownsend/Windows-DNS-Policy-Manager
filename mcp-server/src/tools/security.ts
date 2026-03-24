@@ -1,12 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import * as bridge from "../bridge-client.js";
-
-const ServerParamsSchema = {
-  server: z.string().optional().describe("DNS server hostname (overrides DNS_DEFAULT_SERVER env var)"),
-  serverId: z.string().optional().describe("Server ID for credential lookup"),
-  credentialMode: z.enum(["currentUser", "savedCredential"]).optional().describe("Authentication mode"),
-};
+import { ServerParamsSchema } from "./shared.js";
 
 export function registerSecurityTools(server: McpServer) {
   server.tool(
