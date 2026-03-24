@@ -152,61 +152,42 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
     managedNodeIds.set(entry.server.hostname.toLowerCase(), id);
   }
 
-  // Collect edges first to determine node tiers
+  // Collect edges (only server→external, skip peer-to-peer)
   const ipStackEdges = new Set<string>();
   const forwarderEdges = new Set<string>();
-  const referencedBy = new Set<string>();  // node IDs that are targets
-  const referencesOthers = new Set<string>(); // node IDs that have outgoing edges
 
   for (const entry of allData) {
     if (!entry.data) continue;
     const srcId = getNodeId(entry.server.hostname);
 
-    // IP stack DNS edges
+    // IP stack DNS edges — skip peer-to-peer (managed→managed) to keep peers on same level
     for (const iface of filterInterfaces(entry.data.interfaces)) {
       for (const addr of iface.ServerAddresses) {
-        if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
+        if (managedIPs.has(addr)) continue; // Skip self-ref AND peer-to-peer
         const targetId = getNodeId(addr);
         ipStackEdges.add(`${srcId}->${targetId}`);
-        referencesOthers.add(srcId);
-        referencedBy.add(targetId);
-        if (!managedIPs.has(addr)) externalNodes.add(targetId);
+        externalNodes.add(targetId);
       }
     }
 
-    // Forwarder edges
+    // Forwarder edges — same: skip managed targets
     for (const addr of filterIPs(entry.data.forwarders?.IPAddress || [])) {
-      if (managedIPs.has(addr) && entry.data.listeningAddresses.includes(addr)) continue;
+      if (managedIPs.has(addr)) continue;
       const targetId = getNodeId(addr);
       forwarderEdges.add(`${srcId}->${targetId}`);
-      referencesOthers.add(srcId);
-      referencedBy.add(targetId);
-      if (!managedIPs.has(addr)) externalNodes.add(targetId);
+      externalNodes.add(targetId);
     }
   }
 
-  // Classify managed servers into tiers
-  const topTier: string[] = [];    // External resolvers (not managed)
-  const midTier: string[] = [];    // Referenced by others AND forward to others
-  const bottomTier: string[] = []; // Only reference others (leaf clients)
+  // Two tiers: external resolvers on top, all managed servers on bottom (peers)
+  const topTier: string[] = [];    // External resolvers
+  const serverTier: string[] = []; // All managed servers (peers)
 
-  // External resolvers always go on top
   for (const nodeId of externalNodes) {
     topTier.push(nodeId);
   }
-
-  // Classify managed servers
   for (const entry of allData) {
-    const id = getNodeId(entry.server.hostname);
-    const isReferenced = referencedBy.has(id);
-    const references = referencesOthers.has(id);
-    if (isReferenced && references) {
-      midTier.push(id);
-    } else if (isReferenced) {
-      midTier.push(id); // Referenced but doesn't forward — still mid
-    } else {
-      bottomTier.push(id); // Only references others — leaf
-    }
+    serverTier.push(getNodeId(entry.server.hostname));
   }
 
   // Build external node labels
@@ -228,7 +209,7 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
     for (const addr of filterIPs(entry.data.forwarders?.IPAddress || [])) addExternal(addr);
   }
 
-  // Render subgraphs for vertical organization
+  // Render subgraphs: external resolvers on top, managed servers below
   if (topTier.length > 0) {
     lines.push(`  subgraph upstream [" "]`);
     lines.push(`    direction LR`);
@@ -239,21 +220,10 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
     lines.push(`  end`);
   }
 
-  if (midTier.length > 0) {
+  if (serverTier.length > 0) {
     lines.push(`  subgraph servers [" "]`);
     lines.push(`    direction LR`);
-    for (const id of midTier) {
-      const entry = allData.find((e) => getNodeId(e.server.hostname) === id);
-      const label = entry ? escapeMermaidLabel(entry.server.name || entry.server.hostname) : id;
-      lines.push(`    ${id}["${label}"]:::managed`);
-    }
-    lines.push(`  end`);
-  }
-
-  if (bottomTier.length > 0) {
-    lines.push(`  subgraph clients [" "]`);
-    lines.push(`    direction LR`);
-    for (const id of bottomTier) {
+    for (const id of serverTier) {
       const entry = allData.find((e) => getNodeId(e.server.hostname) === id);
       const label = entry ? escapeMermaidLabel(entry.server.name || entry.server.hostname) : id;
       lines.push(`    ${id}["${label}"]:::managed`);
@@ -291,7 +261,6 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
   // Hide subgraph borders
   lines.push(`  style upstream fill:transparent,stroke:transparent`);
   lines.push(`  style servers fill:transparent,stroke:transparent`);
-  lines.push(`  style clients fill:transparent,stroke:transparent`);
 
   // Per-edge color styles
   if (ipStackIndices.length > 0) {
