@@ -2577,15 +2577,15 @@ function Handle-StartBpa {
                         Invoke-BpaModel -ModelId $m -ErrorAction Stop | Out-Null
                         Get-BpaResult -ModelId $m -ErrorAction Stop | ForEach-Object {
                             @{
-                                Severity   = $_.Severity.ToString()
-                                Category   = $_.Category.ToString()
-                                Title      = $_.Title
-                                Problem    = $_.Problem
-                                Impact     = $_.Impact
-                                Resolution = $_.Resolution
-                                Compliance = $_.Compliance.ToString()
-                                Source     = $_.Source
-                                ResultId   = $_.ResultId
+                                Severity   = if ($_.Severity)   { $_.Severity.ToString() }   else { 'Information' }
+                                Category   = if ($_.Category)   { $_.Category.ToString() }   else { 'Other' }
+                                Title      = if ($_.Title)      { $_.Title }                 else { '' }
+                                Problem    = if ($_.Problem)    { $_.Problem }                else { '' }
+                                Impact     = if ($_.Impact)     { $_.Impact }                 else { '' }
+                                Resolution = if ($_.Resolution) { $_.Resolution }             else { '' }
+                                Compliance = if ($_.Compliance) { $_.Compliance.ToString() }  else { '' }
+                                Source     = if ($_.Source)      { $_.Source }                 else { '' }
+                                ResultId   = if ($_.ResultId)   { $_.ResultId }               else { '' }
                             }
                         }
                     } -ArgumentList $mid
@@ -2593,15 +2593,15 @@ function Handle-StartBpa {
                     Invoke-BpaModel -ModelId $mid -ErrorAction Stop | Out-Null
                     $findings = Get-BpaResult -ModelId $mid -ErrorAction Stop | ForEach-Object {
                         @{
-                            Severity   = $_.Severity.ToString()
-                            Category   = $_.Category.ToString()
-                            Title      = $_.Title
-                            Problem    = $_.Problem
-                            Impact     = $_.Impact
-                            Resolution = $_.Resolution
-                            Compliance = $_.Compliance.ToString()
-                            Source     = $_.Source
-                            ResultId   = $_.ResultId
+                            Severity   = if ($_.Severity)   { $_.Severity.ToString() }   else { 'Information' }
+                            Category   = if ($_.Category)   { $_.Category.ToString() }   else { 'Other' }
+                            Title      = if ($_.Title)      { $_.Title }                 else { '' }
+                            Problem    = if ($_.Problem)    { $_.Problem }                else { '' }
+                            Impact     = if ($_.Impact)     { $_.Impact }                 else { '' }
+                            Resolution = if ($_.Resolution) { $_.Resolution }             else { '' }
+                            Compliance = if ($_.Compliance) { $_.Compliance.ToString() }  else { '' }
+                            Source     = if ($_.Source)      { $_.Source }                 else { '' }
+                            ResultId   = if ($_.ResultId)   { $_.ResultId }               else { '' }
                         }
                     }
                 }
