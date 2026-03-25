@@ -74,7 +74,7 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
   // Auto-scroll to bottom on new output
   useEffect(() => {
     if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+      outputRef.current.scrollTop = 0;
     }
   }, [output]);
 
@@ -136,7 +136,7 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
         output: (res as { output?: string }).output || (res.error ? `Error: ${res.error}` : "No output"),
         isError: !res.success,
       };
-      setOutput((prev) => [...prev, entry]);
+      setOutput((prev) => [entry, ...prev]);
     } catch {
       const entry: OutputEntry = {
         id: ++entryIdRef.current,
@@ -145,7 +145,7 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
         output: "Failed to connect to bridge",
         isError: true,
       };
-      setOutput((prev) => [...prev, entry]);
+      setOutput((prev) => [entry, ...prev]);
     } finally {
       setLoading(false);
     }
