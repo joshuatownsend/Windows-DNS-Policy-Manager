@@ -37,9 +37,15 @@ const DEFAULT_DIG_OPTIONS = {
   tcp: false,
   dnssec: false,
   short: false,
+  trace: false,
+  all: false,
+  comments: true,
+  question: true,
+  answer: true,
   authority: true,
   additional: true,
   stats: true,
+  multiline: false,
 };
 
 type NslookupOptions = typeof DEFAULT_NSLOOKUP_OPTIONS;
@@ -283,13 +289,19 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
               </>
             ) : (
               <>
-                <OptionCheckbox label="Recursion" checked={digOptions.recursive} onChange={(v) => setDigOptions((o) => ({ ...o, recursive: v }))} />
-                <OptionCheckbox label="Use TCP" checked={digOptions.tcp} onChange={(v) => setDigOptions((o) => ({ ...o, tcp: v }))} />
-                <OptionCheckbox label="DNSSEC" checked={digOptions.dnssec} onChange={(v) => setDigOptions((o) => ({ ...o, dnssec: v }))} />
-                <OptionCheckbox label="Short Output" checked={digOptions.short} onChange={(v) => setDigOptions((o) => ({ ...o, short: v }))} />
-                <OptionCheckbox label="Authority" checked={digOptions.authority} onChange={(v) => setDigOptions((o) => ({ ...o, authority: v }))} />
-                <OptionCheckbox label="Additional" checked={digOptions.additional} onChange={(v) => setDigOptions((o) => ({ ...o, additional: v }))} />
-                <OptionCheckbox label="Statistics" checked={digOptions.stats} onChange={(v) => setDigOptions((o) => ({ ...o, stats: v }))} />
+                <OptionCheckbox label="+recurse" checked={digOptions.recursive} onChange={(v) => setDigOptions((o) => ({ ...o, recursive: v }))} />
+                <OptionCheckbox label="+tcp" checked={digOptions.tcp} onChange={(v) => setDigOptions((o) => ({ ...o, tcp: v }))} />
+                <OptionCheckbox label="+dnssec" checked={digOptions.dnssec} onChange={(v) => setDigOptions((o) => ({ ...o, dnssec: v }))} />
+                <OptionCheckbox label="+trace" checked={digOptions.trace} onChange={(v) => setDigOptions((o) => ({ ...o, trace: v }))} />
+                <OptionCheckbox label="+short" checked={digOptions.short} onChange={(v) => setDigOptions((o) => ({ ...o, short: v }))} />
+                <OptionCheckbox label="+all" checked={digOptions.all} onChange={(v) => setDigOptions((o) => ({ ...o, all: v, comments: v, question: v, answer: v, authority: v, additional: v, stats: v }))} />
+                <OptionCheckbox label="+multiline" checked={digOptions.multiline} onChange={(v) => setDigOptions((o) => ({ ...o, multiline: v }))} />
+                <OptionCheckbox label="+comments" checked={digOptions.comments} onChange={(v) => setDigOptions((o) => ({ ...o, comments: v }))} />
+                <OptionCheckbox label="+question" checked={digOptions.question} onChange={(v) => setDigOptions((o) => ({ ...o, question: v }))} />
+                <OptionCheckbox label="+answer" checked={digOptions.answer} onChange={(v) => setDigOptions((o) => ({ ...o, answer: v }))} />
+                <OptionCheckbox label="+authority" checked={digOptions.authority} onChange={(v) => setDigOptions((o) => ({ ...o, authority: v }))} />
+                <OptionCheckbox label="+additional" checked={digOptions.additional} onChange={(v) => setDigOptions((o) => ({ ...o, additional: v }))} />
+                <OptionCheckbox label="+stats" checked={digOptions.stats} onChange={(v) => setDigOptions((o) => ({ ...o, stats: v }))} />
               </>
             )}
           </div>

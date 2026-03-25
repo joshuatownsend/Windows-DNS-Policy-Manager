@@ -3805,15 +3805,23 @@ function Handle-DnsLookup {
         if ($splatParams.ContainsKey('DnssecOk'))    { $cmdDisplay += ' -DnssecOk' }
 
         $startTime = [System.Diagnostics.Stopwatch]::StartNew()
-        $results = @(Resolve-DnsName @splatParams)
-        $startTime.Stop()
-        $queryTime = $startTime.ElapsedMilliseconds
 
-        # Format output based on tool
-        $output = if ($tool -eq 'dig') {
-            Format-DigOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+        # +trace: iterative resolution from root servers
+        if ($tool -eq 'dig' -and $options.trace -eq $true) {
+            $traceOutput = Format-DigTrace -Hostname $hostname -RecordType $recordType -Options $options
+            $startTime.Stop()
+            $output = $traceOutput
         } else {
-            Format-NslookupOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+            $results = @(Resolve-DnsName @splatParams)
+            $startTime.Stop()
+            $queryTime = $startTime.ElapsedMilliseconds
+
+            # Format output based on tool
+            $output = if ($tool -eq 'dig') {
+                Format-DigOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+            } else {
+                Format-NslookupOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+            }
         }
 
         Send-Response -Response $Response -Body @{
@@ -3961,40 +3969,46 @@ function Format-DigOutput {
     }
 
     # Full dig-style output
-    $lines.Add("; <<>> Resolve-DnsName <<>> $Hostname $RecordType")
-    $lines.Add(";; global options: +cmd")
-    $lines.Add('')
+    $multiline = ($Options.multiline -eq $true)
+
+    if ($Options.comments -ne $false) {
+        $lines.Add("; <<>> Resolve-DnsName <<>> $Hostname $RecordType")
+        $lines.Add(";; global options: +cmd")
+        $lines.Add('')
+    }
 
     # Question section
-    $lines.Add(';; QUESTION SECTION:')
-    $lines.Add(";$($Hostname.PadRight(28)) IN  $RecordType")
-    $lines.Add('')
+    if ($Options.question -ne $false) {
+        $lines.Add(';; QUESTION SECTION:')
+        $lines.Add(";$($Hostname.PadRight(28)) IN  $RecordType")
+        $lines.Add('')
+    }
 
     # Group results by section
     $answerRecords = @($Results | Where-Object { -not $_.Section -or $_.Section.ToString() -eq 'Answer' })
     $authorityRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Authority' })
     $additionalRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Additional' })
 
-    if ($answerRecords.Count -gt 0) {
-        $lines.Add(';; ANSWER SECTION:')
+    if ($answerRecords.Count -gt 0 -and $Options.answer -ne $false) {
+        if ($Options.comments -ne $false) { $lines.Add(';; ANSWER SECTION:') }
         foreach ($r in $answerRecords) {
-            $lines.Add((Format-DigRecord $r))
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
         }
         $lines.Add('')
     }
 
     if ($authorityRecords.Count -gt 0 -and $Options.authority -ne $false) {
-        $lines.Add(';; AUTHORITY SECTION:')
+        if ($Options.comments -ne $false) { $lines.Add(';; AUTHORITY SECTION:') }
         foreach ($r in $authorityRecords) {
-            $lines.Add((Format-DigRecord $r))
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
         }
         $lines.Add('')
     }
 
     if ($additionalRecords.Count -gt 0 -and $Options.additional -ne $false) {
-        $lines.Add(';; ADDITIONAL SECTION:')
+        if ($Options.comments -ne $false) { $lines.Add(';; ADDITIONAL SECTION:') }
         foreach ($r in $additionalRecords) {
-            $lines.Add((Format-DigRecord $r))
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
         }
         $lines.Add('')
     }
@@ -4010,10 +4024,23 @@ function Format-DigOutput {
 }
 
 function Format-DigRecord {
-    param($Record)
+    param($Record, [switch]$Multiline)
     $name = $Record.Name.PadRight(28)
     $ttl  = if ($Record.TTL) { "$($Record.TTL)".PadRight(6) } else { '0'.PadRight(6) }
     $type = $Record.Type.ToString().PadRight(6)
+
+    if ($Multiline -and $Record.Type.ToString() -eq 'SOA') {
+        $soaLines = @(
+            "$name $ttl IN  $type $($Record.PrimaryServer) $($Record.NameAdministrator) ("
+            "                                $($Record.SerialNumber)  ; serial"
+            "                                $($Record.RefreshInterval)       ; refresh"
+            "                                $($Record.RetryDelay)       ; retry"
+            "                                $($Record.ExpireLimit)       ; expire"
+            "                                $($Record.MinimumTimeToLive)       ; minimum"
+            "                                )"
+        )
+        return ($soaLines -join "`n")
+    }
 
     $data = switch ($Record.Type.ToString()) {
         'A'     { $Record.IPAddress }
@@ -4029,6 +4056,82 @@ function Format-DigRecord {
     }
 
     return "$name $ttl IN  $type $data"
+}
+
+function Format-DigTrace {
+    param($Hostname, $RecordType, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("; <<>> Resolve-DnsName <<>> +trace $Hostname $RecordType")
+    $lines.Add(";; global options: +cmd")
+
+    # Step 1: Query root servers (. NS)
+    try {
+        $lines.Add('')
+        $lines.Add(';; Received from root-servers.net:')
+        $rootNs = @(Resolve-DnsName -Name '.' -Type NS -ErrorAction Stop)
+        foreach ($r in $rootNs) {
+            if ($r.Type.ToString() -eq 'NS') {
+                $lines.Add(".                            518400 IN  NS     $($r.NameHost)")
+            }
+        }
+    } catch {
+        $lines.Add(";; ERROR querying root: $($_.Exception.Message)")
+    }
+
+    # Step 2: Query TLD nameservers
+    $parts = $Hostname.Split('.')
+    if ($parts.Count -ge 2) {
+        $tld = $parts[-1]
+        try {
+            $lines.Add('')
+            $lines.Add(";; Received from root for $tld.:")
+            $tldNs = @(Resolve-DnsName -Name "$tld." -Type NS -ErrorAction Stop)
+            foreach ($r in $tldNs) {
+                if ($r.Type.ToString() -eq 'NS') {
+                    $lines.Add("$($tld.PadRight(28)) 172800 IN  NS     $($r.NameHost)")
+                }
+            }
+        } catch {
+            $lines.Add(";; ERROR querying TLD: $($_.Exception.Message)")
+        }
+    }
+
+    # Step 3: Query domain nameservers
+    if ($parts.Count -ge 2) {
+        $domain = ($parts[-2..-1] -join '.')
+        try {
+            $lines.Add('')
+            $lines.Add(";; Received from TLD for $domain.:")
+            $domainNs = @(Resolve-DnsName -Name $domain -Type NS -ErrorAction Stop)
+            foreach ($r in $domainNs) {
+                if ($r.Type.ToString() -eq 'NS') {
+                    $lines.Add("$($domain.PadRight(28)) 86400  IN  NS     $($r.NameHost)")
+                }
+            }
+        } catch {
+            $lines.Add(";; ERROR querying domain NS: $($_.Exception.Message)")
+        }
+    }
+
+    # Step 4: Final query against authoritative server
+    try {
+        $lines.Add('')
+        $lines.Add(";; Received from authoritative for $Hostname:")
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $finalResults = @(Resolve-DnsName -Name $Hostname -Type $RecordType -ErrorAction Stop)
+        $sw.Stop()
+        foreach ($r in $finalResults) {
+            $lines.Add((Format-DigRecord $r))
+        }
+        $lines.Add('')
+        $lines.Add(";; Query time: $($sw.ElapsedMilliseconds) msec")
+        $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
+    } catch {
+        $lines.Add(";; ERROR: $($_.Exception.Message)")
+    }
+
+    return ($lines -join "`n")
 }
 
 # ── Router ───────────────────────────────────────────────────────────────────
