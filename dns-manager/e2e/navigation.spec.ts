@@ -44,7 +44,9 @@ test.describe("Navigation", () => {
     await expect(dialog).toBeVisible();
     await expect(page.getByText("DNS LOOKUP")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(dialog).toHaveClass(/translate-x-full/);
+    // After close, aria-hidden removes from a11y tree — use CSS locator
+    const panel = page.locator('[aria-label="DNS Lookup"]');
+    await expect(panel).toHaveAttribute("aria-hidden", "true");
   });
 
   test("bridge status shows Online", async ({ page }) => {
