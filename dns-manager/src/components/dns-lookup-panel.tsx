@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 
 interface DnsLookupPanelProps {
   open: boolean;
@@ -330,9 +330,9 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
       </div>
 
       {/* Output */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {output.length > 0 && (
-          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-border">
+          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-border shrink-0">
             <Button variant="ghost" size="icon-xs" onClick={handleCopyAll} title="Copy all">
               <Copy className="size-3" />
             </Button>
@@ -341,8 +341,8 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
             </Button>
           </div>
         )}
-        <ScrollArea className="flex-1">
-          <div ref={outputRef} className="p-4 space-y-4">
+        <div ref={outputRef} className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-4">
             {output.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Search className="size-8 text-muted-foreground/30 mb-3" />
@@ -369,7 +369,7 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );
