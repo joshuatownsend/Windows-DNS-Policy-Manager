@@ -2566,7 +2566,8 @@ function Handle-StartBpa {
 
         # Launch BPA in a background job so the listener stays responsive
         $script:BpaJobs[$jobKey] = @{ Job = Start-Job -ScriptBlock {
-            param($mid, $rHost, $rCred)
+            param($rHost, $rCred)
+            $mid = 'Microsoft/Windows/DNSServer'
             try {
                 if ($rHost) {
                     $invokeParams = @{ ComputerName = $rHost; ErrorAction = 'Stop' }
@@ -2587,7 +2588,7 @@ function Handle-StartBpa {
                                 ResultId   = $_.ResultId
                             }
                         }
-                    } -ArgumentList $m
+                    } -ArgumentList $mid
                 } else {
                     Invoke-BpaModel -ModelId $mid -ErrorAction Stop | Out-Null
                     $findings = Get-BpaResult -ModelId $mid -ErrorAction Stop | ForEach-Object {
@@ -2621,7 +2622,7 @@ function Handle-StartBpa {
                     error   = "BPA failed: $($_.Exception.Message). Ensure the DNS Server role is installed."
                 }
             }
-        } -ArgumentList $modelId, $remoteHost, $remoteCred; Result = $null }
+        } -ArgumentList $remoteHost, $remoteCred; Result = $null }
 
         Send-Response -Response $Response -Body @{
             success = $true
