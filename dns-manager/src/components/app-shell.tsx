@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, TerminalSquare } from "lucide-react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
@@ -135,10 +135,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {/* DNS Lookup button */}
               <button
                 onClick={() => setLookupOpen(true)}
-                className="group relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs hover:bg-secondary/50 transition-colors"
                 aria-label="Open DNS lookup utility"
               >
-                <Search className="size-4 text-muted-foreground group-hover:text-cyan transition-colors" />
+                <TerminalSquare className="size-3.5 text-muted-foreground group-hover:text-cyan transition-colors" />
+                <span className="text-muted-foreground group-hover:text-foreground transition-colors font-medium">Lookup</span>
               </button>
               <div className="w-px h-5 bg-border" />
               {/* Help button */}
