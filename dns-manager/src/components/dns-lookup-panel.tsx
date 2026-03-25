@@ -29,7 +29,6 @@ const DEFAULT_NSLOOKUP_OPTIONS = {
   recursive: true,
   tcp: false,
   debug: false,
-  searchList: true,
 };
 
 const DEFAULT_DIG_OPTIONS = {
@@ -77,7 +76,7 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
   const entryIdRef = useRef(0);
   const hostnameRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom on new output
+  // Scroll to top on new output (newest first)
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = 0;
@@ -96,9 +95,11 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
 
   // Focus hostname input when panel opens
   useEffect(() => {
-    if (open && hostnameRef.current) {
-      setTimeout(() => hostnameRef.current?.focus(), 300);
-    }
+    if (!open || !hostnameRef.current) return;
+    const timeoutId = window.setTimeout(() => {
+      hostnameRef.current?.focus();
+    }, 300);
+    return () => window.clearTimeout(timeoutId);
   }, [open]);
 
   const resolveNameserver = useCallback(() => {
@@ -164,10 +165,18 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
     }
   }
 
-  function handleCopyAll() {
+  async function handleCopyAll() {
     const text = output.map((e) => `> ${e.command}\n${e.output}`).join("\n\n");
-    navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard");
+    if (!navigator.clipboard || !window.isSecureContext) {
+      toast.error("Clipboard not available in this context");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Failed to copy — check browser clipboard permissions");
+    }
   }
 
   return (
@@ -175,6 +184,8 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
       role="dialog"
       aria-modal="false"
       aria-label="DNS Lookup"
+      aria-hidden={!open}
+      inert={!open ? true : undefined}
       className={cn(
         "fixed top-0 right-0 z-50 h-full w-full max-w-lg",
         "flex flex-col",
@@ -285,7 +296,6 @@ export function DnsLookupPanel({ open, onClose }: DnsLookupPanelProps) {
                 <OptionCheckbox label="Recursion" checked={nslookupOptions.recursive} onChange={(v) => setNslookupOptions((o) => ({ ...o, recursive: v }))} />
                 <OptionCheckbox label="Use TCP" checked={nslookupOptions.tcp} onChange={(v) => setNslookupOptions((o) => ({ ...o, tcp: v }))} />
                 <OptionCheckbox label="Debug" checked={nslookupOptions.debug} onChange={(v) => setNslookupOptions((o) => ({ ...o, debug: v }))} />
-                <OptionCheckbox label="Search List" checked={nslookupOptions.searchList} onChange={(v) => setNslookupOptions((o) => ({ ...o, searchList: v }))} />
               </>
             ) : (
               <>

@@ -3768,11 +3768,18 @@ function Handle-DnsLookup {
         $Body
     )
 
-    $tool       = if ($Body.tool)       { $Body.tool }       else { 'nslookup' }
+    $tool       = if ($Body.tool)       { $Body.tool.ToLower() } else { 'nslookup' }
     $hostname   = if ($Body.hostname)   { $Body.hostname }   else { '' }
     $server     = if ($Body.server)     { $Body.server }     else { '' }
     $recordType = if ($Body.recordType) { $Body.recordType } else { 'A' }
     $options    = if ($Body.options)     { $Body.options }    else { @{} }
+
+    # Whitelist tools
+    $allowedTools = @('nslookup', 'dig')
+    if ($tool -notin $allowedTools) {
+        Send-Response -Response $Response -Body @{ success = $false; error = "Invalid tool: $tool" } -StatusCode 400
+        return
+    }
 
     # Validate hostname
     if (-not $hostname -or $hostname -match '[;&|`$]') {
@@ -3837,11 +3844,11 @@ function Handle-DnsLookup {
             "*** $($server): can't find $hostname - $($_.Exception.Message)"
         }
         Send-Response -Response $Response -Body @{
-            success = $true
+            success = $false
             output  = $errorOutput
             command = $cmdDisplay
             error   = $_.Exception.Message
-        }
+        } -StatusCode 500
     }
 }
 
@@ -4066,71 +4073,74 @@ function Format-DigTrace {
     $lines.Add("; <<>> Resolve-DnsName <<>> +trace $Hostname $RecordType")
     $lines.Add(";; global options: +cmd")
 
-    # Step 1: Query root servers (. NS)
+    # Build the delegation chain from labels: e.g. example.co.uk -> [uk, co.uk, example.co.uk]
+    $parts = $Hostname.TrimEnd('.').Split('.')
+    $delegationNames = [System.Collections.Generic.List[string]]::new()
+    for ($i = $parts.Count - 1; $i -ge 0; $i--) {
+        $delegationNames.Add(($parts[$i..($parts.Count - 1)] -join '.'))
+    }
+
+    # Step 1: Get root server to start iterative queries
+    $nextServer = $null
     try {
         $lines.Add('')
-        $lines.Add(';; Received from root-servers.net:')
+        $lines.Add(';; Querying root servers:')
         $rootNs = @(Resolve-DnsName -Name '.' -Type NS -ErrorAction Stop)
         foreach ($r in $rootNs) {
             if ($r.Type.ToString() -eq 'NS') {
                 $lines.Add(".                            518400 IN  NS     $($r.NameHost)")
+                if (-not $nextServer) { $nextServer = $r.NameHost }
             }
         }
     } catch {
         $lines.Add(";; ERROR querying root: $($_.Exception.Message)")
     }
 
-    # Step 2: Query TLD nameservers
-    $parts = $Hostname.Split('.')
-    if ($parts.Count -ge 2) {
-        $tld = $parts[-1]
+    # Walk the delegation chain, querying each level's NS against the previous level's server
+    foreach ($name in $delegationNames) {
+        if (-not $nextServer) { break }
+        $queryServer = $nextServer
+        $nextServer = $null
         try {
             $lines.Add('')
-            $lines.Add(";; Received from root for ${tld}.:")
-            $tldNs = @(Resolve-DnsName -Name "$tld." -Type NS -ErrorAction Stop)
-            foreach ($r in $tldNs) {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $nsResults = @(Resolve-DnsName -Name $name -Type NS -Server $queryServer -NoRecursion -ErrorAction Stop)
+            $sw.Stop()
+            $lines.Add(";; Received from ${queryServer} for ${name}. ($($sw.ElapsedMilliseconds) ms):")
+            foreach ($r in $nsResults) {
                 if ($r.Type.ToString() -eq 'NS') {
-                    $lines.Add("$($tld.PadRight(28)) 172800 IN  NS     $($r.NameHost)")
+                    $lines.Add((Format-DigRecord $r))
+                    if (-not $nextServer) { $nextServer = $r.NameHost }
+                } elseif ($r.Type.ToString() -eq 'SOA') {
+                    # Hit authoritative — SOA means this server owns the zone
+                    $lines.Add((Format-DigRecord $r))
                 }
             }
         } catch {
-            $lines.Add(";; ERROR querying TLD: $($_.Exception.Message)")
+            $lines.Add('')
+            $lines.Add(";; Query to ${queryServer} for ${name} NS failed: $($_.Exception.Message)")
         }
     }
 
-    # Step 3: Query domain nameservers
-    if ($parts.Count -ge 2) {
-        $domain = ($parts[-2..-1] -join '.')
+    # Final query: ask the last authoritative server for the actual record
+    $authServer = if ($nextServer) { $nextServer } else { $queryServer }
+    if ($authServer) {
         try {
             $lines.Add('')
-            $lines.Add(";; Received from TLD for ${domain}.:")
-            $domainNs = @(Resolve-DnsName -Name $domain -Type NS -ErrorAction Stop)
-            foreach ($r in $domainNs) {
-                if ($r.Type.ToString() -eq 'NS') {
-                    $lines.Add("$($domain.PadRight(28)) 86400  IN  NS     $($r.NameHost)")
-                }
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $finalResults = @(Resolve-DnsName -Name $Hostname -Type $RecordType -Server $authServer -NoRecursion -ErrorAction Stop)
+            $sw.Stop()
+            $lines.Add(";; Received from ${authServer} for ${Hostname}. ($($sw.ElapsedMilliseconds) ms):")
+            foreach ($r in $finalResults) {
+                $lines.Add((Format-DigRecord $r))
             }
         } catch {
-            $lines.Add(";; ERROR querying domain NS: $($_.Exception.Message)")
+            $lines.Add(";; Final query to ${authServer} failed: $($_.Exception.Message)")
         }
     }
 
-    # Step 4: Final query against authoritative server
-    try {
-        $lines.Add('')
-        $lines.Add(";; Received from authoritative for ${Hostname}:")
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $finalResults = @(Resolve-DnsName -Name $Hostname -Type $RecordType -ErrorAction Stop)
-        $sw.Stop()
-        foreach ($r in $finalResults) {
-            $lines.Add((Format-DigRecord $r))
-        }
-        $lines.Add('')
-        $lines.Add(";; Query time: $($sw.ElapsedMilliseconds) msec")
-        $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
-    } catch {
-        $lines.Add(";; ERROR: $($_.Exception.Message)")
-    }
+    $lines.Add('')
+    $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
 
     return ($lines -join "`n")
 }

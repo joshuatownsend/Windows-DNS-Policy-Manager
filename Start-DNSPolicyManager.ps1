@@ -163,14 +163,21 @@ if ($ready) {
 
     # Start Next.js frontend (auto-install if needed)
     if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
-        Write-Host '  Installing frontend dependencies...' -ForegroundColor Yellow
-        Push-Location $frontendDir
-        npm install --silent 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Pop-Location
-            Write-Host '  npm install failed. Run manually: cd dns-manager && npm install' -ForegroundColor Red
+        if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            Write-Host '  npm not found. Install Node.js 18+ and run: cd dns-manager && npm install' -ForegroundColor Red
         } else {
-            Pop-Location
+            Write-Host '  Installing frontend dependencies...' -ForegroundColor Yellow
+            Push-Location $frontendDir
+            try {
+                npm install --silent 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host '  npm install failed. Run manually: cd dns-manager && npm install' -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "  npm install error: $($_.Exception.Message)" -ForegroundColor Red
+            } finally {
+                Pop-Location
+            }
         }
     }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {

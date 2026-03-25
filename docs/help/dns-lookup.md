@@ -32,7 +32,6 @@ Options change based on the selected tool. They control both the query behavior 
 | **Recursion** | ON | Allow the server to resolve recursively. Turn off to test authoritative-only responses. |
 | **Use TCP** | OFF | Force TCP instead of UDP. Useful for large responses or zone transfer testing. |
 | **Debug** | OFF | Show additional detail: TTL, record class, section, and query timing. |
-| **Search List** | ON | Append the DNS suffix search list to short names. |
 
 #### dig Options
 

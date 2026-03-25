@@ -45,6 +45,7 @@ const bridge = http.createServer((req, res) => {
   else if (u.includes("/api/dnssec")) b = { success: true, settings: {}, keys: [] };
   else if (u.includes("/api/trustanchors")) b = { success: true, anchors: [] };
   else if (u.includes("/api/trustpoints")) b = { success: true, points: [] };
+  else if (u.includes("/api/utilities/dns-lookup")) b = { success: true, output: "Server:  localhost\nAddress:  127.0.0.1\n\nName:    example.com\nAddress: 93.184.216.34\n", command: "Resolve-DnsName -Name 'example.com' -Type A" };
   res.writeHead(200);
   res.end(JSON.stringify(b));
 });
