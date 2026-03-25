@@ -20,6 +20,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 - **Zone lifecycle** — create, delete, convert, suspend, resume, export zones
 - **PowerShell command generation** with copy-to-clipboard — works offline as a command generator
 - **Backup & export** — policy JSON backup/restore, server configuration export (Get-DnsServer as JSON), DNS zone export (single or all primary zones via Export-DnsServerZone), AD-integrated backup info
+- **DNS Lookup utility** — slide-over panel with live nslookup and dig queries from any tab. Tool-specific options (+trace, +dnssec, +short, +all, +multiline, debug), custom or registered nameserver targeting, and console-style session output with copy/clear
 - **Context-sensitive help** with slide-over panel and full-page popout
 - **20 Playwright E2E tests** with mock bridge, integrated into CI
 - **MCP server** — 31 read-only tools for AI agents via Model Context Protocol (zones, records, policies, server config, DNSSEC, RRL, scavenging, and more), plus offline PowerShell command generation
@@ -40,7 +41,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 powershell -ExecutionPolicy Bypass -File Start-DNSPolicyManager.ps1
 ```
 
-This starts both the PowerShell bridge (port 8650) and the Next.js dev server (port 10010), then opens your browser.
+This starts both the PowerShell bridge (port 8650) and the Next.js dev server (port 10010), then opens your browser. Frontend dependencies are installed automatically on first run.
 
 ### Manual startup
 

@@ -60,7 +60,7 @@ function Invoke-McpBuild {
 
 Write-Host ''
 Write-Host '  DNS Policy Manager Launcher' -ForegroundColor Cyan
-Write-Host '  ──────────────────────────────' -ForegroundColor DarkGray
+Write-Host '  ------------------------------' -ForegroundColor DarkGray
 
 # Check if bridge is already running
 try {
@@ -126,7 +126,7 @@ $startArgs = @{
 }
 
 if (-not $isAdmin) {
-    Write-Host '  Not elevated — requesting Administrator rights for bridge...' -ForegroundColor Yellow
+    Write-Host '  Not elevated - requesting Administrator rights for bridge...' -ForegroundColor Yellow
     $startArgs['Verb'] = 'RunAs'
 }
 
@@ -161,14 +161,30 @@ if ($ready) {
     Write-Host "  Bridge started (PID: $($bridgeJob.Id))" -ForegroundColor Green
     Write-Host "  DNS Module: $(if ($health.dnsModuleAvailable) { 'Available' } else { 'Not Found' })" -ForegroundColor $(if ($health.dnsModuleAvailable) { 'Green' } else { 'Yellow' })
 
-    # Start Next.js frontend
+    # Start Next.js frontend (auto-install if needed)
+    if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
+        if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            Write-Host '  npm not found. Install Node.js 18+ and run: cd dns-manager && npm install' -ForegroundColor Red
+        } else {
+            Write-Host '  Installing frontend dependencies...' -ForegroundColor Yellow
+            Push-Location $frontendDir
+            try {
+                npm install --silent 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host '  npm install failed. Run manually: cd dns-manager && npm install' -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "  npm install error: $($_.Exception.Message)" -ForegroundColor Red
+            } finally {
+                Pop-Location
+            }
+        }
+    }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {
         Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
-        $devCmd = "cd '$frontendDir'; npm run dev"
-        Start-Process powershell -ArgumentList "-NoProfile -Command `"$devCmd`"" -WindowStyle Normal
-        Start-Sleep -Milliseconds 2000
-    } else {
-        Write-Host '  Frontend not installed. Run: cd dns-manager && npm install' -ForegroundColor Yellow
+        $devCmd = "Set-Location '$frontendDir'; npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
+        Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"$devCmd`"" -WindowStyle Normal
+        Start-Sleep -Milliseconds 3000
     }
 
     if (-not $NoBrowser) {

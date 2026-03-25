@@ -150,8 +150,9 @@ export default function ServerPage() {
   useEffect(() => { setMounted(true); }, []);
 
   // ── Bootstrap default localhost server ────────────────────
+  // Wait until mounted (persist hydration complete) before checking.
   useEffect(() => {
-    if (didInit.current) return;
+    if (!mounted || didInit.current) return;
     didInit.current = true;
 
     if (servers.length === 0) {
@@ -159,7 +160,7 @@ export default function ServerPage() {
       addServer(def);
       setActiveServerId(def.id);
     }
-  }, [servers.length, addServer, setActiveServerId]);
+  }, [mounted, servers.length, addServer, setActiveServerId]);
 
   // ── Check saved credentials when bridge comes online ──────
   useEffect(() => {

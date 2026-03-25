@@ -2566,7 +2566,8 @@ function Handle-StartBpa {
 
         # Launch BPA in a background job so the listener stays responsive
         $script:BpaJobs[$jobKey] = @{ Job = Start-Job -ScriptBlock {
-            param($mid, $rHost, $rCred)
+            param($rHost, $rCred)
+            $mid = 'Microsoft/Windows/DNSServer'
             try {
                 if ($rHost) {
                     $invokeParams = @{ ComputerName = $rHost; ErrorAction = 'Stop' }
@@ -2576,31 +2577,31 @@ function Handle-StartBpa {
                         Invoke-BpaModel -ModelId $m -ErrorAction Stop | Out-Null
                         Get-BpaResult -ModelId $m -ErrorAction Stop | ForEach-Object {
                             @{
-                                Severity   = $_.Severity.ToString()
-                                Category   = $_.Category.ToString()
-                                Title      = $_.Title
-                                Problem    = $_.Problem
-                                Impact     = $_.Impact
-                                Resolution = $_.Resolution
-                                Compliance = $_.Compliance.ToString()
-                                Source     = $_.Source
-                                ResultId   = $_.ResultId
+                                Severity   = if ($_.Severity)   { $_.Severity.ToString() }   else { 'Information' }
+                                Category   = if ($_.Category)   { $_.Category.ToString() }   else { 'Other' }
+                                Title      = if ($_.Title)      { $_.Title }                 else { '' }
+                                Problem    = if ($_.Problem)    { $_.Problem }                else { '' }
+                                Impact     = if ($_.Impact)     { $_.Impact }                 else { '' }
+                                Resolution = if ($_.Resolution) { $_.Resolution }             else { '' }
+                                Compliance = if ($_.Compliance) { $_.Compliance.ToString() }  else { '' }
+                                Source     = if ($_.Source)      { $_.Source }                 else { '' }
+                                ResultId   = if ($_.ResultId)   { $_.ResultId }               else { '' }
                             }
                         }
-                    } -ArgumentList $m
+                    } -ArgumentList $mid
                 } else {
                     Invoke-BpaModel -ModelId $mid -ErrorAction Stop | Out-Null
                     $findings = Get-BpaResult -ModelId $mid -ErrorAction Stop | ForEach-Object {
                         @{
-                            Severity   = $_.Severity.ToString()
-                            Category   = $_.Category.ToString()
-                            Title      = $_.Title
-                            Problem    = $_.Problem
-                            Impact     = $_.Impact
-                            Resolution = $_.Resolution
-                            Compliance = $_.Compliance.ToString()
-                            Source     = $_.Source
-                            ResultId   = $_.ResultId
+                            Severity   = if ($_.Severity)   { $_.Severity.ToString() }   else { 'Information' }
+                            Category   = if ($_.Category)   { $_.Category.ToString() }   else { 'Other' }
+                            Title      = if ($_.Title)      { $_.Title }                 else { '' }
+                            Problem    = if ($_.Problem)    { $_.Problem }                else { '' }
+                            Impact     = if ($_.Impact)     { $_.Impact }                 else { '' }
+                            Resolution = if ($_.Resolution) { $_.Resolution }             else { '' }
+                            Compliance = if ($_.Compliance) { $_.Compliance.ToString() }  else { '' }
+                            Source     = if ($_.Source)      { $_.Source }                 else { '' }
+                            ResultId   = if ($_.ResultId)   { $_.ResultId }               else { '' }
                         }
                     }
                 }
@@ -2621,7 +2622,7 @@ function Handle-StartBpa {
                     error   = "BPA failed: $($_.Exception.Message). Ensure the DNS Server role is installed."
                 }
             }
-        } -ArgumentList $modelId, $remoteHost, $remoteCred; Result = $null }
+        } -ArgumentList $remoteHost, $remoteCred; Result = $null }
 
         Send-Response -Response $Response -Body @{
             success = $true
@@ -3758,6 +3759,392 @@ function Handle-Execute {
     }
 }
 
+# ── DNS Lookup Utility ────────────────────────────────────────────────────────
+
+function Handle-DnsLookup {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [System.Net.HttpListenerRequest]$Request,
+        $Body
+    )
+
+    $tool       = if ($Body.tool)       { $Body.tool.ToLower() } else { 'nslookup' }
+    $hostname   = if ($Body.hostname)   { $Body.hostname }   else { '' }
+    $server     = if ($Body.server)     { $Body.server }     else { '' }
+    $recordType = if ($Body.recordType) { $Body.recordType } else { 'A' }
+    $options    = if ($Body.options)     { $Body.options }    else { @{} }
+
+    # Whitelist tools
+    $allowedTools = @('nslookup', 'dig')
+    if ($tool -notin $allowedTools) {
+        Send-Response -Response $Response -Body @{ success = $false; error = "Invalid tool: $tool" } -StatusCode 400
+        return
+    }
+
+    # Validate hostname
+    if (-not $hostname -or $hostname -match '[;&|`$]') {
+        Send-Response -Response $Response -Body @{ success = $false; error = 'Invalid hostname' } -StatusCode 400
+        return
+    }
+
+    # Whitelist record types
+    $allowedTypes = @('A','AAAA','CNAME','MX','NS','PTR','SRV','TXT','SOA','ANY')
+    if ($recordType -notin $allowedTypes) {
+        Send-Response -Response $Response -Body @{ success = $false; error = "Invalid record type: $recordType" } -StatusCode 400
+        return
+    }
+
+    try {
+        # Build splatted params for Resolve-DnsName
+        $splatParams = @{
+            Name        = $hostname
+            Type        = $recordType
+            ErrorAction = 'Stop'
+        }
+        if ($server) { $splatParams['Server'] = $server }
+        if ($options.recursive -eq $false) { $splatParams['NoRecursion'] = $true }
+        if ($options.tcp -eq $true)        { $splatParams['TcpOnly'] = $true }
+        if ($options.dnssec -eq $true)     { $splatParams['DnssecOk'] = $true }
+
+        $cmdDisplay = "Resolve-DnsName -Name '$hostname' -Type $recordType"
+        if ($server) { $cmdDisplay += " -Server '$server'" }
+        if ($splatParams.ContainsKey('NoRecursion')) { $cmdDisplay += ' -NoRecursion' }
+        if ($splatParams.ContainsKey('TcpOnly'))     { $cmdDisplay += ' -TcpOnly' }
+        if ($splatParams.ContainsKey('DnssecOk'))    { $cmdDisplay += ' -DnssecOk' }
+
+        $startTime = [System.Diagnostics.Stopwatch]::StartNew()
+
+        # +trace: iterative resolution from root servers
+        if ($tool -eq 'dig' -and $options.trace -eq $true) {
+            $traceOutput = Format-DigTrace -Hostname $hostname -RecordType $recordType -Options $options
+            $startTime.Stop()
+            $output = $traceOutput
+        } else {
+            $results = @(Resolve-DnsName @splatParams)
+            $startTime.Stop()
+            $queryTime = $startTime.ElapsedMilliseconds
+
+            # Format output based on tool
+            $output = if ($tool -eq 'dig') {
+                Format-DigOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+            } else {
+                Format-NslookupOutput -Results $results -Hostname $hostname -Server $server -RecordType $recordType -QueryTime $queryTime -Options $options
+            }
+        }
+
+        Send-Response -Response $Response -Body @{
+            success = $true
+            output  = $output
+            command = $cmdDisplay
+        }
+    } catch {
+        $errorOutput = if ($tool -eq 'dig') {
+            ";; connection timed out; no servers could be reached`n;; Error: $($_.Exception.Message)"
+        } else {
+            "*** $($server): can't find $hostname - $($_.Exception.Message)"
+        }
+        Send-Response -Response $Response -Body @{
+            success = $false
+            output  = $errorOutput
+            command = $cmdDisplay
+            error   = $_.Exception.Message
+        } -StatusCode 500
+    }
+}
+
+function Format-NslookupOutput {
+    param($Results, $Hostname, $Server, $RecordType, $QueryTime, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("Server:  $Server")
+    $lines.Add("Address:  $Server")
+    $lines.Add('')
+
+    $debug = ($Options.debug -eq $true)
+
+    if ($Results.Count -eq 0) {
+        $lines.Add("*** $Server can't find ${Hostname}: Non-existent domain")
+    } else {
+        $hasNonAuth = $false
+        foreach ($r in $Results) {
+            $section = if ($r.Section) { $r.Section.ToString() } else { 'Answer' }
+            if ($section -eq 'Additional') { $hasNonAuth = $true }
+
+            switch ($r.Type.ToString()) {
+                'A' {
+                    if ($debug) {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add("TTL:     $($r.TTL)")
+                        $lines.Add("Section: $section")
+                        $lines.Add('')
+                    } else {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add('')
+                    }
+                }
+                'AAAA' {
+                    if ($debug) {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add("TTL:     $($r.TTL)")
+                        $lines.Add("Section: $section")
+                        $lines.Add('')
+                    } else {
+                        $lines.Add("Name:    $($r.Name)")
+                        $lines.Add("Address: $($r.IPAddress)")
+                        $lines.Add('')
+                    }
+                }
+                'CNAME' {
+                    $lines.Add("$($r.Name)  canonical name = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'MX' {
+                    $lines.Add("$Hostname  MX preference = $($r.Preference), mail exchanger = $($r.NameExchange)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'NS' {
+                    $lines.Add("$Hostname  nameserver = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'SOA' {
+                    $lines.Add("$Hostname")
+                    $lines.Add("  primary name server = $($r.PrimaryServer)")
+                    $lines.Add("  responsible mail addr = $($r.NameAdministrator)")
+                    $lines.Add("  serial  = $($r.SerialNumber)")
+                    $lines.Add("  refresh = $($r.RefreshInterval)")
+                    $lines.Add("  retry   = $($r.RetryDelay)")
+                    $lines.Add("  expire  = $($r.ExpireLimit)")
+                    $lines.Add("  default TTL = $($r.MinimumTimeToLive)")
+                    $lines.Add('')
+                }
+                'TXT' {
+                    $txt = if ($r.Strings) { ($r.Strings -join '') } else { $r.Text }
+                    $lines.Add("$($r.Name)  text = `"$txt`"")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'SRV' {
+                    $lines.Add("$($r.Name)  SRV service location:")
+                    $lines.Add("  priority = $($r.Priority), weight = $($r.Weight), port = $($r.Port), target = $($r.NameTarget)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                'PTR' {
+                    $lines.Add("$($r.Name)  name = $($r.NameHost)")
+                    if ($debug) { $lines.Add("TTL:     $($r.TTL)"); $lines.Add('') }
+                }
+                default {
+                    $lines.Add("$($r.Name)  type = $($r.Type)  data = $($r | ConvertTo-Json -Compress)")
+                    if ($debug) { $lines.Add('') }
+                }
+            }
+        }
+        if ($hasNonAuth -and -not $debug) {
+            $lines.Insert(2, 'Non-authoritative answer:')
+        }
+    }
+
+    if ($debug) {
+        $lines.Add("Query time: ${QueryTime}ms")
+    }
+
+    return ($lines -join "`n")
+}
+
+function Format-DigOutput {
+    param($Results, $Hostname, $Server, $RecordType, $QueryTime, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $short = ($Options.short -eq $true)
+
+    if ($short) {
+        foreach ($r in $Results) {
+            switch ($r.Type.ToString()) {
+                'A'     { $lines.Add($r.IPAddress) }
+                'AAAA'  { $lines.Add($r.IPAddress) }
+                'CNAME' { $lines.Add($r.NameHost) }
+                'MX'    { $lines.Add("$($r.Preference) $($r.NameExchange)") }
+                'NS'    { $lines.Add($r.NameHost) }
+                'PTR'   { $lines.Add($r.NameHost) }
+                'TXT'   { $txt = if ($r.Strings) { ($r.Strings -join '') } else { $r.Text }; $lines.Add("`"$txt`"") }
+                'SRV'   { $lines.Add("$($r.Priority) $($r.Weight) $($r.Port) $($r.NameTarget)") }
+                'SOA'   { $lines.Add("$($r.PrimaryServer) $($r.NameAdministrator) $($r.SerialNumber) $($r.RefreshInterval) $($r.RetryDelay) $($r.ExpireLimit) $($r.MinimumTimeToLive)") }
+                default { $lines.Add(($r | ConvertTo-Json -Compress)) }
+            }
+        }
+        return ($lines -join "`n")
+    }
+
+    # Full dig-style output
+    $multiline = ($Options.multiline -eq $true)
+
+    if ($Options.comments -ne $false) {
+        $lines.Add("; <<>> Resolve-DnsName <<>> $Hostname $RecordType")
+        $lines.Add(";; global options: +cmd")
+        $lines.Add('')
+    }
+
+    # Question section
+    if ($Options.question -ne $false) {
+        $lines.Add(';; QUESTION SECTION:')
+        $lines.Add(";$($Hostname.PadRight(28)) IN  $RecordType")
+        $lines.Add('')
+    }
+
+    # Group results by section
+    $answerRecords = @($Results | Where-Object { -not $_.Section -or $_.Section.ToString() -eq 'Answer' })
+    $authorityRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Authority' })
+    $additionalRecords = @($Results | Where-Object { $_.Section -and $_.Section.ToString() -eq 'Additional' })
+
+    if ($answerRecords.Count -gt 0 -and $Options.answer -ne $false) {
+        if ($Options.comments -ne $false) { $lines.Add(';; ANSWER SECTION:') }
+        foreach ($r in $answerRecords) {
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
+        }
+        $lines.Add('')
+    }
+
+    if ($authorityRecords.Count -gt 0 -and $Options.authority -ne $false) {
+        if ($Options.comments -ne $false) { $lines.Add(';; AUTHORITY SECTION:') }
+        foreach ($r in $authorityRecords) {
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
+        }
+        $lines.Add('')
+    }
+
+    if ($additionalRecords.Count -gt 0 -and $Options.additional -ne $false) {
+        if ($Options.comments -ne $false) { $lines.Add(';; ADDITIONAL SECTION:') }
+        foreach ($r in $additionalRecords) {
+            $lines.Add((Format-DigRecord $r -Multiline:$multiline))
+        }
+        $lines.Add('')
+    }
+
+    if ($Options.stats -ne $false) {
+        $lines.Add(";; Query time: ${QueryTime} msec")
+        $lines.Add(";; SERVER: ${Server}")
+        $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
+        $lines.Add(";; MSG SIZE  rcvd: $($Results.Count) records")
+    }
+
+    return ($lines -join "`n")
+}
+
+function Format-DigRecord {
+    param($Record, [switch]$Multiline)
+    $name = $Record.Name.PadRight(28)
+    $ttl  = if ($Record.TTL) { "$($Record.TTL)".PadRight(6) } else { '0'.PadRight(6) }
+    $type = $Record.Type.ToString().PadRight(6)
+
+    if ($Multiline -and $Record.Type.ToString() -eq 'SOA') {
+        $soaLines = @(
+            "$name $ttl IN  $type $($Record.PrimaryServer) $($Record.NameAdministrator) ("
+            "                                $($Record.SerialNumber)  ; serial"
+            "                                $($Record.RefreshInterval)       ; refresh"
+            "                                $($Record.RetryDelay)       ; retry"
+            "                                $($Record.ExpireLimit)       ; expire"
+            "                                $($Record.MinimumTimeToLive)       ; minimum"
+            "                                )"
+        )
+        return ($soaLines -join "`n")
+    }
+
+    $data = switch ($Record.Type.ToString()) {
+        'A'     { $Record.IPAddress }
+        'AAAA'  { $Record.IPAddress }
+        'CNAME' { $Record.NameHost }
+        'MX'    { "$($Record.Preference) $($Record.NameExchange)" }
+        'NS'    { $Record.NameHost }
+        'PTR'   { $Record.NameHost }
+        'TXT'   { $txt = if ($Record.Strings) { ($Record.Strings -join '') } else { $Record.Text }; "`"$txt`"" }
+        'SRV'   { "$($Record.Priority) $($Record.Weight) $($Record.Port) $($Record.NameTarget)" }
+        'SOA'   { "$($Record.PrimaryServer) $($Record.NameAdministrator) $($Record.SerialNumber) $($Record.RefreshInterval) $($Record.RetryDelay) $($Record.ExpireLimit) $($Record.MinimumTimeToLive)" }
+        default { $Record | ConvertTo-Json -Compress }
+    }
+
+    return "$name $ttl IN  $type $data"
+}
+
+function Format-DigTrace {
+    param($Hostname, $RecordType, $Options)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("; <<>> Resolve-DnsName <<>> +trace $Hostname $RecordType")
+    $lines.Add(";; global options: +cmd")
+
+    # Build the delegation chain from labels: e.g. example.co.uk -> [uk, co.uk, example.co.uk]
+    $parts = $Hostname.TrimEnd('.').Split('.')
+    $delegationNames = [System.Collections.Generic.List[string]]::new()
+    for ($i = $parts.Count - 1; $i -ge 0; $i--) {
+        $delegationNames.Add(($parts[$i..($parts.Count - 1)] -join '.'))
+    }
+
+    # Step 1: Get root server to start iterative queries
+    $nextServer = $null
+    try {
+        $lines.Add('')
+        $lines.Add(';; Querying root servers:')
+        $rootNs = @(Resolve-DnsName -Name '.' -Type NS -ErrorAction Stop)
+        foreach ($r in $rootNs) {
+            if ($r.Type.ToString() -eq 'NS') {
+                $lines.Add(".                            518400 IN  NS     $($r.NameHost)")
+                if (-not $nextServer) { $nextServer = $r.NameHost }
+            }
+        }
+    } catch {
+        $lines.Add(";; ERROR querying root: $($_.Exception.Message)")
+    }
+
+    # Walk the delegation chain, querying each level's NS against the previous level's server
+    foreach ($name in $delegationNames) {
+        if (-not $nextServer) { break }
+        $queryServer = $nextServer
+        $nextServer = $null
+        try {
+            $lines.Add('')
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $nsResults = @(Resolve-DnsName -Name $name -Type NS -Server $queryServer -NoRecursion -ErrorAction Stop)
+            $sw.Stop()
+            $lines.Add(";; Received from ${queryServer} for ${name}. ($($sw.ElapsedMilliseconds) ms):")
+            foreach ($r in $nsResults) {
+                if ($r.Type.ToString() -eq 'NS') {
+                    $lines.Add((Format-DigRecord $r))
+                    if (-not $nextServer) { $nextServer = $r.NameHost }
+                } elseif ($r.Type.ToString() -eq 'SOA') {
+                    # Hit authoritative — SOA means this server owns the zone
+                    $lines.Add((Format-DigRecord $r))
+                }
+            }
+        } catch {
+            $lines.Add('')
+            $lines.Add(";; Query to ${queryServer} for ${name} NS failed: $($_.Exception.Message)")
+        }
+    }
+
+    # Final query: ask the last authoritative server for the actual record
+    $authServer = if ($nextServer) { $nextServer } else { $queryServer }
+    if ($authServer) {
+        try {
+            $lines.Add('')
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $finalResults = @(Resolve-DnsName -Name $Hostname -Type $RecordType -Server $authServer -NoRecursion -ErrorAction Stop)
+            $sw.Stop()
+            $lines.Add(";; Received from ${authServer} for ${Hostname}. ($($sw.ElapsedMilliseconds) ms):")
+            foreach ($r in $finalResults) {
+                $lines.Add((Format-DigRecord $r))
+            }
+        } catch {
+            $lines.Add(";; Final query to ${authServer} failed: $($_.Exception.Message)")
+        }
+    }
+
+    $lines.Add('')
+    $lines.Add(";; WHEN: $(Get-Date -Format 'ddd MMM dd HH:mm:ss yyyy')")
+
+    return ($lines -join "`n")
+}
+
 # ── Router ───────────────────────────────────────────────────────────────────
 
 function Route-Request {
@@ -4287,6 +4674,15 @@ function Route-Request {
                 if ($method -eq 'GET') { Handle-GetZoneDelegation -Response $response -Request $request -ZoneName $zn }
                 else { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
             }
+            # ── Utilities ──────────────────────────────────
+            '^/api/utilities/dns-lookup$' {
+                if ($method -eq 'POST') {
+                    $body = Read-RequestBody -Request $request
+                    Handle-DnsLookup -Response $response -Request $request -Body $body
+                } else {
+                    Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405
+                }
+            }
             default {
                 Send-Response -Response $response -Body @{ success = $false; error = "Not found: $path" } -StatusCode 404
             }
@@ -4371,7 +4767,7 @@ try {
 
     # Collect all functions defined in this session into InitialSessionState
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-)' } | ForEach-Object {
+    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-|Format-)' } | ForEach-Object {
         $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($_.Name, $_.Definition)
         $iss.Commands.Add($entry)
     }

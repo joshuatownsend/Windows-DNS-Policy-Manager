@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, TerminalSquare } from "lucide-react";
 import { BridgeStatus } from "./bridge-status";
 import { ExecutionToggle } from "./execution-toggle";
 import { TabNav } from "./tab-nav";
 import { HelpPanel } from "./help-panel";
+import { DnsLookupPanel } from "./dns-lookup-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 import { useStore } from "@/lib/store";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -50,6 +52,7 @@ function ServerSwitcher() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="min-w-[220px]">
+        <DropdownMenuGroup>
         <DropdownMenuLabel>DNS Servers</DropdownMenuLabel>
         {servers.map((s) => {
           const isActive = s.id === activeServerId;
@@ -74,6 +77,7 @@ function ServerSwitcher() {
             </DropdownMenuItem>
           );
         })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -82,6 +86,7 @@ function ServerSwitcher() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [lookupOpen, setLookupOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -127,6 +132,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="w-px h-5 bg-border" />
               <BridgeStatus />
               <div className="w-px h-5 bg-border" />
+              {/* DNS Lookup button */}
+              <button
+                onClick={() => setLookupOpen(true)}
+                className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs hover:bg-secondary/50 transition-colors"
+                aria-label="Open DNS lookup utility"
+              >
+                <TerminalSquare className="size-3.5 text-muted-foreground group-hover:text-cyan transition-colors" />
+                <span className="text-muted-foreground group-hover:text-foreground transition-colors font-medium">Lookup</span>
+              </button>
+              <div className="w-px h-5 bg-border" />
               {/* Help button */}
               <button
                 onClick={() => setHelpOpen(true)}
@@ -160,6 +175,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <TabNav />
         <main className="py-6 animate-fade-in">{children}</main>
       </div>
+
+      {/* ── DNS Lookup slide-over ─────────────────────────── */}
+      <DnsLookupPanel open={lookupOpen} onClose={() => setLookupOpen(false)} />
 
       {/* ── Help slide-over ─────────────────────────────── */}
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />

@@ -56,6 +56,12 @@ All DNS cmdlet calls use **splatted parameters** (`@splatParams`) to prevent com
 
 The UI has 11 tabs: Server, DNS Objects, Zones, Policies, Create Policy, Blocklists, Wizards, DNSSEC, Resolvers, Backup & Import, PowerShell. The root `/` redirects to `/server`.
 
+### Slide-over Panels
+
+Two slide-over panels are accessible from the header on any tab:
+- **DNS Lookup** (Lookup button) — live nslookup/dig queries with tool-specific options, custom nameserver targeting, console output. Component: `src/components/dns-lookup-panel.tsx`. Bridge endpoint: `POST /api/utilities/dns-lookup`.
+- **Help** (? button) — context-sensitive help docs. Component: `src/components/help-panel.tsx`.
+
 ## TODO
 - If I give you a TODO, save it to TODO.md in our repo.
 - Consider our TODO list when planning new features. If something on the list can be accomplished during a plan or implement run, suggest it.

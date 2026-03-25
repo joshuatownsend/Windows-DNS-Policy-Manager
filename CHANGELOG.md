@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **DNS Lookup utility** — slide-over panel accessible from the header (terminal icon) on any tab. Supports nslookup and dig output styles with tool-specific options:
+  - **nslookup**: Recursion, Use TCP, Debug (verbose output)
+  - **dig**: +recurse, +tcp, +dnssec, +trace, +short, +all, +multiline, +comments, +question, +answer, +authority, +additional, +stats
+  - Query any registered server or enter a custom nameserver IP
+  - Console-style output area with session history, copy, and clear
+  - Powered by `Resolve-DnsName` via the bridge (`/api/utilities/dns-lookup`)
+
+### Fixed
+
+- **Server switcher crash** — wrap `DropdownMenuLabel` in `DropdownMenuGroup` to satisfy Base UI's `MenuGroupRootContext` requirement
+- **Launcher** — `Start-DNSPolicyManager.ps1` now auto-installs frontend dependencies (`npm install`) on first run instead of printing a warning and skipping the frontend
+
 ### Changed
 
 - **Tab navigation** — redesigned from underline-indicator with numeric prefixes to pill-style active tabs with descriptive labels (e.g., "DNS Objects", "Create Policy", "Backup & Import")

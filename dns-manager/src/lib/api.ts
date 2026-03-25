@@ -547,4 +547,15 @@ export const api = {
   // Execute
   execute: (command: string) =>
     request("POST", "/api/execute", { command }),
+
+  // Utilities
+  dnsLookup: (params: {
+    tool: "nslookup" | "dig";
+    hostname: string;
+    server: string;
+    recordType: string;
+    options: Record<string, boolean>;
+    serverId?: string;
+    credentialMode?: string;
+  }) => request("POST", "/api/utilities/dns-lookup", params),
 };

@@ -67,7 +67,7 @@ function ConfigSection({
       <Card className="border-border/50">
         <CardHeader className="py-3 px-4">
           <div className="flex items-center justify-between">
-            <CollapsibleTrigger render={<div />} className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1">
+            <CollapsibleTrigger className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1 text-left">
               {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
               <Icon className="h-4 w-4 text-cyan" />
               <CardTitle className="text-sm font-medium">{title}</CardTitle>
