@@ -4086,7 +4086,7 @@ function Format-DigTrace {
         $tld = $parts[-1]
         try {
             $lines.Add('')
-            $lines.Add(";; Received from root for $tld.:")
+            $lines.Add(";; Received from root for ${tld}.:")
             $tldNs = @(Resolve-DnsName -Name "$tld." -Type NS -ErrorAction Stop)
             foreach ($r in $tldNs) {
                 if ($r.Type.ToString() -eq 'NS') {
@@ -4103,7 +4103,7 @@ function Format-DigTrace {
         $domain = ($parts[-2..-1] -join '.')
         try {
             $lines.Add('')
-            $lines.Add(";; Received from TLD for $domain.:")
+            $lines.Add(";; Received from TLD for ${domain}.:")
             $domainNs = @(Resolve-DnsName -Name $domain -Type NS -ErrorAction Stop)
             foreach ($r in $domainNs) {
                 if ($r.Type.ToString() -eq 'NS') {
@@ -4118,7 +4118,7 @@ function Format-DigTrace {
     # Step 4: Final query against authoritative server
     try {
         $lines.Add('')
-        $lines.Add(";; Received from authoritative for $Hostname:")
+        $lines.Add(";; Received from authoritative for ${Hostname}:")
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $finalResults = @(Resolve-DnsName -Name $Hostname -Type $RecordType -ErrorAction Stop)
         $sw.Stop()
