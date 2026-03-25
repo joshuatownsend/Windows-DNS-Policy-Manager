@@ -27,6 +27,7 @@ const allDocs = [
   { slug: "resolvers", title: "Resolvers & Topology" },
   { slug: "backup-and-import", title: "Backup & Import" },
   { slug: "powershell-output", title: "PowerShell Commands" },
+  { slug: "dns-lookup", title: "DNS Lookup Utility" },
   { slug: "troubleshooting", title: "Troubleshooting" },
 ];
 
