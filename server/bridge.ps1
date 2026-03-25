@@ -4653,7 +4653,7 @@ try {
 
     # Collect all functions defined in this session into InitialSessionState
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-)' } | ForEach-Object {
+    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-|Format-)' } | ForEach-Object {
         $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($_.Name, $_.Definition)
         $iss.Commands.Add($entry)
     }
