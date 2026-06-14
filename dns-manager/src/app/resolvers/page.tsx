@@ -282,6 +282,7 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
 export default function ResolversPage() {
   const servers = useStore((s) => s.servers);
   const bridgeConnected = useStore((s) => s.bridgeConnected);
+  const onlineKey = servers.filter((s) => s.status === "online").map((s) => s.id).sort().join(",");
 
   const [resolverData, setResolverData] = useState<ServerResolverData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -373,9 +374,7 @@ export default function ResolversPage() {
   useEffect(() => {
     if (!bridgeConnected) return;
     fetchAll();
-    // fetchAll is stable (deps []); only re-run when bridge connection changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridgeConnected]);
+  }, [bridgeConnected, onlineKey, fetchAll]);
 
   // Initialize Mermaid once
   const mermaidReady = useRef(false);
