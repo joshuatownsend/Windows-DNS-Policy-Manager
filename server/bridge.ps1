@@ -164,6 +164,58 @@ function Assert-SafeFileName {
     return $safe
 }
 
+function Test-CommandAllowed {
+    # Validate a /api/execute command string. Returns $true only if every command
+    # invoked anywhere in the input (including inside pipelines and $() subexpressions)
+    # resolves to an allowlisted DNS cmdlet (or a safe read-only formatter), and the
+    # input contains no static method calls or dynamically-named invocations.
+    param([string]$Command)
+
+    # Allowed by NAME PREFIX (covers e.g. Get-DnsServerZone, Get-DnsServerResourceRecord).
+    $allowedPrefixes = @(
+        'Get-DnsServer', 'Add-DnsServer', 'Remove-DnsServer', 'Set-DnsServer',
+        'Clear-DnsServer', 'Show-DnsServer', 'Enable-DnsServer', 'Disable-DnsServer',
+        'ConvertTo-DnsServer', 'Export-DnsServer', 'Import-DnsServer',
+        'Invoke-DnsServer', 'Start-DnsServer', 'Restore-DnsServer',
+        'Resume-DnsServer', 'Suspend-DnsServer', 'Sync-DnsServer',
+        'Step-DnsServer', 'Reset-DnsServer', 'Register-DnsServer', 'Unregister-DnsServer',
+        'Update-DnsServer', 'Test-DnsServer',
+        'Get-DnsClientServerAddress', 'Test-NetConnection', 'Resolve-DnsName', 'Get-Service'
+    )
+    # Allowed by EXACT NAME — read-only output shaping used in legitimate pipelines.
+    $allowedExact = @(
+        'Format-Table', 'Format-List', 'Select-Object', 'Sort-Object', 'Out-String'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
+
+    $tokens = $null
+    $errs   = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$errs)
+    if ($errs -and $errs.Count -gt 0) { return $false }
+
+    # Reject any static/instance method call, e.g. [Diagnostics.Process]::Start(...)
+    $methodCalls = $ast.FindAll(
+        { param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)
+    if ($methodCalls.Count -gt 0) { return $false }
+
+    # Every command invoked anywhere must be allowlisted.
+    $commands = $ast.FindAll(
+        { param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
+    if (-not $commands -or $commands.Count -eq 0) { return $false }
+
+    foreach ($c in $commands) {
+        $name = $c.GetCommandName()
+        if (-not $name) { return $false }   # e.g. `& $var` — dynamic, not statically verifiable
+        $ok = $false
+        foreach ($p in $allowedPrefixes) {
+            if ($name -like "$p*") { $ok = $true; break }
+        }
+        if (-not $ok -and ($allowedExact -notcontains $name)) { return $false }
+    }
+    return $true
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
 $script:SessionCredentials = @{}
@@ -3715,32 +3767,12 @@ function Handle-Execute {
         return
     }
 
-    # Security: only allow DNS-related commands
     $command = $Body.command
-    $allowedVerbs = @(
-        'Get-DnsServer', 'Add-DnsServer', 'Remove-DnsServer', 'Set-DnsServer',
-        'Clear-DnsServer', 'Show-DnsServer', 'Enable-DnsServer', 'Disable-DnsServer',
-        'ConvertTo-DnsServer', 'Export-DnsServer', 'Import-DnsServer',
-        'Invoke-DnsServer', 'Start-DnsServer', 'Restore-DnsServer',
-        'Resume-DnsServer', 'Suspend-DnsServer', 'Sync-DnsServer',
-        'Step-DnsServer', 'Reset-DnsServer', 'Register-DnsServer', 'Unregister-DnsServer',
-        'Update-DnsServer', 'Test-DnsServer',
-        'Get-DnsClientServerAddress', 'Test-NetConnection',
-        'Resolve-DnsName', 'Get-Service'
-    )
 
-    $isAllowed = $false
-    foreach ($verb in $allowedVerbs) {
-        if ($command -match "^\s*$([regex]::Escape($verb))") {
-            $isAllowed = $true
-            break
-        }
-    }
-
-    if (-not $isAllowed) {
+    if (-not (Test-CommandAllowed -Command $command)) {
         Send-Response -Response $Response -Body @{
             success = $false
-            error   = 'Command not allowed. Only DNS-related cmdlets are permitted.'
+            error   = 'Command not allowed. Only specific DNS cmdlets (optionally piped to Format-Table/List/Select-Object/Sort-Object/Out-String) are permitted.'
         } -StatusCode 403
         return
     }
