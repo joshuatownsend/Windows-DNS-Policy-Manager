@@ -275,6 +275,8 @@ function Resolve-ServerCredential {
         $so = New-CimSessionOption -Protocol Dcom
         $session = New-CimSession -ComputerName $Hostname -Credential $cred -SessionOption $so -ErrorAction Stop
         $params['CimSession'] = $session
+        if (-not $script:RequestCimSessions) { $script:RequestCimSessions = @() }
+        $script:RequestCimSessions += $session
     } elseif ($isRemote) {
         $params['ComputerName'] = $Hostname
     }
@@ -4887,6 +4889,7 @@ try {
             $script:CredStorePath      = $state.CredStorePath
             $script:BpaJobs            = $state.BpaJobs
             $script:ResolverJobs       = $state.ResolverJobs
+            $script:RequestCimSessions = @()
 
             try {
                 Route-Request -Context $ctx
@@ -4897,6 +4900,11 @@ try {
                         error   = "Internal server error: $($_.Exception.Message)"
                     } -StatusCode 500
                 } catch {}
+            } finally {
+                foreach ($s in $script:RequestCimSessions) {
+                    try { Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue } catch {}
+                }
+                $script:RequestCimSessions = @()
             }
 
             # Write back mutable state
