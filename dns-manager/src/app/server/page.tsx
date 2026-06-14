@@ -165,14 +165,16 @@ export default function ServerPage() {
   // ── Check saved credentials when bridge comes online ──────
   useEffect(() => {
     if (!bridgeConnected) return;
-    servers
-      .filter((s) => s.credentialMode === "savedCredential")
-      .forEach(async (s) => {
-        const res = await api.checkCredential(s.id);
-        if (res.success) {
-          updateServer(s.id, { hasCredential: !!res.found });
-        }
-      });
+    void Promise.all(
+      servers
+        .filter((s) => s.credentialMode === "savedCredential")
+        .map(async (s) => {
+          const res = await api.checkCredential(s.id);
+          if (res.success) {
+            updateServer(s.id, { hasCredential: !!res.exists });
+          }
+        })
+    );
     // Run once when bridge connects; intentionally not re-running on servers changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridgeConnected]);
