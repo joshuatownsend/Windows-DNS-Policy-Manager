@@ -13,7 +13,10 @@
 
 param(
     [int]$Port = 8650,
-    [string]$BindAddress = '127.0.0.1'
+    [string]$BindAddress = '127.0.0.1',
+    [string[]]$AllowedOrigins = @(
+        'http://localhost:10010', 'http://127.0.0.1:10010'
+    )
 )
 
 Set-StrictMode -Version Latest
@@ -216,8 +219,20 @@ function Test-CommandAllowed {
     return $true
 }
 
+function Test-OriginAllowed {
+    # CSRF guard. A browser attaches an Origin header on cross-origin (and
+    # state-changing same-origin) requests. Non-browser clients (curl, the MCP
+    # server, Invoke-RestMethod) usually send none. Rule: allow when there is no
+    # Origin; otherwise the Origin must be in the allowlist.
+    param([System.Net.HttpListenerRequest]$Request)
+    $origin = $Request.Headers['Origin']
+    if ([string]::IsNullOrEmpty($origin)) { return $true }
+    return ($script:AllowedOrigins -contains $origin)
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
+$script:AllowedOrigins = $AllowedOrigins
 $script:SessionCredentials = @{}
 $script:CredStorePath = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\credentials'
 
@@ -4194,6 +4209,15 @@ function Route-Request {
         return
     }
 
+    # CSRF guard: reject browser requests from untrusted origins.
+    if (-not (Test-OriginAllowed -Request $request)) {
+        Send-Response -Response $response -Body @{
+            success = $false
+            error   = 'Origin not allowed'
+        } -StatusCode 403
+        return
+    }
+
     Write-Log "$method $path"
 
     try {
@@ -4824,6 +4848,11 @@ try {
     $iss.Variables.Add(
         [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
             'SharedState', $sharedState, ''
+        )
+    )
+    $iss.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'AllowedOrigins', $AllowedOrigins, ''
         )
     )
 
