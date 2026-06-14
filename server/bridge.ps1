@@ -197,10 +197,21 @@ function Test-CommandAllowed {
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$errs)
     if ($errs -and $errs.Count -gt 0) { return $false }
 
-    # Reject any static/instance method call, e.g. [Diagnostics.Process]::Start(...)
-    $methodCalls = $ast.FindAll(
-        { param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)
-    if ($methodCalls.Count -gt 0) { return $false }
+    # Reject side-effecting AST constructs BEFORE allowlisting commands:
+    #   - InvokeMemberExpressionAst: static/instance method calls, e.g. [Diagnostics.Process]::Start(...)
+    #   - AssignmentStatementAst: assignments can redefine an allowlisted command, e.g.
+    #     ${function:Get-DnsServer}='Start-Process calc'; Get-DnsServer  — the CommandAst still
+    #     looks allowlisted but the redefined function body runs arbitrary code.
+    #   - RedirectionAst (base type, covers file + merging redirections): writes arbitrary files,
+    #     e.g. Get-DnsServer > C:\evil.txt  or  Get-DnsServer 2> C:\evil.txt
+    # Legitimate /api/execute commands (DNS cmdlets, optionally piped to a read-only formatter)
+    # contain none of these, so this does not break legitimate use.
+    $sideEffects = $ast.FindAll(
+        { param($n)
+            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -or
+            $n -is [System.Management.Automation.Language.AssignmentStatementAst] -or
+            $n -is [System.Management.Automation.Language.RedirectionAst] }, $true)
+    if ($sideEffects.Count -gt 0) { return $false }
 
     # Every command invoked anywhere must be allowlisted.
     $commands = $ast.FindAll(
@@ -4205,18 +4216,21 @@ function Route-Request {
     $method   = $request.HttpMethod
     $path     = $request.Url.LocalPath
 
-    # Handle CORS preflight
-    if ($method -eq 'OPTIONS') {
-        Send-Preflight -Response $response
-        return
-    }
-
-    # CSRF guard: reject browser requests from untrusted origins.
+    # CSRF guard: reject browser requests from untrusted origins. This runs BEFORE
+    # the OPTIONS preflight so untrusted origins receive a consistent 403 rather than
+    # a 204 preflight. Allowlisted origins and no-Origin requests still pass, so the
+    # legitimate UI preflight (e.g. from localhost:10010) continues to work.
     if (-not (Test-OriginAllowed -Request $request)) {
         Send-Response -Response $response -Body @{
             success = $false
             error   = 'Origin not allowed'
         } -StatusCode 403
+        return
+    }
+
+    # Handle CORS preflight
+    if ($method -eq 'OPTIONS') {
+        Send-Preflight -Response $response
         return
     }
 
@@ -4836,6 +4850,7 @@ try {
         CredStorePath      = $script:CredStorePath
         BpaJobs            = @{}
         ResolverJobs       = @{}
+        AllowedOrigins     = $script:AllowedOrigins
     })
     $iss.Variables.Add(
         [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
@@ -4889,6 +4904,7 @@ try {
             $script:CredStorePath      = $state.CredStorePath
             $script:BpaJobs            = $state.BpaJobs
             $script:ResolverJobs       = $state.ResolverJobs
+            $script:AllowedOrigins     = $state.AllowedOrigins
             $script:RequestCimSessions = @()
 
             try {
