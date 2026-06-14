@@ -290,6 +290,10 @@ export default function ResolversPage() {
   const [mermaidError, setMermaidError] = useState<string | null>(null);
 
   const pollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
+  const serversRef = useRef(servers);
+  useEffect(() => {
+    serversRef.current = servers;
+  }, [servers]);
 
   // Clean up polls on unmount
   useEffect(() => {
@@ -299,7 +303,7 @@ export default function ResolversPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const onlineServers = servers.filter((s) => s.status === "online");
+    const onlineServers = serversRef.current.filter((s) => s.status === "online");
     if (onlineServers.length === 0) {
       setResolverData([]);
       return;
@@ -364,12 +368,14 @@ export default function ResolversPage() {
     }, 2000);
 
     pollTimers.current.push(timer);
-  }, [servers]);
+  }, []);
 
   useEffect(() => {
     if (!bridgeConnected) return;
     fetchAll();
-  }, [bridgeConnected, fetchAll]);
+    // fetchAll is stable (deps []); only re-run when bridge connection changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bridgeConnected]);
 
   // Initialize Mermaid once
   const mermaidReady = useRef(false);
