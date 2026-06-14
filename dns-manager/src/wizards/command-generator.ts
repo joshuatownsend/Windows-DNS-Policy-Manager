@@ -6,7 +6,7 @@
 /** Escape PowerShell metacharacters for safe use inside double-quoted strings.
  *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
 function psEscape(value: string): string {
-  return value.replace(/[`"$]/g, (ch) => "`" + ch).replace(/[\r\n]+/g, " ");
+  return value.replace(/[`"$]/g, (ch) => "`" + ch);
 }
 
 export function generateCommands(
@@ -273,7 +273,7 @@ export function generateCommands(
       psSecs.forEach((sec: any) => {
         if (!sec.name) return;
         const secP = ` -ComputerName "${sec.name}"`;
-        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${serverHostname}"` : '"localhost"'}${secP}`);
+        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${psEscape(serverHostname)}"` : '"localhost"'}${secP}`);
         cmds.push("");
         psRegs.forEach((r: any) => {
           if (r.name && r.subnet) cmds.push(`Add-DnsServerClientSubnet -Name "${r.name}Subnet" -IPv4Subnet "${r.subnet}"${secP}`);

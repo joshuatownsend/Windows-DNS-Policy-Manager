@@ -77,4 +77,25 @@ describe("generateCommands escaping", () => {
     const out = generateCommands("blocklist", { blocklistDomains: "a.com,b.com", blocklistAction: "IGNORE" });
     expect(out).toContain('-FQDN "EQ,a.com,b.com"');
   });
+
+  it("newline-delimited blocklist domains are split correctly (psEscape preserves newlines)", () => {
+    const out = generateCommands("blocklist", { blocklistDomains: "a.com\nb.com" });
+    expect(out).toContain("EQ,a.com,b.com");
+  });
+
+  it("primarysecondary: -MasterServers hostname is escaped", () => {
+    const out = generateCommands(
+      "primarysecondary",
+      {
+        zone: "contoso.com",
+        psRegions: [{ name: "US", subnet: "10.0.0.0/8", ip: "1.2.3.4" }],
+        psSecondaries: [{ name: "sec01", ip: "192.168.1.2" }],
+      },
+      'h"$(x)'
+    );
+    // Raw unescaped hostname must NOT appear in -MasterServers
+    expect(out).not.toContain('-MasterServers "h"$(x)"');
+    // Backtick-escaped form must appear
+    expect(out).toContain('-MasterServers "h`"`$(x)"');
+  });
 });
