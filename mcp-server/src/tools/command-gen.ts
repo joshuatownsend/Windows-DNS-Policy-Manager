@@ -6,6 +6,9 @@ import { z } from "zod";
  * Ported from dns-manager/src/wizards/command-generator.ts.
  */
 
+// ⚠ KEEP IN SYNC with dns-manager/src/wizards/command-generator.ts (same generator, two packages).
+//   If you change scenario logic here, mirror it there, and vice versa.
+
 const SCENARIOS = [
   "geolocation",
   "splitbrain",

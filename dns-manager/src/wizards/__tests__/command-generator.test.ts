@@ -54,3 +54,27 @@ describe("generateCommands", () => {
     expect(generateCommands("nope", {})).toBe("");
   });
 });
+
+describe("generateCommands escaping", () => {
+  it("escapes double quotes, backticks, and $ in field values", () => {
+    const out = generateCommands("geolocation", {
+      zone: 'evil"$(calc)"',
+      recordName: "www",
+      regions: [{ name: "US", subnet: "10.0.0.0/8", ip: "1.2.3.4" }],
+    });
+    // Raw, dangerous form must NOT appear:
+    expect(out).not.toContain('"evil"$(calc)""');
+    // Escaped form (backtick before each metachar) must appear:
+    expect(out).toContain('evil`"`$(calc)`"');
+  });
+
+  it("escapes the serverHostname", () => {
+    const out = generateCommands("blocklist", { blocklistDomains: "a.com" }, 'h"$(x)');
+    expect(out).toContain('-ComputerName "h`"`$(x)"');
+  });
+
+  it("leaves safe alphanumeric input unchanged", () => {
+    const out = generateCommands("blocklist", { blocklistDomains: "a.com,b.com", blocklistAction: "IGNORE" });
+    expect(out).toContain('-FQDN "EQ,a.com,b.com"');
+  });
+});
