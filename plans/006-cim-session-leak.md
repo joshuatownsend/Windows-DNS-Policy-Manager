@@ -188,7 +188,7 @@ environment is available, note that Step 3 was not run.
 
 ## Test plan
 
-No automated PowerShell test harness exists yet (plan 004 sets one up for the TS
+No automated PowerShell test harness exists yet (plan 003 sets one up for the TS
 side; a Pester harness for the bridge is a separate future item). Verification:
 - Automated: parse check passes.
 - Manual (if environment available): `Get-CimSession` count stays flat across

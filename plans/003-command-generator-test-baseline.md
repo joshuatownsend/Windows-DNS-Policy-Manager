@@ -28,7 +28,7 @@ specs that run against a mock bridge; nothing exercises command generation. A
 typo there silently produces invalid PowerShell that a user pastes into a DNS
 server. This plan stands up a fast unit-test runner (Vitest) and writes
 **characterization tests** that lock in the generator's current output. That
-runner and those tests are also the safety net for plan 005 (which adds input
+runner and those tests are also the safety net for plan 004 (which adds input
 escaping to this same file) — land this first.
 
 ## Current state
@@ -83,7 +83,7 @@ Representative current output to characterize (verbatim from the code):
 
 **Out of scope** (do NOT touch):
 - `dns-manager/src/wizards/command-generator.ts` itself — this plan only
-  *characterizes* current behavior; do not change the generator. (Plan 005 will.)
+  *characterizes* current behavior; do not change the generator. (Plan 004 will.)
 - The Playwright E2E setup (`e2e/`, `test:e2e`) — leave it as is. Do not let
   Vitest try to run the Playwright `*.spec.ts` files (the config below scopes
   Vitest to `src/**`).
@@ -234,11 +234,11 @@ Stop and report if:
 
 ## Maintenance notes
 
-- Plan 005 depends on this: it adds escaping assertions to this same test file.
-  Keep the file's structure simple so 005 can append cases.
+- Plan 004 depends on this: it adds escaping assertions to this same test file.
+  Keep the file's structure simple so 004 can append cases.
 - The MCP server (`mcp-server/src/tools/command-gen.ts`) is a near-duplicate of
   this generator and should get the same treatment (Vitest + tests) as a
-  follow-up; it already includes the `psEscape` logic plan 005 ports to the
+  follow-up; it already includes the `psEscape` logic plan 004 ports to the
   frontend, so its tests would assert escaping is present.
 - When adding new wizard scenarios, add a characterization test here in the same
   pass — that is the convention this plan establishes.
