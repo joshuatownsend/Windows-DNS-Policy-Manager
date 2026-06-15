@@ -22,7 +22,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 - **Backup & export** — policy JSON backup/restore, server configuration export (Get-DnsServer as JSON), DNS zone export (single or all primary zones via Export-DnsServerZone), AD-integrated backup info
 - **DNS Lookup utility** — slide-over panel with live nslookup and dig queries from any tab. Tool-specific options (+trace, +dnssec, +short, +all, +multiline, debug), custom or registered nameserver targeting, and console-style session output with copy/clear
 - **Context-sensitive help** with slide-over panel and full-page popout
-- **20 Playwright E2E tests** with mock bridge, integrated into CI
+- **21 Playwright E2E tests** with mock bridge, integrated into CI
 - **MCP server** — 31 read-only tools for AI agents via Model Context Protocol (zones, records, policies, server config, DNSSEC, RRL, scavenging, and more), plus offline PowerShell command generation
 - **Docker-ready** with multi-stage Alpine image (221 MB)
 - Keyboard-accessible tab navigation and ARIA attributes
@@ -31,7 +31,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 ### Requirements
 
-- **Node.js** 18+ (for the frontend)
+- **Node.js** 20.19+ or 22.12+ (for the frontend and test tooling; CI builds on Node 22)
 - **Windows Server** with the DNS Server role, or a machine with the `DnsServer` PowerShell module
 - The bridge binds only to `127.0.0.1` by default — never exposed to the network
 
