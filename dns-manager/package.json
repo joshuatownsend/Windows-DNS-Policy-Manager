@@ -17,8 +17,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
-    "mermaid": "^11.13.0",
-    "next": "^16.2.4",
+    "mermaid": "^11.15.0",
+    "next": "^16.2.6",
     "next-themes": "^0.4.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
@@ -31,7 +31,8 @@
   },
   "overrides": {
     "path-to-regexp": ">=8.4.0",
-    "postcss": ">=8.5.10"
+    "postcss": ">=8.5.10",
+    "esbuild": ">=0.28.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
@@ -43,6 +44,6 @@
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^6",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.6"
   }
 }
