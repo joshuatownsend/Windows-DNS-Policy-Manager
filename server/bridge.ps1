@@ -13,7 +13,10 @@
 
 param(
     [int]$Port = 8650,
-    [string]$BindAddress = '127.0.0.1'
+    [string]$BindAddress = '127.0.0.1',
+    [string[]]$AllowedOrigins = @(
+        'http://localhost:10010', 'http://127.0.0.1:10010'
+    )
 )
 
 Set-StrictMode -Version Latest
@@ -164,8 +167,83 @@ function Assert-SafeFileName {
     return $safe
 }
 
+function Test-CommandAllowed {
+    # Validate a /api/execute command string. Returns $true only if every command
+    # invoked anywhere in the input (including inside pipelines and $() subexpressions)
+    # resolves to an allowlisted DNS cmdlet (or a safe read-only formatter), and the
+    # input contains no static method calls or dynamically-named invocations.
+    param([string]$Command)
+
+    # Allowed by NAME PREFIX (covers e.g. Get-DnsServerZone, Get-DnsServerResourceRecord).
+    $allowedPrefixes = @(
+        'Get-DnsServer', 'Add-DnsServer', 'Remove-DnsServer', 'Set-DnsServer',
+        'Clear-DnsServer', 'Show-DnsServer', 'Enable-DnsServer', 'Disable-DnsServer',
+        'ConvertTo-DnsServer', 'Export-DnsServer', 'Import-DnsServer',
+        'Invoke-DnsServer', 'Start-DnsServer', 'Restore-DnsServer',
+        'Resume-DnsServer', 'Suspend-DnsServer', 'Sync-DnsServer',
+        'Step-DnsServer', 'Reset-DnsServer', 'Register-DnsServer', 'Unregister-DnsServer',
+        'Update-DnsServer', 'Test-DnsServer',
+        'Get-DnsClientServerAddress', 'Test-NetConnection', 'Resolve-DnsName', 'Get-Service'
+    )
+    # Allowed by EXACT NAME — read-only output shaping used in legitimate pipelines.
+    $allowedExact = @(
+        'Format-Table', 'Format-List', 'Select-Object', 'Sort-Object', 'Out-String'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
+
+    $tokens = $null
+    $errs   = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$errs)
+    if ($errs -and $errs.Count -gt 0) { return $false }
+
+    # Reject side-effecting AST constructs BEFORE allowlisting commands:
+    #   - InvokeMemberExpressionAst: static/instance method calls, e.g. [Diagnostics.Process]::Start(...)
+    #   - AssignmentStatementAst: assignments can redefine an allowlisted command, e.g.
+    #     ${function:Get-DnsServer}='Start-Process calc'; Get-DnsServer  — the CommandAst still
+    #     looks allowlisted but the redefined function body runs arbitrary code.
+    #   - RedirectionAst (base type, covers file + merging redirections): writes arbitrary files,
+    #     e.g. Get-DnsServer > C:\evil.txt  or  Get-DnsServer 2> C:\evil.txt
+    # Legitimate /api/execute commands (DNS cmdlets, optionally piped to a read-only formatter)
+    # contain none of these, so this does not break legitimate use.
+    $sideEffects = $ast.FindAll(
+        { param($n)
+            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -or
+            $n -is [System.Management.Automation.Language.AssignmentStatementAst] -or
+            $n -is [System.Management.Automation.Language.RedirectionAst] }, $true)
+    if ($sideEffects.Count -gt 0) { return $false }
+
+    # Every command invoked anywhere must be allowlisted.
+    $commands = $ast.FindAll(
+        { param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
+    if (-not $commands -or $commands.Count -eq 0) { return $false }
+
+    foreach ($c in $commands) {
+        $name = $c.GetCommandName()
+        if (-not $name) { return $false }   # e.g. `& $var` — dynamic, not statically verifiable
+        $ok = $false
+        foreach ($p in $allowedPrefixes) {
+            if ($name -like "$p*") { $ok = $true; break }
+        }
+        if (-not $ok -and ($allowedExact -notcontains $name)) { return $false }
+    }
+    return $true
+}
+
+function Test-OriginAllowed {
+    # CSRF guard. A browser attaches an Origin header on cross-origin (and
+    # state-changing same-origin) requests. Non-browser clients (curl, the MCP
+    # server, Invoke-RestMethod) usually send none. Rule: allow when there is no
+    # Origin; otherwise the Origin must be in the allowlist.
+    param([System.Net.HttpListenerRequest]$Request)
+    $origin = $Request.Headers['Origin']
+    if ([string]::IsNullOrEmpty($origin)) { return $true }
+    return ($script:AllowedOrigins -contains $origin)
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
+$script:AllowedOrigins = $AllowedOrigins
 $script:SessionCredentials = @{}
 $script:CredStorePath = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\credentials'
 
@@ -208,6 +286,8 @@ function Resolve-ServerCredential {
         $so = New-CimSessionOption -Protocol Dcom
         $session = New-CimSession -ComputerName $Hostname -Credential $cred -SessionOption $so -ErrorAction Stop
         $params['CimSession'] = $session
+        if (-not $script:RequestCimSessions) { $script:RequestCimSessions = @() }
+        $script:RequestCimSessions += $session
     } elseif ($isRemote) {
         $params['ComputerName'] = $Hostname
     }
@@ -3715,32 +3795,12 @@ function Handle-Execute {
         return
     }
 
-    # Security: only allow DNS-related commands
     $command = $Body.command
-    $allowedVerbs = @(
-        'Get-DnsServer', 'Add-DnsServer', 'Remove-DnsServer', 'Set-DnsServer',
-        'Clear-DnsServer', 'Show-DnsServer', 'Enable-DnsServer', 'Disable-DnsServer',
-        'ConvertTo-DnsServer', 'Export-DnsServer', 'Import-DnsServer',
-        'Invoke-DnsServer', 'Start-DnsServer', 'Restore-DnsServer',
-        'Resume-DnsServer', 'Suspend-DnsServer', 'Sync-DnsServer',
-        'Step-DnsServer', 'Reset-DnsServer', 'Register-DnsServer', 'Unregister-DnsServer',
-        'Update-DnsServer', 'Test-DnsServer',
-        'Get-DnsClientServerAddress', 'Test-NetConnection',
-        'Resolve-DnsName', 'Get-Service'
-    )
 
-    $isAllowed = $false
-    foreach ($verb in $allowedVerbs) {
-        if ($command -match "^\s*$([regex]::Escape($verb))") {
-            $isAllowed = $true
-            break
-        }
-    }
-
-    if (-not $isAllowed) {
+    if (-not (Test-CommandAllowed -Command $command)) {
         Send-Response -Response $Response -Body @{
             success = $false
-            error   = 'Command not allowed. Only DNS-related cmdlets are permitted.'
+            error   = 'Command not allowed. Only specific DNS cmdlets (optionally piped to Format-Table/List/Select-Object/Sort-Object/Out-String) are permitted.'
         } -StatusCode 403
         return
     }
@@ -4155,6 +4215,18 @@ function Route-Request {
     $response = $Context.Response
     $method   = $request.HttpMethod
     $path     = $request.Url.LocalPath
+
+    # CSRF guard: reject browser requests from untrusted origins. This runs BEFORE
+    # the OPTIONS preflight so untrusted origins receive a consistent 403 rather than
+    # a 204 preflight. Allowlisted origins and no-Origin requests still pass, so the
+    # legitimate UI preflight (e.g. from localhost:10010) continues to work.
+    if (-not (Test-OriginAllowed -Request $request)) {
+        Send-Response -Response $response -Body @{
+            success = $false
+            error   = 'Origin not allowed'
+        } -StatusCode 403
+        return
+    }
 
     # Handle CORS preflight
     if ($method -eq 'OPTIONS') {
@@ -4778,6 +4850,7 @@ try {
         CredStorePath      = $script:CredStorePath
         BpaJobs            = @{}
         ResolverJobs       = @{}
+        AllowedOrigins     = $script:AllowedOrigins
     })
     $iss.Variables.Add(
         [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
@@ -4792,6 +4865,11 @@ try {
     $iss.Variables.Add(
         [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
             'SharedState', $sharedState, ''
+        )
+    )
+    $iss.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'AllowedOrigins', $AllowedOrigins, ''
         )
     )
 
@@ -4826,6 +4904,8 @@ try {
             $script:CredStorePath      = $state.CredStorePath
             $script:BpaJobs            = $state.BpaJobs
             $script:ResolverJobs       = $state.ResolverJobs
+            $script:AllowedOrigins     = $state.AllowedOrigins
+            $script:RequestCimSessions = @()
 
             try {
                 Route-Request -Context $ctx
@@ -4836,6 +4916,11 @@ try {
                         error   = "Internal server error: $($_.Exception.Message)"
                     } -StatusCode 500
                 } catch {}
+            } finally {
+                foreach ($s in $script:RequestCimSessions) {
+                    try { Remove-CimSession -CimSession $s -ErrorAction SilentlyContinue } catch {}
+                }
+                $script:RequestCimSessions = @()
             }
 
             # Write back mutable state

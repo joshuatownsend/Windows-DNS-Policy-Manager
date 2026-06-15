@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/start-test.mjs"
   },
   "dependencies": {

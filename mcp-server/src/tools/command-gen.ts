@@ -372,7 +372,7 @@ Example data for 'geolocation': { "zone": "contoso.com", "recordName": "www", "r
 Example data for 'loadbalancing': { "zone": "contoso.com", "backends": [{ "name": "DC1", "ip": "10.0.0.1", "weight": 3 }, { "name": "DC2", "ip": "10.0.0.2", "weight": 1 }] }`,
     {
       scenario: z.enum(SCENARIOS).describe("The policy scenario to generate commands for"),
-      data: z.record(z.unknown()).describe("Object with scenario-specific parameters (see tool description for examples)"),
+      data: z.record(z.string(), z.unknown()).describe("Object with scenario-specific parameters (see tool description for examples)"),
       serverHostname: z.string().optional().describe("Target DNS server hostname for -ComputerName parameter"),
     },
     async ({ scenario, data, serverHostname }) => {
