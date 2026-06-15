@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-15
+
 ### Security
 
 - **Dependency CVE sweep** — cleared the entire open vulnerability backlog: GitHub Dependabot alerts 49 → 0, and `npm audit` from 14 → 0 (`dns-manager/`) and 5 → 0 (`mcp-server/`).

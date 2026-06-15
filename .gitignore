@@ -14,3 +14,12 @@ Thumbs.db
 
 # Large binaries / PDFs
 *.pdf
+
+# Local tooling caches / indexes (machine-specific, not source)
+.codegraph/
+.claudelint-cache/
+.remember/
+
+# Session-generated artifacts
+INSIGHTS.md
+console.png
