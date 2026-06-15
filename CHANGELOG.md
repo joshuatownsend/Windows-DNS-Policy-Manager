@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency CVE sweep** — cleared the entire open vulnerability backlog: GitHub Dependabot alerts 49 → 0, and `npm audit` from 14 → 0 (`dns-manager/`) and 5 → 0 (`mcp-server/`).
+  - **dns-manager**: `vitest` 2 → 3 (CRITICAL; also pulls `vite` 7, clearing the `vite` advisory), `next` 16.2.4 → 16.2.6 (HIGH), `mermaid` 11.13 → 11.15, an `esbuild >=0.28.1` override (2× HIGH — RCE via `NPM_CONFIG_REGISTRY`, dev-server file read), plus semver-compatible transitive patches to `fast-uri`, `hono`, `ip-address`, `qs`, `brace-expansion`, and `uuid` (#50).
+  - **mcp-server**: transitive patches (lockfile-only) to `fast-uri` (HIGH), `hono`, `ip-address`, and `qs` (#51).
+  - Deferred (non-security, tracked by Dependabot): `eslint` 9 → 10, `@types/node` 20 → 25.
+
 ## [0.5.0] - 2026-03-25
 
 ### Added
