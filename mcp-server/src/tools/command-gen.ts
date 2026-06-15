@@ -6,6 +6,9 @@ import { z } from "zod";
  * Ported from dns-manager/src/wizards/command-generator.ts.
  */
 
+// ⚠ KEEP IN SYNC with dns-manager/src/wizards/command-generator.ts (same generator, two packages).
+//   If you change scenario logic here, mirror it there, and vice versa.
+
 const SCENARIOS = [
   "geolocation",
   "splitbrain",
@@ -22,7 +25,7 @@ type ScenarioId = (typeof SCENARIOS)[number];
 /** Escape PowerShell metacharacters for safe use inside double-quoted strings.
  *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
 function psEscape(value: string): string {
-  return value.replace(/[`"$]/g, (ch) => "`" + ch).replace(/[\r\n]+/g, " ");
+  return value.replace(/[`"$]/g, (ch) => "`" + ch);
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -290,7 +293,7 @@ function generateCommands(
       psSecs.forEach((sec: any) => {
         if (!sec.name) return;
         const secP = ` -ComputerName "${sec.name}"`;
-        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${serverHostname}"` : '"localhost"'}${secP}`);
+        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${psEscape(serverHostname)}"` : '"localhost"'}${secP}`);
         cmds.push("");
         psRegs.forEach((r: any) => {
           if (r.name && r.subnet) cmds.push(`Add-DnsServerClientSubnet -Name "${r.name}Subnet" -IPv4Subnet "${r.subnet}"${secP}`);

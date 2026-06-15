@@ -131,7 +131,7 @@ Session credentials (username/password) are intentionally not supported in the M
 
 - All tools are **read-only** — no write operations on DNS servers
 - The bridge's `/api/execute` endpoint (arbitrary PowerShell) is **not exposed** through MCP
-- Generated PowerShell commands (offline tool) sanitize all input against injection (`$`, `` ` ``, `"`)
+- Generated PowerShell commands (offline command generator, both the web UI and the MCP `dns_generate_policy_commands` tool) escape user input against injection (`$`, `` ` ``, `"`) before interpolation
 - The bridge must be running for live queries; the offline command generator works independently
 
 ## Running with Docker

@@ -1,5 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// ⚠ KEEP IN SYNC with mcp-server/src/tools/command-gen.ts (same generator, two packages).
+//   If you change scenario logic here, mirror it there, and vice versa.
+
+/** Escape PowerShell metacharacters for safe use inside double-quoted strings.
+ *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
+function psEscape(value: string): string {
+  return value.replace(/[`"$]/g, (ch) => "`" + ch);
+}
+
 export function generateCommands(
   scenarioId: string,
   data: Record<string, any>,
@@ -7,8 +16,20 @@ export function generateCommands(
 ): string {
   const serverParam =
     serverHostname && serverHostname !== "localhost"
-      ? ` -ComputerName "${serverHostname}"`
+      ? ` -ComputerName "${psEscape(serverHostname)}"`
       : "";
+  // Sanitize all string values in data to prevent PowerShell injection via quotes/backticks
+  function sanitizeData(obj: any): any {
+    if (typeof obj === "string") return psEscape(obj);
+    if (Array.isArray(obj)) return obj.map(sanitizeData);
+    if (obj && typeof obj === "object") {
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = sanitizeData(v);
+      return out;
+    }
+    return obj;
+  }
+  data = sanitizeData(data);
   const cmds: string[] = [];
 
   switch (scenarioId) {
@@ -252,7 +273,7 @@ export function generateCommands(
       psSecs.forEach((sec: any) => {
         if (!sec.name) return;
         const secP = ` -ComputerName "${sec.name}"`;
-        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${serverHostname}"` : '"localhost"'}${secP}`);
+        cmds.push(`Add-DnsServerSecondaryZone -Name "${data.zone}" -ZoneFile "${data.zone}.dns" -MasterServers ${serverHostname ? `"${psEscape(serverHostname)}"` : '"localhost"'}${secP}`);
         cmds.push("");
         psRegs.forEach((r: any) => {
           if (r.name && r.subnet) cmds.push(`Add-DnsServerClientSubnet -Name "${r.name}Subnet" -IPv4Subnet "${r.subnet}"${secP}`);
