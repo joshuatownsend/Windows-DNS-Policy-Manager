@@ -282,6 +282,7 @@ function buildMermaidGraph(allData: ServerResolverData[], addressFilter: Address
 export default function ResolversPage() {
   const servers = useStore((s) => s.servers);
   const bridgeConnected = useStore((s) => s.bridgeConnected);
+  const onlineKey = servers.filter((s) => s.status === "online").map((s) => s.id).sort().join(",");
 
   const [resolverData, setResolverData] = useState<ServerResolverData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -290,6 +291,10 @@ export default function ResolversPage() {
   const [mermaidError, setMermaidError] = useState<string | null>(null);
 
   const pollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
+  const serversRef = useRef(servers);
+  useEffect(() => {
+    serversRef.current = servers;
+  }, [servers]);
 
   // Clean up polls on unmount
   useEffect(() => {
@@ -299,7 +304,7 @@ export default function ResolversPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const onlineServers = servers.filter((s) => s.status === "online");
+    const onlineServers = serversRef.current.filter((s) => s.status === "online");
     if (onlineServers.length === 0) {
       setResolverData([]);
       return;
@@ -364,12 +369,12 @@ export default function ResolversPage() {
     }, 2000);
 
     pollTimers.current.push(timer);
-  }, [servers]);
+  }, []);
 
   useEffect(() => {
     if (!bridgeConnected) return;
     fetchAll();
-  }, [bridgeConnected, fetchAll]);
+  }, [bridgeConnected, onlineKey, fetchAll]);
 
   // Initialize Mermaid once
   const mermaidReady = useRef(false);
