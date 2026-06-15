@@ -32,6 +32,12 @@ jobs:
         working-directory: dns-manager
         run: npm run build
 
+      - name: Typecheck
+        working-directory: dns-manager
+        # Runs after "TypeScript build" because tsc needs next-env.d.ts, which
+        # `next build` generates (it is gitignored and absent on a fresh checkout).
+        run: npm run typecheck
+
       - name: Lint
         working-directory: dns-manager
         run: npm run lint
@@ -43,3 +49,24 @@ jobs:
       - name: E2E tests
         working-directory: dns-manager
         run: npm run test:e2e
+
+  mcp-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build (tsc — fails on type errors)
+        working-directory: mcp-server
+        run: npm run build
