@@ -2756,17 +2756,17 @@ function Handle-PollBpa {
     }
 }
 
-function Handle-GetEncryptionProtocol {
+function Handle-GetDohConfig {
     param(
         [System.Net.HttpListenerResponse]$Response,
         [System.Net.HttpListenerRequest]$Request
     )
     try {
-        # Server 2025+ only — check cmdlet existence before calling
+        # Inbound DoH is Windows Server 2025+ only — check cmdlet existence before calling
         if (-not (Get-Command Get-DnsServerEncryptionProtocol -ErrorAction SilentlyContinue)) {
             Send-Response -Response $Response -Body @{
                 success     = $false
-                error       = 'Encryption protocol settings require Windows Server 2025 or later.'
+                error       = 'DNS over HTTPS settings require Windows Server 2025 or later.'
                 unsupported = $true
             }
             return
@@ -2779,21 +2779,46 @@ function Handle-GetEncryptionProtocol {
     }
 }
 
-function Handle-SetEncryptionProtocol {
+function Handle-SetDohConfig {
     param(
         [System.Net.HttpListenerResponse]$Response,
         [System.Net.HttpListenerRequest]$Request,
         [psobject]$Body
     )
     try {
+        # Inbound DoH is Windows Server 2025+ only — check cmdlet existence before calling
+        if (-not (Get-Command Set-DnsServerEncryptionProtocol -ErrorAction SilentlyContinue)) {
+            Send-Response -Response $Response -Body @{
+                success     = $false
+                error       = 'DNS over HTTPS settings require Windows Server 2025 or later.'
+                unsupported = $true
+            }
+            return
+        }
+        if ($null -eq $Body.enableDoh) { throw 'enableDoh (boolean) is required.' }
+
         $p = Resolve-ServerConfigParams -Request $Request
         $splatParams = @{}
         foreach ($key in $p.Keys) { $splatParams[$key] = $p[$key] }
-        if ($null -ne $Body.dohEnabled) { $splatParams['DohEnabled'] = [bool]$Body.dohEnabled }
-        if ($null -ne $Body.dotEnabled) { $splatParams['DotEnabled'] = [bool]$Body.dotEnabled }
-        if ($Body.certificateSubjectName) { $splatParams['CertificateSubjectName'] = $Body.certificateSubjectName }
+
+        $enable = [bool]$Body.enableDoh
+        $splatParams['EnableDoh'] = $enable
+
+        # URI templates only apply when enabling. Accept a single string or an array.
+        # Set-DnsServerEncryptionProtocol takes one pipe-separated string, max 3 templates.
+        # Disabling clears all templates automatically, so we never pass UriTemplate then.
+        if ($enable -and $null -ne $Body.uriTemplate) {
+            $templates = @(@($Body.uriTemplate) | Where-Object { $_ -and "$_".Trim() } | ForEach-Object { "$_".Trim() })
+            if ($templates.Count -gt 3) { throw 'A maximum of 3 URI templates is allowed.' }
+            foreach ($t in $templates) {
+                if ($t -notmatch '^https://') { throw "URI templates must be valid HTTPS URIs (got '$t')." }
+            }
+            if ($templates.Count -gt 0) { $splatParams['UriTemplate'] = ($templates -join '|') }
+        }
+
         Set-DnsServerEncryptionProtocol @splatParams -ErrorAction Stop
-        Send-Response -Response $Response -Body @{ success = $true }
+        # The DNS Server service must be restarted for DoH changes to take effect.
+        Send-Response -Response $Response -Body @{ success = $true; restartRequired = $true }
     } catch {
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
@@ -4651,10 +4676,10 @@ function Route-Request {
                     default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }
-            '^/api/server/encryption$' {
+            '^/api/doh/config$' {
                 switch ($method) {
-                    'GET' { Handle-GetEncryptionProtocol -Response $response -Request $request }
-                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetEncryptionProtocol -Response $response -Request $request -Body $body }
+                    'GET' { Handle-GetDohConfig -Response $response -Request $request }
+                    'PUT' { $body = Read-RequestBody -Request $request; Handle-SetDohConfig -Response $response -Request $request -Body $body }
                     default { Send-Response -Response $response -Body @{ success = $false; error = 'Method not allowed' } -StatusCode 405 }
                 }
             }

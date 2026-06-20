@@ -117,9 +117,9 @@ View AD DS replication settings for the DNS server. This panel is read-only and 
 
 View and toggle the GlobalNames zone feature. This provides single-label name resolution as an alternative to WINS.
 
-### Encryption (DoH/DoT)
+### DNS over HTTPS
 
-View and configure DNS over HTTPS (DoH) and DNS over TLS (DoT) settings. This panel is only available on Windows Server 2025 and later — on older versions, it shows a "not available" message.
+DNS over HTTPS (DoH) configuration now lives on its own **DNS over HTTPS** tab. Inbound DoH encrypts DNS queries to this server and requires Windows Server 2025 (KB5094125 / 2026-06 update) or later. (DNS over TLS is not supported by Windows DNS Server.)
 
 ## DNS Best Practices Analyzer
 

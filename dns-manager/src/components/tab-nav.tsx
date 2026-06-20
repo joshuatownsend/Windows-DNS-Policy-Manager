@@ -13,6 +13,7 @@ const tabs = [
   { href: "/blocklists", label: "Blocklists" },
   { href: "/wizards", label: "Wizards" },
   { href: "/dnssec", label: "DNSSEC" },
+  { href: "/doh", label: "DNS over HTTPS" },
   { href: "/resolvers", label: "Resolvers" },
   { href: "/backup", label: "Backup & Import" },
   { href: "/powershell", label: "PowerShell Commands" },
