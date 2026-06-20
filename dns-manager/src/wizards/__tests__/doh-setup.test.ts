@@ -13,7 +13,7 @@ describe("generateDohSetupScript", () => {
     const out = generateDohSetupScript({ serverHost: "dns.contoso.com", port: 8443 });
     expect(out).toContain('https://dns.contoso.com:8443/dns-query');
     expect(out).toContain("-LocalPort 8443");
-    expect(out).toContain("ipport=0.0.0.0:8443");
+    expect(out).toContain('ipport="0.0.0.0:8443"');
   });
 
   it("joins multiple templates with a pipe and caps at 3", () => {
@@ -46,7 +46,13 @@ describe("generateDohSetupScript", () => {
       certSubject: "CN=dns.contoso.com",
     });
     expect(out).not.toContain("Import-PfxCertificate");
-    expect(out).toContain('$_.Subject -match "CN=dns.contoso.com"');
+    expect(out).toContain('$_.Subject -match [regex]::Escape("CN=dns.contoso.com")');
+  });
+
+  it("never matches every certificate (-match \"\") when no host or subject is given", () => {
+    const out = generateDohSetupScript({ serverHost: "" });
+    expect(out).not.toContain('[regex]::Escape("")');
+    expect(out).toContain('[regex]::Escape("<certificate-subject>")');
   });
 
   it("escapes PowerShell metacharacters in user-supplied input", () => {

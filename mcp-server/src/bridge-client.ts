@@ -162,8 +162,8 @@ export const getRootHints = (p: ServerParams = {}) =>
 export const getEdns = (p: ServerParams = {}) =>
   request("/api/server/edns", p);
 
-export const getEncryption = (p: ServerParams = {}) =>
-  request("/api/server/encryption", p);
+export const getDohConfig = (p: ServerParams = {}) =>
+  request("/api/doh/config", p);
 
 export const getGlobalNameZone = (p: ServerParams = {}) =>
   request("/api/server/globalnamezone", p);

@@ -66,9 +66,12 @@ export function generateDohSetupScript(input: DohSetupInput): string {
       `Import-PfxCertificate -FilePath "${psEscape(input.pfxPath)}" -CertStoreLocation "Cert:\\LocalMachine\\My" -Password $pfxPassword`
     );
   }
-  const subjectMatch = psEscape(input.certSubject?.trim() || host);
+  // Match the subject as a literal substring via [regex]::Escape so values with regex
+  // metacharacters (CN=…, parentheses, etc.) behave. Fall back to a placeholder when no host
+  // or subject is given so the script never matches every cert via -match "".
+  const subjectMatch = psEscape((input.certSubject?.trim() || host) || "<certificate-subject>");
   lines.push(
-    `$cert = Get-ChildItem -Path Cert:\\LocalMachine\\My | Where-Object { $_.Subject -match "${subjectMatch}" } | Select-Object -First 1`
+    `$cert = Get-ChildItem -Path Cert:\\LocalMachine\\My | Where-Object { $_.Subject -match [regex]::Escape("${subjectMatch}") } | Select-Object -First 1`
   );
   lines.push('if (-not $cert) { throw "No matching certificate found in Cert:\\LocalMachine\\My." }');
   lines.push("");
@@ -76,7 +79,9 @@ export function generateDohSetupScript(input: DohSetupInput): string {
   // 2. Bind the certificate to the DoH port.
   lines.push("# 2. Bind the certificate to the DoH port.");
   lines.push('$guid = [guid]::NewGuid().ToString("B")');
-  lines.push(`netsh http add sslcert ipport=${psEscape(bind)}:${port} certhash=$($cert.Thumbprint) appid="$guid"`);
+  // Quote the user-controlled ipport so PowerShell statement separators in bindAddress
+  // (`;`, `&`) stay inside a single token and can't inject commands into the copy-paste script.
+  lines.push(`netsh http add sslcert ipport="${psEscape(bind)}:${port}" certhash="$($cert.Thumbprint)" appid="$guid"`);
   lines.push("");
 
   // 3. Firewall.
@@ -108,7 +113,7 @@ export function generateDohSetupScript(input: DohSetupInput): string {
   // Verification.
   lines.push("# Verify (run on the server):");
   lines.push("Get-DnsServerEncryptionProtocol");
-  lines.push(`netsh http show sslcert ipport=${psEscape(bind)}:${port}`);
+  lines.push(`netsh http show sslcert ipport="${psEscape(bind)}:${port}"`);
   lines.push("# Then, from a DoH-configured Windows client, test resolution:");
   if (host) {
     lines.push(`#   Resolve-DnsName -Name ${psEscape(host)} -Server ${psEscape(host)}`);

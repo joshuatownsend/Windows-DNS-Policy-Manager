@@ -8,7 +8,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 - **12-tab interface**: Server, Objects, Zones, Policies, Create, Blocklists, Wizards, DNSSEC, DNS over HTTPS, Resolvers, Backup, PowerShell
 - **Multi-server management** with Kerberos, DPAPI-saved, or session-based credentials and header server switcher for quick switching from any tab
-- **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone, DoH/DoT)
+- **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone)
 - **DNS Best Practices Analyzer** — run Windows BPA from the UI with severity-coded findings
 - **Zone browser** with two-panel layout, settings editor, full record CRUD, CSV import/export, pagination, and filters for Forward/Reverse, zone type (Primary/Secondary/Stub/Forwarder), and AD-integrated
 - **8 scenario wizards** with typed execution (geo-location, split-brain, time-of-day, load balancing, query filters, blocklist, geo+LB combo, primary-secondary)

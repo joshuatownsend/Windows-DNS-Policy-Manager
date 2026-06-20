@@ -69,13 +69,13 @@ export default function DohPage() {
     setLoading(true);
     const p = sp();
     const r = await api.getDohConfig(p.server, p.serverId, p.credentialMode);
-    setLoaded(true);
     if (r.success) {
       const proto = (r as { protocol?: DohProtocol }).protocol ?? {};
       setUnsupported(false);
       setEnabled(!!proto.EnableDoh);
       const raw = proto.UriTemplate ? String(proto.UriTemplate) : "";
       setTemplates(raw ? raw.split("|").map((t) => t.trim()).filter(Boolean) : []);
+      setLoaded(true);
     } else if ((r as { unsupported?: boolean }).unsupported) {
       setUnsupported(true);
     } else {
@@ -235,7 +235,13 @@ export default function DohPage() {
                           placeholder="https://dns.contoso.com/dns-query"
                           spellCheck={false}
                         />
-                        <Button variant="ghost" size="icon" onClick={() => removeTemplate(i)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeTemplate(i)}
+                          aria-label="Remove URI template"
+                          title="Remove URI template"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
