@@ -15,6 +15,7 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 - **Blocklists tab** — Quick Block (single domain), Bulk Import (.txt), Active Block Policies table, and Global Query Block List management
 - **Resolvers tab** — IP stack DNS per adapter (IPv4/IPv6), forwarder configuration, Mermaid topology diagram with color-coded edges
 - **DNSSEC management** — zone signing, signing key CRUD, trust anchors, trust points
+- **DNS over HTTPS (DoH)** — dedicated tab to enable/disable inbound DoH and manage up to 3 URI templates live on Windows Server 2025+ (KB5094125), plus an offline generator for the full prerequisite setup script (certificate import, `netsh` SSL binding, firewall rule, `Set-DnsServerEncryptionProtocol`, and DNS service restart)
 - **Policy CRUD** with enable/disable toggle, processing order editor, and cross-server copy
 - **DNS object management** for client subnets, zone scopes, and recursion scopes
 - **Zone lifecycle** — create, delete, convert, suspend, resume, export zones
@@ -302,6 +303,7 @@ dns-manager/                      Next.js frontend
       blocklists/page.tsx         Blocklists (quick block, bulk import, GQBL)
       wizards/page.tsx            Scenario wizards (8 scenarios)
       dnssec/page.tsx             DNSSEC management
+      doh/page.tsx                DNS over HTTPS (inbound DoH config + setup-script generator)
       resolvers/page.tsx          Resolvers (adapter DNS, forwarders, topology)
       backup/page.tsx             Backup & Import + zone/config export
       powershell/page.tsx         PowerShell output
