@@ -349,6 +349,23 @@ export interface ScavengingConfig {
   [key: string]: unknown;
 }
 
+// ── DNS over HTTPS (inbound DoH — Windows Server 2025+) ────
+
+/** Request body for PUT /api/doh/config. Mirrors Set-DnsServerEncryptionProtocol. */
+export interface DohConfig {
+  enableDoh: boolean;
+  /** One or more HTTPS URI templates (max 3). Omit to let the server auto-generate one. */
+  uriTemplate?: string | string[];
+}
+
+/** Shape returned by Get-DnsServerEncryptionProtocol via GET /api/doh/config (protocol field). */
+export interface DohProtocol {
+  EnableDoh?: boolean;
+  /** Server returns a single pipe-separated string of templates. */
+  UriTemplate?: string;
+  [key: string]: unknown;
+}
+
 // ── API Response Types ────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {

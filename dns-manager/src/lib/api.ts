@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   HealthResponse,
   CredentialMode,
+  DohConfig,
 } from "./types";
 
 const REQUEST_TIMEOUT = 30000;
@@ -523,12 +524,12 @@ export const api = {
   pollBpa: (server?: string, serverId?: string, credentialMode?: string) =>
     request("GET", "/api/server/bpa" + serverParams(server, serverId, credentialMode)),
 
-  // Encryption Protocol (DoH/DoT — Server 2025+)
-  getEncryptionProtocol: (server?: string, serverId?: string, credentialMode?: string) =>
-    request("GET", "/api/server/encryption" + serverParams(server, serverId, credentialMode)),
+  // DNS over HTTPS (inbound DoH — Windows Server 2025+)
+  getDohConfig: (server?: string, serverId?: string, credentialMode?: string) =>
+    request("GET", "/api/doh/config" + serverParams(server, serverId, credentialMode)),
 
-  setEncryptionProtocol: (data: Record<string, unknown>, server?: string, serverId?: string, credentialMode?: string) =>
-    request("PUT", "/api/server/encryption" + serverParams(server, serverId, credentialMode), data),
+  setDohConfig: (data: DohConfig, server?: string, serverId?: string, credentialMode?: string) =>
+    request("PUT", "/api/doh/config" + serverParams(server, serverId, credentialMode), data),
 
   // Backup & Export
   backup: (server: string, includeZone = true, includeServer = true) =>

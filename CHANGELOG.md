@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **DNS over HTTPS (DoH) tab** — dedicated tab to view, enable/disable, and configure inbound DoH (up to 3 pipe-separated URI templates) on Windows Server 2025+. Includes an offline generator that produces the full setup script: certificate import, `netsh http add sslcert` binding, inbound firewall rule, `Set-DnsServerEncryptionProtocol -EnableDoh`, and the required DNS service restart.
+
+### Fixed
+
+- **DoH configuration silently did nothing on Server 2025** — the encryption-protocol setter sent invented parameters (`DohEnabled`/`DotEnabled`/`CertificateSubjectName`) that do not exist on `Set-DnsServerEncryptionProtocol`. The GA cmdlet only accepts `-EnableDoh` and `-UriTemplate`, so edits were a no-op (and would have thrown if the bogus params reached the cmdlet). The bridge now uses the correct contract, validates HTTPS templates (max 3), version-gates the setter, and reports `restartRequired`.
+
+### Removed
+
+- **DNS over TLS (DoT) controls** — `Set-DnsServerEncryptionProtocol` has no DoT capability. The non-functional DoT toggle and the generic "Encryption (DoH/DoT)" panel on the Server tab were removed in favor of the new DNS over HTTPS tab.
+
 ## [0.5.1] - 2026-06-15
 
 ### Security

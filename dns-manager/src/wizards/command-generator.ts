@@ -5,7 +5,7 @@
 
 /** Escape PowerShell metacharacters for safe use inside double-quoted strings.
  *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
-function psEscape(value: string): string {
+export function psEscape(value: string): string {
   return value.replace(/[`"$]/g, (ch) => "`" + ch);
 }
 

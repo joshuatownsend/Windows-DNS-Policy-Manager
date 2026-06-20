@@ -113,10 +113,10 @@ export function registerServerConfigTools(server: McpServer) {
 
   server.tool(
     "dns_get_encryption",
-    "Get DNS encryption protocol settings (DoH/DoT — requires Server 2025+)",
+    "Get DNS over HTTPS (DoH) configuration (requires Windows Server 2025+)",
     { ...ServerParamsSchema },
     async (params) => ({
-      content: [{ type: "text", text: JSON.stringify(await bridge.getEncryption(params), null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(await bridge.getDohConfig(params), null, 2) }],
     })
   );
 

@@ -6,9 +6,9 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 ## Features
 
-- **11-tab interface**: Server, Objects, Zones, Policies, Create, Blocklists, Wizards, DNSSEC, Resolvers, Backup, PowerShell
+- **12-tab interface**: Server, Objects, Zones, Policies, Create, Blocklists, Wizards, DNSSEC, DNS over HTTPS, Resolvers, Backup, PowerShell
 - **Multi-server management** with Kerberos, DPAPI-saved, or session-based credentials and header server switcher for quick switching from any tab
-- **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone, DoH/DoT)
+- **Server configuration dashboard** with inline editing for 13 config panels (settings, forwarders, recursion, cache, blocklist, diagnostics, statistics, RRL, scavenging, root hints, EDNS, AD settings, global name zone)
 - **DNS Best Practices Analyzer** — run Windows BPA from the UI with severity-coded findings
 - **Zone browser** with two-panel layout, settings editor, full record CRUD, CSV import/export, pagination, and filters for Forward/Reverse, zone type (Primary/Secondary/Stub/Forwarder), and AD-integrated
 - **8 scenario wizards** with typed execution (geo-location, split-brain, time-of-day, load balancing, query filters, blocklist, geo+LB combo, primary-secondary)
@@ -293,7 +293,7 @@ mcp-server/                       MCP server for AI agents
 dns-manager/                      Next.js frontend
   Dockerfile                      Multi-stage Alpine build (standalone output)
   src/
-    app/                          App Router pages (11 tabs + help)
+    app/                          App Router pages (12 tabs + help)
       server/page.tsx             Server management + configuration dashboard
       objects/page.tsx            DNS Objects (subnets, scopes)
       zones/page.tsx              Zone browser + record CRUD + lifecycle + filters
@@ -340,7 +340,6 @@ The app wraps ~98 of ~120 cmdlets in the [DnsServer PowerShell module](https://l
 | Key storage | `Show-DnsServerKeyStorageProvider` | Read-only diagnostic |
 | Directory partitions | `Get/Add/Remove/Register/Unregister-DnsServerDirectoryPartition` | AD infrastructure, rarely changed |
 | Virtualization | `Get/Add/Set/Remove-DnsServerVirtualizationInstance` | Server 2016+ niche feature |
-| Encryption (DoH) | `Get/Set-DnsServerEncryptionProtocol` | Server 2025+ only |
 
 ## Browser Support
 
