@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency security sweep** — consolidated 9 open Dependabot PRs into one change and closed the gaps none of them covered. Dependabot alerts 37 → 1; `npm audit` production tree 0 in both workspaces (`dns-manager/` 12 high → 9 high, all dev-only; `mcp-server/` 0).
+  - **dns-manager**: `next` 16.2.9 → 16.2.12 (4× HIGH, 4× MODERATE), `js-yaml` → 4.3.0 (HIGH + MODERATE), `dompurify` → 3.4.12 (8 alerts), `hono` → 4.12.32 (3× MODERATE), `fast-uri` → 3.1.4 (2× HIGH), `body-parser` → 2.3.0, `brace-expansion` → 1.1.17/5.0.8 (2× HIGH), `@babel/core` → 7.29.7.
+  - **mcp-server**: lockfile-only patches to `fast-uri` 3.1.4 (2× HIGH), `hono` 4.12.32 (3× MODERATE), `body-parser` 2.3.0, `@hono/node-server` 2.0.12 (MODERATE), `zod` 4.4.3.
+  - **`postcss` override was silently stale** — the pinned floor `>=8.5.10` resolved to 8.5.12, but GHSA-r28c-9q8g-f849 (HIGH — path traversal in `sourceMappingURL` auto-loading, arbitrary `.map` file disclosure) is vulnerable through 8.5.17. Raised to `>=8.5.18` (resolves 8.5.25). No Dependabot alert or PR covered this.
+  - **`sharp` → `>=0.35.0` override** (HIGH — inherited libvips CVE-2026-33327/33328/35590/35591). Reachable only as an *optional* dependency of `next`, which still declares `^0.34.5`; the app imports `next/image` nowhere and configures no `images` optimizer, so the code path is unused. Overridden to clear the alert; revisit when Next widens its range.
+  - **`@hono/node-server` fixed via its parent, not an override** — `@modelcontextprotocol/sdk` 1.27.1 (range `^1.19.9`) held it at 1.19.x. Bumping the SDK to 1.30.0, which declares `^1.19.9 || ^2.0.5`, brings 2.0.12 inside a supported range.
+  - Still open, both upstream-blocked and neither in the production tree:
+    - `eslint` 9 → 10 (9 dev-only HIGH: the `eslint`/`eslint-config-next` plugin chain, all rooted in `brace-expansion@1.1.17` / GHSA-mh99-v99m-4gvg, which has no v1-line fix). `eslint-config-next` 16.2.x crashes under ESLint 10 inside its bundled `eslint-plugin-react`, so the bump cannot land until upstream adds ESLint 10 support.
+    - `dompurify` GHSA-x4vx-rjvf-j5p4 (LOW) — no patched version has been published.
+
 ### Added
 
 - **DNS over HTTPS (DoH) tab** — dedicated tab to view, enable/disable, and configure inbound DoH (up to 3 pipe-separated URI templates) on Windows Server 2025+. Includes an offline generator that produces the full setup script: certificate import, `netsh http add sslcert` binding, inbound firewall rule, `Set-DnsServerEncryptionProtocol -EnableDoh`, and the required DNS service restart.
