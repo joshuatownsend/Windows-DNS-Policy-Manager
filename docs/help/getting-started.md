@@ -6,7 +6,7 @@ DNS Policy Manager is a graphical tool for creating and managing DNS policies on
 
 ## Requirements
 
-- **Node.js 18 or later** (for the web interface)
+- **Node.js 24 LTS or later** (for the web interface)
 - **Windows Server** with the DNS Server role installed, or any Windows machine with the `DnsServer` PowerShell module
 - A modern web browser (Chrome, Firefox, or Edge)
 
