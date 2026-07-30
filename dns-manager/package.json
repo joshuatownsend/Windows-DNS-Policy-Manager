@@ -2,6 +2,9 @@
   "name": "dns-manager",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "next dev --port 10010",
     "build": "next build",
@@ -38,7 +41,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
