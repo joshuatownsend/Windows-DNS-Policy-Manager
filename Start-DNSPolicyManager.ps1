@@ -164,7 +164,7 @@ if ($ready) {
     # Start Next.js frontend (auto-install if needed)
     if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
         if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-            Write-Host '  npm not found. Install Node.js 18+ and run: cd dns-manager && npm install' -ForegroundColor Red
+            Write-Host '  npm not found. Install Node.js 24 LTS and run: cd dns-manager && npm install' -ForegroundColor Red
         } else {
             Write-Host '  Installing frontend dependencies...' -ForegroundColor Yellow
             Push-Location $frontendDir

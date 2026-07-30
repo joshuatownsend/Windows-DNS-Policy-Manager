@@ -32,7 +32,9 @@ A browser-based GUI for creating and managing Windows Server DNS Policies. Built
 
 ### Requirements
 
-- **Node.js** 20.19+ or 22.12+ (for the frontend and test tooling; CI builds on Node 22)
+- **Node.js 24 LTS** ("Krypton") — the version CI, Docker, and `.nvmrc` all target. Node 20 reached
+  end-of-life on 2026-04-30 and Node 22 is in maintenance until 2027-04-30, so 24 is the current
+  Active LTS. With `nvm`, run `nvm use` in the repo root to pick it up.
 - **Windows Server** with the DNS Server role, or a machine with the `DnsServer` PowerShell module
 - The bridge binds only to `127.0.0.1` by default — never exposed to the network
 

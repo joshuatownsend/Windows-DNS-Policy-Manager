@@ -6,6 +6,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # @types/node tracks the Node runtime line, not a normal library version. Major bumps are
+    # made deliberately alongside CI/Dockerfile/.nvmrc — see TODO.md. Left to Dependabot it
+    # proposes EOL or pre-LTS lines (e.g. 20 -> 25, where 25 went EOL 2026-06-01).
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       react-ecosystem:
         patterns:
@@ -45,10 +52,19 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       mcp-server-deps:
         patterns:
           - "*"
+        # Majors must not ride in on a grouped bump — that is how typescript 6 -> 7 arrived
+        # bundled with routine updates in #66/#79. Ungrouped majors still get their own PR.
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /

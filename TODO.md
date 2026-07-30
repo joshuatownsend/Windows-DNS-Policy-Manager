@@ -25,8 +25,26 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
 - **Audit `overrides` floors on a schedule.** The `postcss` pin sat at `>=8.5.10` while a HIGH
   advisory (GHSA-r28c-9q8g-f849) covered everything through 8.5.17 — a `>=` floor goes stale
   silently and no Dependabot alert fires for it.
-- **Align `@types/node`**: `dns-manager` is on `^20` while `mcp-server` is on `^25`
-  (Dependabot PRs #55 and #66 propose 25/26). Decide one target rather than drifting.
+- ~~**Align `@types/node`**~~ — done: both workspaces are on `^24` (Active LTS line), pinned
+  alongside CI, Dockerfile, `.nvmrc`, and `engines`. Dependabot now ignores `@types/node` majors.
+
+### The Dockerfile is never exercised by PR CI
+`release-ghcr.yml` triggers only on `v*.*.*` tags, so a broken `dns-manager/Dockerfile` is not
+caught until release time. The Node 24 base-image bump landed unverified for this reason.
+- Add a docker build (no push) job to `build.yml` on pull_request, or a `paths: [dns-manager/Dockerfile]`
+  triggered workflow, so base-image changes fail fast.
+
+### Re-evaluate Node and TypeScript on their upstream triggers
+- **Node 26** becomes Active LTS **2026-10-28**; Node 24 enters maintenance **2026-10-20**. Natural
+  point to move `.nvmrc`/CI/Docker/`@types/node`/`engines` together again.
+- **TypeScript 7** (native Go port, currently `latest` at 7.0.2) is held back by two upstream gaps,
+  both verified 2026-07-30:
+  - `@typescript-eslint` 8.65.0 still declares `typescript: ">=4.8.4 <6.1.0"` — TS 7 unsupported,
+    and CI gates on `npm run lint`.
+  - `next build` rejects TS 7: *"does not provide the compiler API required by Next.js"*. The
+    `experimental.useTypeScriptCli` flag works around it but is experimental.
+  - mcp-server alone builds fine on TS 7. Worth revisiting: TS 7 typechecks dns-manager in ~6.4s
+    vs ~23.5s on TS 6 (~3.6x).
 
 ### Server OS Version Detection & Feature Gating
 - Query Windows Server version during `Handle-Connect` (e.g., via `[System.Environment]::OSVersion` or `Get-CimInstance Win32_OperatingSystem` on remote servers)

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Node.js 24 LTS ("Krypton") is now the single target across the repo** — CI (`build.yml`), the
+  `dns-manager` Dockerfile (all three stages), a new root `.nvmrc`, and `engines.node: ">=24"` in
+  both workspaces. `@types/node` moves to `^24` (24.13.3) in both, replacing `^20` in `dns-manager`
+  and `^25.6.0` in `mcp-server`.
+  - Both workspaces had been typed against **end-of-life** Node lines: 20 ("Iron") reached EOL
+    2026-04-30 and 25 reached EOL 2026-06-01. Node 22 ("Jod"), which CI and Docker pinned, has been
+    in maintenance since 2025-10-21. Node 24 is the only Active LTS (maintenance 2026-10-20,
+    EOL 2028-04-30) and was already the local development version.
+  - Nothing in the dependency graph forced a lower floor: `next` requires `>=20.9.0` and the MCP SDK
+    `>=18`. Raising `engines` to `>=24` keeps the declared minimum consistent with the types and the
+    runtime actually tested, rather than claiming support for a runtime lacking those APIs.
+  - README requirements updated accordingly.
+- **Dependabot no longer proposes Node-runtime-coupled bumps on its own** — `@types/node` major
+  updates are now ignored in both npm ecosystems, because it tracks the Node line rather than a
+  normal library and Dependabot was proposing EOL/pre-LTS targets (PR #55 proposed 20 → 25, a line
+  that went EOL 2026-06-01). The `mcp-server-deps` group is now restricted to `minor`/`patch`,
+  matching `dns-manager`'s `types-and-tooling` group — grouping majors is how `typescript` 6 → 7
+  arrived bundled with routine updates in #66/#79. Ungrouped majors still get their own PR.
+
 ### Security
 
 - **Dependency security sweep** — consolidated 9 open Dependabot PRs into one change and closed the gaps none of them covered. Dependabot alerts 37 → 1; `npm audit` production tree 0 in both workspaces (`dns-manager/` 12 high → 9 high, all dev-only; `mcp-server/` 0).
