@@ -30,9 +30,15 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
 
 ### The Dockerfile is never exercised by PR CI
 `release-ghcr.yml` triggers only on `v*.*.*` tags, so a broken `dns-manager/Dockerfile` is not
-caught until release time. The Node 24 base-image bump landed unverified for this reason.
+caught until release time. The Node 24 base-image bump landed unverified for this reason, and was
+verified by hand on 2026-08-01 (build + container smoke test both passed — see `MANUAL_STEPS.md`).
+That hand-verification is exactly what should be automated.
 - Add a docker build (no push) job to `build.yml` on pull_request, or a `paths: [dns-manager/Dockerfile]`
   triggered workflow, so base-image changes fail fast.
+- While in there: the runner stage calls `adduser --system --uid 1001 nextjs` without `-G nodejs`, so
+  the process runs as `uid=1001(nextjs) gid=65533(nogroup)` and the `nodejs` group it creates is
+  unused. Harmless today (single process, no group-owned paths), but the intent doesn't match the
+  result.
 
 ### Re-evaluate Node and TypeScript on their upstream triggers
 - **Node 26** becomes Active LTS **2026-10-28**; Node 24 enters maintenance **2026-10-20**. Natural

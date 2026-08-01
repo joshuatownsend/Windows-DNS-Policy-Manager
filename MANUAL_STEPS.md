@@ -20,3 +20,23 @@ tags. The `node:24-alpine` tag itself was confirmed to exist on Docker Hub (last
   base-image changes fail fast on PRs instead of at release time. Tracked in `TODO.md`.
 
 ---
+
+## 2026-08-01 07:35 | node-24-lts | Node 24 Docker image verified (resolves the 2026-07-30 entry)
+
+Docker Desktop 29.6.2 was started and the two build/smoke steps in the entry above were run to
+completion. Result: **pass, no changes required to the Dockerfile.**
+
+- [x] `cd dns-manager && docker build -t dnspm-node24-test:local .` — all three stages succeeded.
+  Next.js 16.2.12 compiled in 23.9s, TypeScript in 21.4s, 16/16 static pages generated, all 15
+  routes present including `/doh` and the dynamic `/help/[slug]`.
+- [x] Container smoke test on `-p 10099:10010` — `/`, `/doh`, `/wizards`, and `/help/getting-started`
+  all returned HTTP 200. Runtime confirmed as `v24.18.1`, running as non-root `uid=1001(nextjs)`.
+- [ ] Still open: the build-only docker CI job. `release-ghcr.yml` remains tag-only, so this
+  verification has to be repeated by hand after any `dns-manager/Dockerfile` change until that
+  job exists. Tracked in `TODO.md`.
+
+Incidental observation (pre-existing, not a Node 24 regression): the runtime user lands in
+`gid=65533(nogroup)` rather than the `nodejs` group the Dockerfile creates, because `adduser` is
+called without `-G nodejs`. Harmless for a single-process container; noted in `TODO.md`.
+
+---

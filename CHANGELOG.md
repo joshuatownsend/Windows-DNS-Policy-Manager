@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-01
+
 ### Changed
 
 - **Node.js 24 LTS ("Krypton") is now the single target across the repo** — CI (`build.yml`), the
