@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-07
+
 ### Removed
 
 - **`shadcn` dropped from `dns-manager` dependencies** — it is a scaffolding CLI, but it was declared
@@ -14,14 +16,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   (989 → 741 lockfile entries) along with the entire `@modelcontextprotocol/sdk` HTTP stack — `hono`,
   `express-rate-limit`, `ajv`, `ts-morph` — that the CLI dragged into the production graph. Use
   `npx shadcn@latest add <component>` to scaffold components; if a new component needs a custom
-  variant not in the vendored file, refresh it from the matching shadcn release.
+  variant not in the vendored file, refresh it from the matching shadcn release. The vendored file
+  carries the upstream MIT notice (© 2023 shadcn) and a canonical source reference — repo, npm
+  tarball URL, and `sha512` integrity hash — so its provenance is verifiable.
 
 ### Security
 
-- **Clears all 8 open Dependabot alerts** (4 high, 4 moderate; they close once this lands on the
-  default branch). No direct dependency was vulnerable; every alert was transitive, and
-  all fixes were patch bumps already inside their parents' declared semver ranges, so no `overrides`
-  entries were added.
+- **Dependabot alerts 8 → 0** (4 high, 4 moderate; confirmed closed on the default branch after
+  merge). No direct dependency was vulnerable; every alert was transitive, and all fixes were patch
+  bumps already inside their parents' declared semver ranges, so no `overrides` entries were added.
   - Six of the eight (`fast-uri` GHSA-7p8r-x3mc-p8w7, `ip-address` GHSA-mwp4-54f8-5fhr /
     GHSA-4xrf-jv44-h6hh / GHSA-22jq-vg5j-6vgg, `hono` GHSA-8j4g-w8fx-2239, and the production copy of
     `brace-expansion` GHSA-rgw5-rvv9-x895) existed *only* via `shadcn` and were cleared by removing
@@ -41,8 +44,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
     `classDef`, `style`, and `linkStyle` index lists — which produced a valid SVG (4 nodes, 3 edges,
     2 clusters) with no console errors.
   - Still open, not part of this change: `js-yaml` 4.3.0 (HIGH — quadratic CPU consumption in
-    `!!omap` resolution). Dev-only, reached via `eslint` → `@eslint/eslintrc`, so it never enters the
-    production tree; blocked until eslint widens its range.
+    `!!omap` resolution), filed as alert #131 after the sweep landed. Dev-only, reached via `eslint`
+    → `@eslint/eslintrc`, so it never enters the production tree; blocked until eslint widens its
+    range.
 
 ## [0.6.0] - 2026-08-01
 
