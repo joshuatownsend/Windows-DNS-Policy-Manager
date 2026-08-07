@@ -19,6 +19,9 @@ Thumbs.db
 .codegraph/
 .claudelint-cache/
 .remember/
+# Impeccable: share config.json, keep the per-machine cache and local overrides out
+**/.impeccable/hook.cache.json
+**/.impeccable/config.local.json
 
 # Session-generated artifacts
 INSIGHTS.md

@@ -1,0 +1,9 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "dns-manager/src/app/globals.css"
+    ],
+    "ignoreValues": []
+  }
+}
