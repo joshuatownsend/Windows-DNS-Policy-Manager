@@ -19,6 +19,7 @@ const connect = load("connect");
 const zones = load("zones");
 const policies = load("policies");
 const records = load("records");
+const resolvers = load("resolvers");
 
 // ── Start mock bridge on :8650 ──
 const bridge = http.createServer((req, res) => {
@@ -31,6 +32,9 @@ const bridge = http.createServer((req, res) => {
   let b = { success: true };
   if (u.includes("/api/health")) b = health;
   else if (u.includes("/api/connect")) b = connect;
+  // POST starts the job, GET polls it. The mock completes immediately, so both
+  // return the finished payload; the page ignores the POST result.
+  else if (u.includes("/api/server/resolvers")) b = resolvers;
   else if (/\/api\/zones\/[^/]+\/records/.test(u)) b = records;
   else if (u.includes("/api/zones") && !u.includes("zonescopes")) {
     if (req.method === "GET" && /\/api\/zones\/[^/]+$/.test(u)) b = { success: true, zone: zones.zones[0] };

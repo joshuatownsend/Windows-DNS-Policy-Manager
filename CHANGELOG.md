@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed
+
+- **`shadcn` dropped from `dns-manager` dependencies** — it is a scaffolding CLI, but it was declared
+  as a production dependency because `src/app/globals.css` imported `shadcn/tailwind.css`. That
+  1.7 KB stylesheet is now vendored as `src/app/shadcn-tailwind.css`, removing **248 packages**
+  (989 → 741 lockfile entries) along with the entire `@modelcontextprotocol/sdk` HTTP stack — `hono`,
+  `express-rate-limit`, `ajv`, `ts-morph` — that the CLI dragged into the production graph. Use
+  `npx shadcn@latest add <component>` to scaffold components; if a new component needs a custom
+  variant not in the vendored file, refresh it from the matching shadcn release.
+
+### Security
+
+- **Clears all 8 open Dependabot alerts** (4 high, 4 moderate; they close once this lands on the
+  default branch). No direct dependency was vulnerable; every alert was transitive, and
+  all fixes were patch bumps already inside their parents' declared semver ranges, so no `overrides`
+  entries were added.
+  - Six of the eight (`fast-uri` GHSA-7p8r-x3mc-p8w7, `ip-address` GHSA-mwp4-54f8-5fhr /
+    GHSA-4xrf-jv44-h6hh / GHSA-22jq-vg5j-6vgg, `hono` GHSA-8j4g-w8fx-2239, and the production copy of
+    `brace-expansion` GHSA-rgw5-rvv9-x895) existed *only* via `shadcn` and were cleared by removing
+    it. The vulnerable code paths lived in the MCP SDK's HTTP transport, which the Next.js app never
+    executed — reachable risk was nil even before the fix.
+  - **dns-manager**: `brace-expansion` → 5.0.9 and 1.1.18 (dev-only, via `@typescript-eslint` and
+    `eslint`).
+  - **mcp-server**: `fast-uri` → 3.1.5, `hono` → 4.13.1. Both arrive via `@modelcontextprotocol/sdk`,
+    a genuine runtime dependency here; the `hono` CORS ReDoS was unreachable because the server uses
+    the stdio transport. `npm audit` now reports 0 vulnerabilities.
+  - **`mermaid` 11.15.0 → 11.16.1** — surfaced by `npm audit` ahead of the Dependabot dashboard.
+    Four MODERATE advisories (prototype pollution via configuration APIs and in Architecture
+    diagrams, CSS injection into siblings of the diagram, infinite-loop DoS in XY Charts and radar
+    diagrams). This is the only *direct* dependency in the sweep that was vulnerable; it renders the
+    Resolvers topology diagram. Verified by headless-rendering the exact graph shape
+    `buildMermaidGraph()` emits — `graph TB`, two `direction LR` subgraphs, `:::` node classes,
+    `classDef`, `style`, and `linkStyle` index lists — which produced a valid SVG (4 nodes, 3 edges,
+    2 clusters) with no console errors.
+  - Still open, not part of this change: `js-yaml` 4.3.0 (HIGH — quadratic CPU consumption in
+    `!!omap` resolution). Dev-only, reached via `eslint` → `@eslint/eslintrc`, so it never enters the
+    production tree; blocked until eslint widens its range.
+
 ## [0.6.0] - 2026-08-01
 
 ### Changed
