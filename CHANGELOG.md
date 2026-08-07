@@ -32,10 +32,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - **mcp-server**: `fast-uri` → 3.1.5, `hono` → 4.13.1. Both arrive via `@modelcontextprotocol/sdk`,
     a genuine runtime dependency here; the `hono` CORS ReDoS was unreachable because the server uses
     the stdio transport. `npm audit` now reports 0 vulnerabilities.
-  - Still open in `dns-manager`, surfaced by `npm audit` ahead of the Dependabot dashboard and not
-    part of this change: `mermaid` ≤ 11.16.0 (MODERATE — prototype pollution, CSS injection, two DoS;
-    a direct dependency, fixed in 11.16.1, in range of the declared `^11.15.0`) and `js-yaml` 4.3.0
-    (HIGH — quadratic CPU in `!!omap`; dev-only via `eslint` → `@eslint/eslintrc`).
+  - **`mermaid` 11.15.0 → 11.16.1** — surfaced by `npm audit` ahead of the Dependabot dashboard.
+    Four MODERATE advisories (prototype pollution via configuration APIs and in Architecture
+    diagrams, CSS injection into siblings of the diagram, infinite-loop DoS in XY Charts and radar
+    diagrams). This is the only *direct* dependency in the sweep that was vulnerable; it renders the
+    Resolvers topology diagram. Verified by headless-rendering the exact graph shape
+    `buildMermaidGraph()` emits — `graph TB`, two `direction LR` subgraphs, `:::` node classes,
+    `classDef`, `style`, and `linkStyle` index lists — which produced a valid SVG (4 nodes, 3 edges,
+    2 clusters) with no console errors.
+  - Still open, not part of this change: `js-yaml` 4.3.0 (HIGH — quadratic CPU consumption in
+    `!!omap` resolution). Dev-only, reached via `eslint` → `@eslint/eslintrc`, so it never enters the
+    production tree; blocked until eslint widens its range.
 
 ## [0.6.0] - 2026-08-01
 
