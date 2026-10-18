@@ -6,12 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-17
+
 ### Security
 
 - **Mermaid 11 → 12 — clears the last open Dependabot alert.** `katex` GHSA-238p-pmpm-9mq7 (low)
   came in through `mermaid` 11, which pinned `katex` 0.16; `mermaid` 12.2 pulls `katex` 0.18.10.
   The Resolvers topology diagram pins `layout: "dagre"` and `look: "classic"` so it keeps its
   pre-12 layout and colours instead of picking up Mermaid 12's new defaults.
+
+### Changed
+
+- **Dependency upgrades:** `@base-ui/react` 1.4 → 1.9 and `lucide-react` 1.14 → 1.57 (#95);
+  Tailwind CSS 4.2 → 4.3 and `tailwind-merge` 3.7 (#84); the MCP server now builds with
+  TypeScript 7 (#81). The app's own TypeScript stays on 6 until Next.js and typescript-eslint
+  support 7.
+- **Dependabot:** security fixes now arrive as one grouped PR per npm directory, and the blocked
+  TypeScript 7 / ESLint 10 majors are ignored for `dns-manager` until their upstream support lands
+  (#162).
 
 ## [0.6.3] - 2026-10-17
 
