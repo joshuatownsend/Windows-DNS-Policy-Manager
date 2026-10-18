@@ -227,6 +227,7 @@ export default function PoliciesPage() {
   }, [bridgeConnected, zoneFilter, setPolicies]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount, setState is in the async callbacks
     loadPolicies();
   }, [loadPolicies]);
 

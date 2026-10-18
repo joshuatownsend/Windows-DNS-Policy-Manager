@@ -147,6 +147,7 @@ export default function ServerPage() {
 
   // Prevent hydration mismatch — Zustand persist loads from localStorage
   // after SSR, so server/client HTML differ until mounted.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- standard hydration guard
   useEffect(() => { setMounted(true); }, []);
 
   // ── Bootstrap default localhost server ────────────────────

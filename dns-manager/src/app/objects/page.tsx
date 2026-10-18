@@ -173,6 +173,7 @@ export default function ObjectsPage() {
   // Load on mount when bridge is connected
   useEffect(() => {
     if (bridgeConnected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount, setState is in the async callbacks
       loadSubnets();
       loadRecursionScopes();
     }
