@@ -28,6 +28,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - the dev-only `braces` advisory through `eslint-config-next` (`braces` 3.0.3 is already the
     latest release);
   - a low-severity `katex` advisory that requires mermaid 12.
+- **MCP server: `@modelcontextprotocol/sdk` 1.30.0 → 1.32.1** clears GHSA-6qxp-vccf-f47h. No
+  Dependabot PR covered this fix. Transitive patches clear the remaining 13 `mcp-server` alerts:
+  - `fast-uri` 3.1.8 (4 advisories)
+  - `hono` 4.13.13 (4)
+  - `ip-address` 10.7.4 (3)
+  - `qs` 6.16.1 (2)
+
+  Real exposure was low: the server uses only the stdio transport, never acts as an OAuth client,
+  and never starts the SDK's built-in web server. `npm audit` now reports 0 vulnerabilities.
 
 ## [0.6.2] - 2026-10-17
 
