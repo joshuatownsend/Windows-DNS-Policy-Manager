@@ -26,8 +26,8 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
   - `braces` GHSA-vfj7-8cjw-p6xm, dev only: `eslint-config-next` → `@next/eslint-plugin-next` →
     `fast-glob@3.3.1` → `micromatch` → `braces@3.0.3`, and 3.0.3 is already the latest release.
     Recheck when `@next/eslint-plugin-next` moves off `fast-glob` 3.3.1.
-  - `katex` GHSA-238p-pmpm-9mq7, low: comes in through `mermaid` 11, and the fix requires
-    `mermaid` 12 (a major bump). Evaluate alongside the Resolvers diagram e2e suite.
+  - ~~`katex` GHSA-238p-pmpm-9mq7, low~~ — done 2026-10-17: `mermaid` 12.2 pulls `katex` 0.18.10;
+    the Resolvers diagram pins `layout: "dagre"` / `look: "classic"` to keep the pre-12 rendering.
 - **Close or ignore Dependabot PRs #87 (TypeScript 7, dns-manager) and #86 (ESLint 10).** Both fail
   CI for the upstream reasons recorded here. Add `ignore` rules for those majors in
   `.github/dependabot.yml` so they stop reopening, and remove the rules when the blockers clear.
