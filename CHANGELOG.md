@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-17
+
 ### Fixed
 
 - **DNS Objects tab no longer crashes on servers with recursion scope forwarders** (#115). The
