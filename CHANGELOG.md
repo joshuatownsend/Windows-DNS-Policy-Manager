@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Next.js 16.4.1 and React 19.3.1**, plus zustand 5.0.15, `@playwright/test` 1.64.1 and
+  `@types/node` 24.19.2 (one batch replacing Dependabot PRs #163–#167). `eslint-config-next` 16.4
+  turns `react-hooks/set-state-in-effect` into an error. The Zones tab now resets the record page
+  during render when the filter or zone changes, instead of in an effect, so the old page is never
+  shown against the new record list.
+
 ## [0.6.4] - 2026-10-17
 
 ### Security

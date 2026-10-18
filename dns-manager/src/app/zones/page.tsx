@@ -324,6 +324,7 @@ export default function ZonesPage() {
 
   useEffect(() => {
     if (bridgeConnected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetch on mount, setState is in the async callbacks
       loadZones();
     }
   }, [bridgeConnected, loadZones]);
@@ -568,10 +569,13 @@ export default function ZonesPage() {
     (recordPage + 1) * PAGE_SIZE
   );
 
-  // Reset page when filters or zone change
-  useEffect(() => {
+  // Reset page when filters or zone change. Done during render rather than in an
+  // effect so the stale page is never rendered against the new record list.
+  const [pageResetKey, setPageResetKey] = useState({ zoneRecordFilter, selectedZone });
+  if (pageResetKey.zoneRecordFilter !== zoneRecordFilter || pageResetKey.selectedZone !== selectedZone) {
+    setPageResetKey({ zoneRecordFilter, selectedZone });
     setRecordPage(0);
-  }, [zoneRecordFilter, selectedZone]);
+  }
 
   // ── Update record form field ─────────────────────────────
 
