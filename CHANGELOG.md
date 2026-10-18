@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Next.js 16.2.12 → 16.3.8 — clears 3 critical advisories.** GHSA-p293-qw3h-jr36 (unauthenticated
+  RCE on Windows-hosted servers) applies directly, since this app runs `next start`/`next dev` on
+  Windows. GHSA-2xp9-vwfh-vxw4 (RCE in the Image Optimization API) also applies: that endpoint exists
+  by default even though the app never imports `next/image`. GHSA-vcvr-r3jv-pc5j (RCE in `next/og`)
+  is covered by the same bump. `eslint-config-next` moves with it to 16.3.8.
+- **`sharp` override removed.** Next 16.3.8 itself requires `sharp ^0.35.4`, so the lockfile now
+  resolves `sharp` 0.35.5, which clears GHSA-rgj7-g3m4-5g8c (libheif). The old `>=0.35.0` floor had
+  left the lockfile on vulnerable 0.35.3 with no alert pointing at the override.
+- **`vitest` 3.2.6 → 4.1.12** (dev only) clears GHSA-82fw-gwwq-j7x9, a path traversal in
+  `@vitest/mocker`. It stops at 4.1.x rather than taking Dependabot's 5.0.4.
+- **Patch bumps that stay within existing version ranges:**
+  - Runtime: `dompurify` 3.4.17 (sanitizes the Resolvers diagram SVG), `nanoid` 3.3.20,
+    `baseline-browser-mapping` 2.11.29.
+  - Dev only: `browserslist` 4.29.3, `js-yaml` 4.3.2, `@humanfs/node` 0.16.8, plus
+    `brace-expansion` and `source-map-js` via `npm audit fix`.
+- Clears every open Dependabot alert against `dns-manager`. Two `npm audit` findings have no
+  non-breaking fix and are recorded in `TODO.md`:
+  - the dev-only `braces` advisory through `eslint-config-next` (`braces` 3.0.3 is already the
+    latest release);
+  - a low-severity `katex` advisory that requires mermaid 12.
+
 ## [0.6.2] - 2026-10-17
 
 ### Fixed

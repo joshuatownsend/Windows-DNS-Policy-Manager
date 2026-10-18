@@ -19,9 +19,21 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
   ESLint 10 inside its bundled `eslint-plugin-react` (`usedPropTypes.js:307`). This is the only
   fix for 9 dev-only HIGH advisories rooted in `brace-expansion@1.1.17` (GHSA-mh99-v99m-4gvg,
   no v1-line patch). Retry once `eslint-config-next` declares ESLint 10 support.
-- **Drop the `sharp` override** once `next` widens its optional range past `^0.34.5`. The
-  `>=0.35.0` pin is deliberately outside what Next tests against; it is safe today only because
-  the app uses no `next/image` and configures no `images` optimizer.
+- ~~**Drop the `sharp` override**~~ — done 2026-10-17: `next` 16.3.8 declares `sharp ^0.35.4`
+  itself, so the override was removed. (It had also gone stale: the `>=0.35.0` floor left the
+  lockfile on vulnerable 0.35.3.)
+- **`npm audit` findings with no non-breaking fix (2026-10-17):**
+  - `braces` GHSA-vfj7-8cjw-p6xm, dev only: `eslint-config-next` → `@next/eslint-plugin-next` →
+    `fast-glob@3.3.1` → `micromatch` → `braces@3.0.3`, and 3.0.3 is already the latest release.
+    Recheck when `@next/eslint-plugin-next` moves off `fast-glob` 3.3.1.
+  - `katex` GHSA-238p-pmpm-9mq7, low: comes in through `mermaid` 11, and the fix requires
+    `mermaid` 12 (a major bump). Evaluate alongside the Resolvers diagram e2e suite.
+- **Close or ignore Dependabot PRs #87 (TypeScript 7, dns-manager) and #86 (ESLint 10).** Both fail
+  CI for the upstream reasons recorded here. Add `ignore` rules for those majors in
+  `.github/dependabot.yml` so they stop reopening, and remove the rules when the blockers clear.
+- **Group Dependabot security updates.** Add groups with `applies-to: security-updates` for each
+  npm directory, so security fixes arrive as one PR per directory instead of one PR per package.
+  Twenty single-package PRs piling up is how 28 alerts accumulated after v0.6.1.
 - **Audit `overrides` floors on a schedule.** The `postcss` pin sat at `>=8.5.10` while a HIGH
   advisory (GHSA-r28c-9q8g-f849) covered everything through 8.5.17 — a `>=` floor goes stale
   silently and no Dependabot alert fires for it.
