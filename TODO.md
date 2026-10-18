@@ -28,12 +28,12 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
     Recheck when `@next/eslint-plugin-next` moves off `fast-glob` 3.3.1.
   - ~~`katex` GHSA-238p-pmpm-9mq7, low~~ — done 2026-10-17: `mermaid` 12.2 pulls `katex` 0.18.10;
     the Resolvers diagram pins `layout: "dagre"` / `look: "classic"` to keep the pre-12 rendering.
-- **Close or ignore Dependabot PRs #87 (TypeScript 7, dns-manager) and #86 (ESLint 10).** Both fail
-  CI for the upstream reasons recorded here. Add `ignore` rules for those majors in
-  `.github/dependabot.yml` so they stop reopening, and remove the rules when the blockers clear.
-- **Group Dependabot security updates.** Add groups with `applies-to: security-updates` for each
-  npm directory, so security fixes arrive as one PR per directory instead of one PR per package.
-  Twenty single-package PRs piling up is how 28 alerts accumulated after v0.6.1.
+- ~~**Close or ignore Dependabot PRs #87 and #86**~~ — done 2026-10-17: both closed, and
+  `.github/dependabot.yml` ignores `typescript` and `eslint` majors for `/dns-manager`.
+  **Remove those two ignore rules** when the TS 7 / ESLint 10 blockers above clear, or the
+  upgrades will never be proposed.
+- ~~**Group Dependabot security updates**~~ — done 2026-10-17: each npm directory has a
+  `security` group with `applies-to: security-updates`, so fixes arrive as one PR per directory.
 - **Audit `overrides` floors on a schedule.** The `postcss` pin sat at `>=8.5.10` while a HIGH
   advisory (GHSA-r28c-9q8g-f849) covered everything through 8.5.17 — a `>=` floor goes stale
   silently and no Dependabot alert fires for it.
@@ -61,7 +61,7 @@ That hand-verification is exactly what should be automated.
     and CI gates on `npm run lint`.
   - `next build` rejects TS 7: *"does not provide the compiler API required by Next.js"*. The
     `experimental.useTypeScriptCli` flag works around it but is experimental.
-  - mcp-server alone builds fine on TS 7. Worth revisiting: TS 7 typechecks dns-manager in ~6.4s
+  - mcp-server moved to TS 7 on 2026-10-17 (#81). For dns-manager it is worth revisiting: TS 7 typechecks dns-manager in ~6.4s
     vs ~23.5s on TS 6 (~3.6x).
 
 ### Server OS Version Detection & Feature Gating

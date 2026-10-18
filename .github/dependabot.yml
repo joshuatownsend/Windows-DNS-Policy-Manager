@@ -13,7 +13,20 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # Blocked upstream (see TODO.md): @typescript-eslint and `next build` don't support TS 7,
+      # and eslint-config-next crashes under ESLint 10. Remove each rule when its blocker clears.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "eslint"
+        update-types:
+          - version-update:semver-major
     groups:
+      # One PR per directory for security fixes, instead of one PR per vulnerable package.
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
       react-ecosystem:
         patterns:
           - "react"
@@ -57,6 +70,10 @@ updates:
         update-types:
           - version-update:semver-major
     groups:
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
       mcp-server-deps:
         patterns:
           - "*"
