@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import type { ClientSubnet, ZoneScope, RecursionScope } from "@/lib/types";
+import { toStringList } from "@/lib/normalize";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,7 +98,14 @@ export default function ObjectsPage() {
     try {
       const res = await api.listSubnets(sp.server, sp.serverId, sp.credentialMode);
       if (res.success) {
-        setClientSubnets((res as Record<string, unknown>).subnets as ClientSubnet[] ?? []);
+        const subnets = (res as Record<string, unknown>).subnets as ClientSubnet[] ?? [];
+        setClientSubnets(
+          subnets.map((s) => ({
+            ...s,
+            IPv4Subnet: toStringList(s.IPv4Subnet),
+            IPv6Subnet: toStringList(s.IPv6Subnet),
+          }))
+        );
       } else {
         toast.error("Failed to load subnets: " + (res.error ?? "Unknown error"));
       }
@@ -148,8 +156,9 @@ export default function ObjectsPage() {
         sp.credentialMode
       );
       if (res.success) {
+        const scopes = (res as Record<string, unknown>).scopes as RecursionScope[] ?? [];
         setRecursionScopes(
-          (res as Record<string, unknown>).scopes as RecursionScope[] ?? []
+          scopes.map((s) => ({ ...s, Forwarder: toStringList(s.Forwarder) }))
         );
       } else {
         toast.error(
@@ -470,35 +479,30 @@ export default function ObjectsPage() {
       {/* ────────────────── Zone Scopes ────────────────── */}
       <Collapsible open={zoneScopesOpen} onOpenChange={setZoneScopesOpen}>
         <div className="rounded-lg border border-border bg-card">
-          <CollapsibleTrigger>
-            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/60 transition-colors">
-              <div className="flex items-center gap-3">
-                {zoneScopesOpen ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-                <Globe className="h-4 w-4 text-cyan-400" />
-                <span className="font-semibold">Zone Scopes</span>
-                <Badge variant="secondary" className="ml-2">
-                  {allZoneScopes.length}
-                </Badge>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={loadingZoneScopes || !bridgeConnected || !zoneScopeZone}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  loadZoneScopes();
-                }}
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${loadingZoneScopes ? "animate-spin" : ""}`}
-                />
-              </Button>
-            </button>
-          </CollapsibleTrigger>
+          <div className="flex w-full items-center justify-between px-4 py-3 hover:bg-secondary/60 transition-colors">
+            <CollapsibleTrigger className="flex items-center gap-3 text-left cursor-pointer flex-1">
+              {zoneScopesOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+              <Globe className="h-4 w-4 text-cyan-400" />
+              <span className="font-semibold">Zone Scopes</span>
+              <Badge variant="secondary" className="ml-2">
+                {allZoneScopes.length}
+              </Badge>
+            </CollapsibleTrigger>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={loadingZoneScopes || !bridgeConnected || !zoneScopeZone}
+              onClick={() => loadZoneScopes()}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loadingZoneScopes ? "animate-spin" : ""}`}
+              />
+            </Button>
+          </div>
 
           <CollapsibleContent>
             <div className="border-t border-border px-4 py-4 space-y-4">
@@ -612,35 +616,30 @@ export default function ObjectsPage() {
       {/* ────────────────── Recursion Scopes ────────────────── */}
       <Collapsible open={recursionOpen} onOpenChange={setRecursionOpen}>
         <div className="rounded-lg border border-border bg-card">
-          <CollapsibleTrigger>
-            <button className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/60 transition-colors">
-              <div className="flex items-center gap-3">
-                {recursionOpen ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-                <GitBranch className="h-4 w-4 text-cyan-400" />
-                <span className="font-semibold">Recursion Scopes</span>
-                <Badge variant="secondary" className="ml-2">
-                  {recursionScopes.length}
-                </Badge>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={loadingRecursion || !bridgeConnected}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  loadRecursionScopes();
-                }}
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${loadingRecursion ? "animate-spin" : ""}`}
-                />
-              </Button>
-            </button>
-          </CollapsibleTrigger>
+          <div className="flex w-full items-center justify-between px-4 py-3 hover:bg-secondary/60 transition-colors">
+            <CollapsibleTrigger className="flex items-center gap-3 text-left cursor-pointer flex-1">
+              {recursionOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+              <GitBranch className="h-4 w-4 text-cyan-400" />
+              <span className="font-semibold">Recursion Scopes</span>
+              <Badge variant="secondary" className="ml-2">
+                {recursionScopes.length}
+              </Badge>
+            </CollapsibleTrigger>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={loadingRecursion || !bridgeConnected}
+              onClick={loadRecursionScopes}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loadingRecursion ? "animate-spin" : ""}`}
+              />
+            </Button>
+          </div>
 
           <CollapsibleContent>
             <div className="border-t border-border px-4 py-4 space-y-4">
