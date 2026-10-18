@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Mermaid 11 → 12 — clears the last open Dependabot alert.** `katex` GHSA-238p-pmpm-9mq7 (low)
+  came in through `mermaid` 11, which pinned `katex` 0.16; `mermaid` 12.2 pulls `katex` 0.18.10.
+  The Resolvers topology diagram pins `layout: "dagre"` and `look: "classic"` so it keeps its
+  pre-12 layout and colours instead of picking up Mermaid 12's new defaults.
+
 ## [0.6.3] - 2026-10-17
 
 ### Security

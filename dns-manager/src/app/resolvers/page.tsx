@@ -383,6 +383,9 @@ export default function ResolversPage() {
       const mermaid = (await import("mermaid")).default;
       mermaid.initialize({
         startOnLoad: false,
+        // Mermaid 12 switched the default layout and look; pin the pre-12 rendering.
+        layout: "dagre",
+        look: "classic",
         theme: "dark",
         themeVariables: {
           primaryColor: "#0e4066",
