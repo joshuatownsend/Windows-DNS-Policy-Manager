@@ -42,9 +42,16 @@ const bridge = http.createServer((req, res) => {
   }
   else if (u.includes("/api/policies") && req.method === "GET") b = policies;
   else if (u.includes("/api/transferpolicies")) b = { success: true, policies: [] };
-  else if (u.includes("/api/subnets")) b = { success: true, subnets: [] };
+  // Subnets and recursion scopes use the raw shapes older bridges emitted
+  // (collapsed single-element arrays, serialized IPAddress objects, the
+  // PS 5.1 { value, Count } wrapper) so the Objects tab must normalize them.
+  else if (u.includes("/api/subnets")) b = { success: true, subnets: [{ Name: "BranchOffice", IPv4Subnet: "10.1.0.0/16", IPv6Subnet: null }] };
   else if (u.includes("/api/zonescopes")) b = { success: true, scopes: [] };
-  else if (u.includes("/api/recursionscopes")) b = { success: true, scopes: [] };
+  else if (u.includes("/api/recursionscopes")) b = { success: true, scopes: [
+    { Name: ".", EnableRecursion: true, Forwarder: null },
+    { Name: "SingleForwarder", EnableRecursion: true, Forwarder: { Address: 16777226, AddressFamily: 2, IPAddressToString: "10.0.0.1" } },
+    { Name: "WrappedForwarders", EnableRecursion: false, Forwarder: { value: ["10.0.0.2", "10.0.0.3"], Count: 2 } },
+  ] };
   else if (u.includes("/api/credentials")) b = { success: true, exists: false };
   else if (u.includes("/api/dnssec")) b = { success: true, settings: {}, keys: [] };
   else if (u.includes("/api/trustanchors")) b = { success: true, anchors: [] };

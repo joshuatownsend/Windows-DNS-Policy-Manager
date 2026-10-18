@@ -690,8 +690,14 @@ function Handle-GetSubnets {
             }
         }
 
-        $subnets = @(Get-DnsServerClientSubnet @params -ErrorAction Stop |
-            Select-Object Name, IPv4Subnet, IPv6Subnet)
+        # Explicitly flatten so single-entry subnet lists stay JSON arrays
+        $subnets = @(Get-DnsServerClientSubnet @params -ErrorAction Stop | ForEach-Object {
+            @{
+                Name       = $_.Name
+                IPv4Subnet = @($_.IPv4Subnet | Where-Object { $_ } | ForEach-Object { "$_" })
+                IPv6Subnet = @($_.IPv6Subnet | Where-Object { $_ } | ForEach-Object { "$_" })
+            }
+        })
 
         Send-Response -Response $Response -Body @{
             success = $true
@@ -1618,8 +1624,15 @@ function Handle-GetRecursionScopes {
             }
         }
 
-        $scopes = @(Get-DnsServerRecursionScope @params -ErrorAction Stop |
-            Select-Object Name, EnableRecursion, Forwarder)
+        # Explicitly flatten — Forwarder is IPAddress[], which ConvertTo-Json
+        # serializes as objects (or unwraps to a scalar) instead of a string array
+        $scopes = @(Get-DnsServerRecursionScope @params -ErrorAction Stop | ForEach-Object {
+            @{
+                Name            = $_.Name
+                EnableRecursion = [bool]$_.EnableRecursion
+                Forwarder       = @($_.Forwarder | Where-Object { $_ } | ForEach-Object { "$_" })
+            }
+        })
 
         Send-Response -Response $Response -Body @{
             success = $true

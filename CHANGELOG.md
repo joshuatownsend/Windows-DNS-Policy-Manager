@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **DNS Objects tab no longer crashes on servers with recursion scope forwarders** (#115). The
+  bridge passed `Get-DnsServerRecursionScope`'s `Forwarder` (`IPAddress[]`) straight to
+  `ConvertTo-Json`, which emits IP address objects — or a single bare object when the scope has one
+  forwarder — instead of a string array, so the tab failed with
+  `scope.Forwarder?.join is not a function`. `GET /api/recursionscopes` now returns `Forwarder` as a
+  string array, and `GET /api/subnets` does the same for `IPv4Subnet`/`IPv6Subnet`. The tab also
+  normalizes these fields on load, so it renders correctly against older bridge builds.
+- **Nested `<button>` hydration errors on the DNS Objects tab** — the Zone Scopes and Recursion
+  Scopes headers wrapped a `<button>` (and a refresh button inside it) in the collapsible trigger,
+  which already renders a button. They now use the same layout as the Client Subnets header: the
+  trigger and the refresh button are siblings.
+
 ## [0.6.1] - 2026-08-07
 
 ### Removed
