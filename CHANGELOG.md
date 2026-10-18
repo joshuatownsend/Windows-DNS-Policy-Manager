@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-17
+
 ### Security
 
 - **Next.js 16.2.12 → 16.3.8 — clears 3 critical advisories.** GHSA-p293-qw3h-jr36 (unauthenticated
