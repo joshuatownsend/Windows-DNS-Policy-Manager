@@ -4,6 +4,13 @@ No high or medium priority items remain. The following are ideas for future cons
 
 ## Medium Priority
 
+### Run `/api/execute` in a restricted runspace (defense in depth for #137)
+The execute endpoint now validates an allowlist of AST node types before `Invoke-Expression`
+(`Test-CommandAllowed` in `server/bridge.ps1`). Add a second layer: run the validated command in
+a runspace built from `InitialSessionState.CreateRestricted(SessionCapabilities.Language)` with
+`LanguageMode = ConstrainedLanguage` and only the DnsServer module plus the formatter cmdlets
+visible. Needs testing against CIM-session parameters and DnsServer module import in the
+restricted state. Chosen 2026-10-24 as the follow-up to the allowlist fix.
 ### Policy backups don't include criteria
 `Handle-Backup` exports only Name, Action, ProcessingOrder, IsEnabled, Condition, Level and
 ZoneName, so a restored policy comes back without its FQDN/subnet/time-of-day criteria or zone

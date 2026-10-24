@@ -331,6 +331,8 @@ docs/help/                        Source help documentation
 
 The app wraps ~98 of ~120 cmdlets in the [DnsServer PowerShell module](https://learn.microsoft.com/en-us/powershell/module/dnsserver/) with dedicated UI. The remaining cmdlets are accessible through the **PowerShell tab** via the execute endpoint, which allows any `DnsServer` cmdlet.
 
+Commands sent to the execute endpoint are checked against an allowlist before they run: `DnsServer` cmdlets (plus `Resolve-DnsName`, `Test-NetConnection`, `Get-DnsClientServerAddress` and `Get-Service`), optionally piped to `Select-Object`, `Sort-Object`, `Format-Table`, `Format-List` or `Out-String`. Arguments may be literals, arrays and hashtables; script blocks are accepted only as calculated properties or sort keys for those formatters, and the only variables are `$_`, `$PSItem`, `$true`, `$false` and `$null`. Method calls, casts, `$( )` subexpressions, assignments, redirection and control flow are rejected.
+
 **Cmdlets without dedicated UI** (reachable via execute):
 
 | Group | Cmdlets | Reason |

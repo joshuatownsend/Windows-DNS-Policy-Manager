@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
+- **`/api/execute` validates against an allowlist of PowerShell syntax (#137).** The checker used
+  to reject a list of known-dangerous constructs and let everything else through. It now accepts
+  only pipelines of allowlisted cmdlets with literal, array, hashtable and `$_` arguments.
+  Script blocks are allowed only as `Select-Object`/`Sort-Object`/`Format-*` calculated
+  properties. Operators are limited to comparison, logical, arithmetic, `-join` and `-f`;
+  `-as`/`-is` are excluded because type conversion runs constructors. Casts, type literals,
+  `$( )`, other variables, dot-sourcing and command names that aren't cmdlet-shaped are
+  rejected, and so is any syntax PowerShell adds later. The specific
+  `[scriptblock]::Create` bypass in the report was already blocked; the cast form
+  `@{e=[scriptblock]"..."}` passed the old checker, though PowerShell refused to run it.
+- **Bridge request limits (#141).** Bodies over 1 MB are refused with `413`. That applies both
+  to the declared `Content-Length` and while reading chunked uploads. Resolver and BPA
+  background jobs are capped at 16 per registry, and entries expire after 30 minutes: a hung
+  job is stopped and removed (even when the same server asks again), and an unpolled result is
+  dropped. A full registry returns `429`. Slots are reserved atomically under the registry lock,
+  so concurrent starts can't overshoot the cap. The registries are now synchronized hashtables,
+  since pooled runspaces share them.
 - **Policy backup import can no longer be retargeted by the file (#142).** Backups are now
   validated field by field. Only name, action, processing order, zone, condition, criteria,
   zone scopes and recursion settings are read, so `server`, `serverId` or `credentialMode`
@@ -38,6 +55,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   and frontend windows are started with `-EncodedCommand`, and paths are passed as escaped
   single-quoted literals, so an apostrophe in the install path can't inject commands into the
   elevated bridge process.
+
+### Added
+
+- **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
+  and pwsh 7: 86 cases covering the execute allowlist, body limits, job reaping and policy
+  criterion types.
 
 ### Changed
 
