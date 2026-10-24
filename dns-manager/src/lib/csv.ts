@@ -18,10 +18,23 @@ export function csvRow(values: unknown[]): string {
 }
 
 /**
- * Parse one CSV line (RFC 4180 quoting, `""` for an embedded quote). Reverses `csvCell`,
- * including its formula-neutralizing `'` prefix — imported values go to DNS, not a spreadsheet.
+ * Header row for record exports. It is written quoted (`"HostName",...`), which the old
+ * exporter never did, so an importer can tell an escaped export from a legacy/third-party
+ * file and only undo the `'` prefix when this exporter added it.
  */
-export function parseCsvLine(line: string): string[] {
+export const RECORD_CSV_HEADER = csvRow(["HostName", "RecordType", "Data", "TTL"]);
+
+/** True when a file's first line marks it as written by `csvCell` (see RECORD_CSV_HEADER). */
+export function hasEscapedCells(firstLine: string): boolean {
+  return firstLine.trim().startsWith('"HostName"');
+}
+
+/**
+ * Parse one CSV line (RFC 4180 quoting, `""` for an embedded quote). With `unescape`, also
+ * reverses `csvCell`'s formula-neutralizing `'` prefix — pass it only for files written by
+ * `csvCell` (`hasEscapedCells`), so a literal leading `'` in a legacy file is kept.
+ */
+export function parseCsvLine(line: string, unescape = false): string[] {
   const cells: string[] = [];
   // Whitespace outside quotes is trimmed; whitespace inside quotes is data (e.g. TXT values).
   let quotedPart = "";
@@ -30,7 +43,7 @@ export function parseCsvLine(line: string): string[] {
   let quoted = false;
   const finish = () => {
     const value = sawQuote ? quotedPart + unquotedPart.trimEnd() : unquotedPart.trim();
-    cells.push(sawQuote && NEEDS_PREFIX.test(value.slice(1)) && value.startsWith("'") ? value.slice(1) : value);
+    cells.push(unescape && sawQuote && value.startsWith("'") && NEEDS_PREFIX.test(value.slice(1)) ? value.slice(1) : value);
     quotedPart = "";
     unquotedPart = "";
     sawQuote = false;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvCell, csvRow, parseCsvLine } from "./csv";
+import { csvCell, csvRow, hasEscapedCells, parseCsvLine, RECORD_CSV_HEADER } from "./csv";
 
 describe("csvCell", () => {
   it("quotes plain values", () => {
@@ -48,7 +48,7 @@ describe("parseCsvLine", () => {
 
   it("round-trips csvRow, including neutralized formulas", () => {
     const values = ["=evil", "TXT", "v=spf1 include:x, -all", "01:00:00"];
-    expect(parseCsvLine(csvRow(values))).toEqual(values);
+    expect(parseCsvLine(csvRow(values), true)).toEqual(values);
   });
 });
 
@@ -62,6 +62,17 @@ describe("csv round-trip edge cases", () => {
   });
 
   it.each(["'=literal", "'plain", "''double", "=formula", "  spaced  ", "'"])("round-trips %j", (value) => {
-    expect(parseCsvLine(csvRow([value]))).toEqual([value]);
+    expect(parseCsvLine(csvRow([value]), true)).toEqual([value]);
+  });
+});
+
+describe("legacy files", () => {
+  it("marks this exporter's header as escaped", () => {
+    expect(hasEscapedCells(RECORD_CSV_HEADER)).toBe(true);
+    expect(hasEscapedCells("HostName,RecordType,Data,TTL")).toBe(false);
+  });
+
+  it("keeps a literal leading apostrophe when not unescaping", () => {
+    expect(parseCsvLine(`txt,TXT,"'=literal",3600`)).toEqual(["txt", "TXT", "'=literal", "3600"]);
   });
 });

@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Upload } from "lucide-react";
-import { parseCsvLine } from "@/lib/csv";
+import { hasEscapedCells, parseCsvLine } from "@/lib/csv";
 import { MAX_IMPORT_ENTRIES, checkImportFile } from "@/lib/import-limits";
 
 interface ParsedRecord {
@@ -69,10 +69,12 @@ function parseCsv(text: string): ParsedRecord[] {
   // Detect header row
   const first = lines[0].toLowerCase();
   const startIdx = first.includes("hostname") && first.includes("recordtype") ? 1 : 0;
+  // Only undo the formula-escaping `'` in files this app exported.
+  const unescape = hasEscapedCells(lines[0]);
 
   const records: ParsedRecord[] = [];
   for (let i = startIdx; i < lines.length && records.length < MAX_IMPORT_ENTRIES; i++) {
-    const parts = parseCsvLine(lines[i]);
+    const parts = parseCsvLine(lines[i], unescape);
     if (parts.length < 3) {
       records.push({ hostName: parts[0] || "", recordType: "", data: "", ttl: "", valid: false, error: "Too few columns" });
       continue;

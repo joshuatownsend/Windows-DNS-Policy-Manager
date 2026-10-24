@@ -1,7 +1,7 @@
 "use client";
 
 import type { DnsRecord } from "@/lib/types";
-import { csvRow } from "@/lib/csv";
+import { csvRow, RECORD_CSV_HEADER } from "@/lib/csv";
 
 function flattenRecordData(record: DnsRecord): string {
   const d = record.RecordData;
@@ -20,7 +20,7 @@ function flattenRecordData(record: DnsRecord): string {
 }
 
 export function exportRecordsCsv(records: DnsRecord[], zoneName: string) {
-  const header = "HostName,RecordType,Data,TTL";
+  const header = RECORD_CSV_HEADER;
   const rows = records.map((r) =>
     csvRow([r.HostName, r.RecordType, flattenRecordData(r), r.TimeToLive || ""]),
   );
