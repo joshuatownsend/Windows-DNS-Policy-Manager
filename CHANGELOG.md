@@ -25,11 +25,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   dropped. A full registry returns `429`. Slots are reserved atomically under the registry lock,
   so concurrent starts can't overshoot the cap. The registries are now synchronized hashtables,
   since pooled runspaces share them.
-
-### Added
-
-- **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
-  and pwsh 7: 71 cases covering the execute allowlist, body limits and job reaping.
 - **Release supply chain pinned (#140, #144).** Every GitHub Action is pinned to a full commit SHA
   (with a version comment Dependabot keeps current), and the Docker base image is pinned by digest
   in all three stages, with a new Dependabot `docker` entry to refresh it. `build.yml` now runs
@@ -39,6 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   and frontend windows are started with `-EncodedCommand`, and paths are passed as escaped
   single-quoted literals, so an apostrophe in the install path can't inject commands into the
   elevated bridge process.
+
+### Added
+
+- **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
+  and pwsh 7: 71 cases covering the execute allowlist, body limits and job reaping.
 
 ### Changed
 
