@@ -83,6 +83,19 @@ updates:
           - minor
           - patch
 
+  - package-ecosystem: docker
+    directory: /dns-manager
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    # Keeps the pinned node:24-alpine digest fresh. Node majors move deliberately with CI,
+    # .nvmrc, engines and @types/node — see TODO.md.
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - version-update:semver-major
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

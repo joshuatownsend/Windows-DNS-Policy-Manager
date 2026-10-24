@@ -48,21 +48,15 @@ entire subtree lands in the **production** dependency graph: `express`, `hono`, 
 - ~~**Align `@types/node`**~~ — done: both workspaces are on `^24` (Active LTS line), pinned
   alongside CI, Dockerfile, `.nvmrc`, and `engines`. Dependabot now ignores `@types/node` majors.
 
-### The Dockerfile is never exercised by PR CI
-`release-ghcr.yml` triggers only on `v*.*.*` tags, so a broken `dns-manager/Dockerfile` is not
-caught until release time. The Node 24 base-image bump landed unverified for this reason, and was
-verified by hand on 2026-08-01 (build + container smoke test both passed — see `MANUAL_STEPS.md`).
-That hand-verification is exactly what should be automated.
-- Add a docker build (no push) job to `build.yml` on pull_request, or a `paths: [dns-manager/Dockerfile]`
-  triggered workflow, so base-image changes fail fast.
-- While in there: the runner stage calls `adduser --system --uid 1001 nextjs` without `-G nodejs`, so
-  the process runs as `uid=1001(nextjs) gid=65533(nogroup)` and the `nodejs` group it creates is
-  unused. Harmless today (single process, no group-owned paths), but the intent doesn't match the
-  result.
+### ~~The Dockerfile is never exercised by PR CI~~
+Done 2026-10-24 (#140/#144 hardening): `build.yml` has a `docker` job that builds the image and
+smoke-tests it on every PR, and the runner user is now in the `nodejs` group.
 
 ### Re-evaluate Node and TypeScript on their upstream triggers
 - **Node 26** becomes Active LTS **2026-10-28**; Node 24 enters maintenance **2026-10-20**. Natural
-  point to move `.nvmrc`/CI/Docker/`@types/node`/`engines` together again.
+  point to move `.nvmrc`/CI/Docker/`@types/node`/`engines` together again. The Dockerfile pins
+  `node:24-alpine` by digest, so the move means swapping the tag *and* the digest in all three
+  stages (resolve with `docker buildx imagetools inspect node:26-alpine`).
 - **TypeScript 7** (native Go port, currently `latest` at 7.0.2) is held back by two upstream gaps,
   both verified 2026-07-30:
   - `@typescript-eslint` 8.65.0 still declares `typescript: ">=4.8.4 <6.1.0"` — TS 7 unsupported,

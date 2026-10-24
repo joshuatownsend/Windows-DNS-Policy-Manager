@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -15,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -54,10 +57,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -70,6 +73,30 @@ jobs:
       - name: Build (tsc — fails on type errors)
         working-directory: mcp-server
         run: npm run build
+
+  docker:
+    # The release workflow only runs on tags, so without this a broken Dockerfile or base-image
+    # digest bump would not surface until release time. Builds the image without pushing it.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image (no push)
+        run: docker build --tag dns-manager:ci ./dns-manager
+
+      - name: Smoke test
+        run: |
+          docker run -d --name dns-manager-ci -p 10010:10010 dns-manager:ci
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:10010/server; then
+              docker exec dns-manager-ci id
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dns-manager-ci
+          exit 1
 
   bridge-tests:
     # Pester tests for the PowerShell bridge's security boundaries (command allowlist,

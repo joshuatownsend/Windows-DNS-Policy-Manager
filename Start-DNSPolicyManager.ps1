@@ -24,6 +24,36 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
 $frontendDir = Join-Path $scriptDir 'dns-manager'
 
+function ConvertTo-PSLiteral {
+    # Quote a value as a single-quoted PowerShell literal. PowerShell treats the curly quotes
+    # U+2018-U+201B as single quotes too, so every one of them is doubled, not just ASCII '.
+    param([string]$Value)
+    $quotes = "'" + [char]0x2018 + [char]0x2019 + [char]0x201A + [char]0x201B
+    "'" + ($Value -replace "([$quotes])", '$1$1') + "'"
+}
+
+function Test-BridgeCommandLine {
+    # True when a powershell.exe command line runs bridge.ps1, either directly or inside an
+    # -EncodedCommand payload (how this launcher starts it).
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return $false }
+    if ($CommandLine -match 'bridge\.ps1') { return $true }
+    if ($CommandLine -match '-EncodedCommand\s+([A-Za-z0-9+/=]+)') {
+        try {
+            $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($Matches[1]))
+            return $decoded -match 'bridge\.ps1'
+        } catch { return $false }
+    }
+    $false
+}
+
+function ConvertTo-EncodedCommand {
+    # -EncodedCommand takes UTF-16LE base64, so the child process receives the script text
+    # verbatim with no command-line quoting layer for a path to break out of.
+    param([string]$Script)
+    [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
+}
+
 function Invoke-McpBuild {
     param([string]$McpDir, [int]$BridgePort)
     if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
@@ -98,7 +128,7 @@ try {
 try {
     # Method 2: Find orphaned powershell processes running bridge.ps1
     $bridgeProcs = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match 'bridge\.ps1' -and $_.ProcessId -ne $PID }
+        Where-Object { $_.ProcessId -ne $PID -and (Test-BridgeCommandLine $_.CommandLine) }
     foreach ($proc in $bridgeProcs) {
         Write-Host "  Stopping stale bridge process (PID: $($proc.ProcessId))..." -ForegroundColor Yellow
         Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
@@ -117,10 +147,10 @@ Write-Host "  Starting bridge on port $Port..." -ForegroundColor Yellow
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
-$bridgeCmd = "& '$bridgeScript' -Port $Port *>&1 | Tee-Object -FilePath '$logFile'; pause"
+$bridgeCmd = "& $(ConvertTo-PSLiteral $bridgeScript) -Port $Port *>&1 | Tee-Object -FilePath $(ConvertTo-PSLiteral $logFile); pause"
 $startArgs = @{
     FilePath     = 'powershell'
-    ArgumentList = "-NoProfile -ExecutionPolicy Bypass -Command `"$bridgeCmd`""
+    ArgumentList = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand $bridgeCmd)"
     PassThru     = $true
     WindowStyle  = 'Normal'
 }
@@ -182,8 +212,8 @@ if ($ready) {
     }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {
         Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
-        $devCmd = "Set-Location '$frontendDir'; npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
-        Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"$devCmd`"" -WindowStyle Normal
+        $devCmd = "Set-Location -LiteralPath $(ConvertTo-PSLiteral $frontendDir); npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
+        Start-Process powershell -ArgumentList "-NoProfile -NoExit -EncodedCommand $(ConvertTo-EncodedCommand $devCmd)" -WindowStyle Normal
         Start-Sleep -Milliseconds 3000
     }
 
