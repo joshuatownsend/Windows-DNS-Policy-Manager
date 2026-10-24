@@ -31,7 +31,7 @@ Next.js App Router with TypeScript, Tailwind CSS v4, and shadcn/ui components.
 
 - **Routing**: File-based via `src/app/{tab}/page.tsx`. 12 tab routes: server, objects, zones, policies, create, blocklists, wizards, dnssec, doh, resolvers, backup, powershell.
 - **State**: Zustand store (`src/lib/store.ts`) with `persist` middleware for server registry in localStorage. All state is typed.
-- **API client**: `src/lib/api.ts` — single typed fetch wrapper with shared query-string builder. All API calls go directly to the bridge (no Next.js proxy).
+- **API client**: `src/lib/api.ts` — single typed fetch wrapper with shared query-string builder. Calls go to the app's own `/api/*`, served by the route handler `src/app/api/[...path]/route.ts`. That handler checks Host/Origin/`Sec-Fetch-Site` (`src/lib/bridge-proxy.ts`), adds the bridge bearer token server-side, and forwards to the bridge. The browser never talks to the bridge or sees the token.
 - **Types**: `src/lib/types.ts` — shared interfaces for Server, Zone, DnsRecord, Policy, WizardState, etc.
 - **Wizards**: `src/wizards/scenarios.ts` (definitions) + `src/wizards/command-generator.ts` (PowerShell generation) + `src/app/wizards/page.tsx` (React UI). 8 scenarios covering all 10 Microsoft DNS Policy use cases.
 - **Components**: shadcn/ui primitives in `src/components/ui/`. App shell components (header, tabs, bridge status) in `src/components/`.
@@ -50,7 +50,9 @@ All DNS cmdlet calls use **splatted parameters** (`@splatParams`) to prevent com
 - **API calls**: `import { api } from "@/lib/api"`. All methods return `Promise<ApiResponse>` with `{ success, error?, bridgeDown?, ...data }`.
 - **Server params helper**: Most API calls need `server`, `serverId`, `credentialMode` from the active server. Use `useStore.getState().getActiveServer()`.
 - **Bridge handlers**: Follow the pattern of resolving credentials via `Resolve-ServerCredential`, building `$splatParams`, calling the DNS cmdlet, and returning JSON via `Send-Response`.
-- **CORS**: Bridge allows `GET, POST, PUT, DELETE, OPTIONS` — safe because it only binds to localhost.
+- **Bridge auth**: every bridge route except `/api/health` requires `Authorization: Bearer <token>`. The token comes from `-Token`, `DNS_BRIDGE_TOKEN`, or is generated per start, and is written to `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`. The bridge sends no CORS headers, and non-loopback binds need `-AllowRemote`.
+- **Credentials**: saved and session credentials are bound to the hostname they were stored for (`Resolve-StoredCredential`); store calls must send `hostname`.
+- **Runspace function injection**: request handlers run in a runspace pool that only receives functions whose names match the prefix regex near the end of `bridge.ps1` (`Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Assert-|Format-|...`). Name new helpers to match, or add them to the list.
 
 ## Tabs and Features
 
