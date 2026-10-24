@@ -310,11 +310,31 @@ export default function ServerPage() {
     try {
       if (editingServerId) {
         // Update existing
+        const previous = servers.find((s) => s.id === editingServerId);
+        const targetChanged =
+          !!previous &&
+          (previous.hostname.trim().toLowerCase() !== trimmedHostname.toLowerCase() ||
+            previous.credentialMode !== form.credentialMode);
+        const enteringNewCredential =
+          form.credentialMode !== "currentUser" && !!form.username && !!form.password;
+
         updateServer(editingServerId, {
           name: trimmedName,
           hostname: trimmedHostname,
           credentialMode: form.credentialMode,
         });
+
+        // A stored credential is bound to the host it was entered for. When the host or mode
+        // changes, revoke it rather than leave a credential the bridge will refuse to use.
+        if (targetChanged && previous && previous.credentialMode !== "currentUser") {
+          if (bridgeConnected) await api.deleteCredential(editingServerId);
+          updateServer(editingServerId, { hasCredential: false });
+          if (!enteringNewCredential && form.credentialMode !== "currentUser") {
+            toast.warning("Stored credentials were cleared because the host or mode changed", {
+              description: "Edit the server again to enter credentials for the new host.",
+            });
+          }
+        }
 
         // Store credentials if provided
         if (
@@ -330,6 +350,7 @@ export default function ServerPage() {
           if (bridgeConnected) {
             const res = await storeFn(
               editingServerId,
+              trimmedHostname,
               form.username,
               form.password
             );
@@ -374,7 +395,7 @@ export default function ServerPage() {
               ? api.storeCredential
               : api.storeSessionCredential;
 
-          const res = await storeFn(newId, form.username, form.password);
+          const res = await storeFn(newId, trimmedHostname, form.username, form.password);
           if (res.success) {
             updateServer(newId, { hasCredential: true });
           }
@@ -391,7 +412,8 @@ export default function ServerPage() {
   };
 
   const handleRemove = (server: Server) => {
-    if (bridgeConnected && server.credentialMode === "savedCredential") {
+    // Revoke saved and session credentials alike (the bridge clears both for this ID).
+    if (bridgeConnected && server.credentialMode !== "currentUser") {
       api.deleteCredential(server.id);
     }
     removeServer(server.id);

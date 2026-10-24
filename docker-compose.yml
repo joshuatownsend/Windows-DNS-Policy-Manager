@@ -8,23 +8,30 @@
 # Usage:
 #   docker compose up -d              # frontend only, bridge on host
 #   docker compose --profile bridge up -d   # both (Windows containers required)
+#
+# The frontend authenticates to the bridge with a shared token. Put it in a .env file
+# next to this compose file (BRIDGE_TOKEN=<long random string>) and start the bridge with
+# the same value:
+#   $env:DNS_BRIDGE_TOKEN = '<same string>'
+#   powershell -File server/bridge.ps1 -BindAddress 0.0.0.0 -AllowRemote
 
 services:
   # ── Frontend (Next.js) ────────────────────────────────────
   frontend:
     build:
       context: ./dns-manager
-      args:
-        # Point rewrites at the bridge. Use "host.docker.internal" when
-        # the bridge runs on the Docker host, or "bridge" when using
-        # the bridge container.
-        BRIDGE_URL: http://host.docker.internal:8650
     ports:
       - "10010:10010"
     environment:
       - NODE_ENV=production
       - PORT=10010
       - HOSTNAME=0.0.0.0
+      # Where the /api proxy forwards to. "host.docker.internal" when the bridge runs on
+      # the Docker host, "http://bridge:8650" when using the bridge container.
+      - BRIDGE_URL=http://host.docker.internal:8650
+      - BRIDGE_TOKEN=${BRIDGE_TOKEN:?Set BRIDGE_TOKEN in .env to the bridge token}
+      # Extra hostnames the app may be opened under besides localhost (comma-separated).
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
     restart: unless-stopped
 
   # ── Bridge (PowerShell) — Windows container ───────────────
@@ -41,7 +48,7 @@ services:
   #   working_dir: /app
   #   command: >
   #     powershell -ExecutionPolicy Bypass -File server/bridge.ps1
-  #     -Port 8650 -BindAddress 0.0.0.0
+  #     -Port 8650 -BindAddress 0.0.0.0 -AllowRemote -Token ${BRIDGE_TOKEN}
   #   restart: unless-stopped
   #   # Note: The DnsServer PowerShell module must be available in the
   #   # container. Install RSAT-DNS-Server or mount the module from the host.

@@ -105,6 +105,8 @@ All configuration is via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BRIDGE_URL` | `http://127.0.0.1:8650` | PowerShell bridge URL |
+| `BRIDGE_TOKEN` | *(read from the token file)* | Bridge bearer token. Only needed when the MCP server runs as a different user or machine than the bridge |
+| `BRIDGE_TOKEN_FILE` | `%LOCALAPPDATA%\DNSPolicyManager\bridge.token` | Where to read the token the bridge writes on start |
 | `DNS_DEFAULT_SERVER` | *(none)* | Default DNS server hostname |
 | `DNS_SERVER_ID` | *(none)* | Server ID for credential lookup |
 | `DNS_CREDENTIAL_MODE` | `currentUser` | Auth mode: `currentUser` or `savedCredential` |
@@ -132,6 +134,7 @@ Session credentials (username/password) are intentionally not supported in the M
 
 ### Security
 
+- The MCP server authenticates to the bridge with the bridge token (see [Bridge authentication](#bridge-authentication))
 - All tools are **read-only** — no write operations on DNS servers
 - The bridge's `/api/execute` endpoint (arbitrary PowerShell) is **not exposed** through MCP
 - Generated PowerShell commands (offline command generator, both the web UI and the MCP `dns_generate_policy_commands` tool) escape user input against injection (`$`, `` ` ``, `"`) before interpolation
@@ -143,15 +146,22 @@ The frontend runs in a standard Linux container. The bridge requires Windows Pow
 
 ### Frontend in Docker, bridge on host
 
-This is the recommended Docker setup. The frontend container proxies API calls to the bridge running on your Windows machine.
+This is the recommended Docker setup. The frontend container proxies API calls to the bridge running on your Windows machine. The container reaches the host through Docker's network, so the bridge has to listen beyond loopback, and both sides share a token.
 
-**Step 1 — Start the bridge on the host:**
+**Step 1 — Pick a token** and put it in a `.env` file next to `docker-compose.yml`:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File server/bridge.ps1
+```bash
+BRIDGE_TOKEN=<a long random string, e.g. from: openssl rand -base64 32>
 ```
 
-**Step 2 — Start the frontend container:**
+**Step 2 — Start the bridge on the host with the same token:**
+
+```powershell
+$env:DNS_BRIDGE_TOKEN = '<the same string>'
+powershell -ExecutionPolicy Bypass -File server/bridge.ps1 -BindAddress 0.0.0.0 -AllowRemote
+```
+
+**Step 3 — Start the frontend container:**
 
 ```bash
 docker compose up -d
@@ -161,36 +171,37 @@ Or build and run manually:
 
 ```bash
 docker build -t dns-manager ./dns-manager
-docker run -d -p 10010:10010 dns-manager
+docker run -d -p 10010:10010 -e BRIDGE_TOKEN='<the same string>' dns-manager
 ```
 
-Open [http://localhost:10010](http://localhost:10010).
+Open [http://localhost:10010](http://localhost:10010). To open the app under another hostname (for example from another machine), list it in `ALLOWED_HOSTS`. The proxy refuses unknown `Host` headers so that a DNS-rebinding page can't drive it.
 
 ### Custom bridge address
 
-By default, the Docker image connects to the bridge at `http://host.docker.internal:8650` (Docker Desktop's host gateway). To point at a different bridge:
+By default, the frontend's `/api` proxy forwards to `http://host.docker.internal:8650` (Docker Desktop's host gateway). `BRIDGE_URL` is read at runtime, so you can point at a different bridge without rebuilding:
 
 ```bash
-# At build time (baked into the image)
-docker build --build-arg BRIDGE_URL=http://192.168.1.50:8650 -t dns-manager ./dns-manager
-
-# Or override in docker-compose.yml
-services:
-  frontend:
-    build:
-      args:
-        BRIDGE_URL: http://192.168.1.50:8650
+docker run -d -p 10010:10010 -e BRIDGE_URL=http://192.168.1.50:8650 -e BRIDGE_TOKEN='<token>' dns-manager
 ```
 
 ### Bridge on a remote host or separate network
 
-If the bridge runs on a different machine than Docker, use `-BindAddress` to make it listen on all interfaces:
+If the bridge runs on a different machine, bind it to a network interface. The bridge refuses to do that unless you pass `-AllowRemote`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File server/bridge.ps1 -BindAddress 0.0.0.0
+powershell -ExecutionPolicy Bypass -File server/bridge.ps1 -BindAddress 0.0.0.0 -AllowRemote
 ```
 
-> **Security note**: `-BindAddress 0.0.0.0` exposes the bridge to the network. Only use this on trusted networks or behind a firewall. The default `127.0.0.1` restricts access to localhost.
+> **Security note**: on a network interface, credentials entered in the Server tab and every DNS change cross the network. Plain HTTP sends them unencrypted. Use `-UseHttps` (after binding a certificate to the port with `netsh http add sslcert ipport=0.0.0.0:8650 certhash=<thumbprint> appid={<any GUID>}`), a TLS-terminating reverse proxy, or an SSH tunnel on anything but a trusted, isolated network. The token stops other clients from *using* the bridge, but it does not encrypt traffic.
+
+### Bridge authentication
+
+Every bridge endpoint except `/api/health` requires `Authorization: Bearer <token>`:
+
+- The bridge takes the token from `-Token`, else `DNS_BRIDGE_TOKEN`, else generates a random one at each start.
+- It writes the token to `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`, readable only by your account, SYSTEM and Administrators.
+- The frontend's server-side `/api` proxy and the MCP server read that file automatically. Set `BRIDGE_TOKEN` when they run as another user or on another machine.
+- The browser never sees the token. It only talks to the frontend's own origin.
 
 ### Docker Compose reference
 
@@ -204,9 +215,9 @@ docker compose logs -f frontend   # View logs
 ## Architecture
 
 ```
-Browser (:10010)                         PowerShell Bridge (:8650)
-─────────────────                        ──────────────────────────
-  Next.js frontend        ──HTTP──►      [System.Net.HttpListener]
+Browser ──same-origin /api──► Next.js (:10010)      PowerShell Bridge (:8650)
+                              ─────────────────     ──────────────────────────
+                              /api proxy  ──HTTP + bearer token──►  [System.Net.HttpListener]
                                                 │
 AI Agent (stdio)                          DNS cmdlets (splatted)
 ────────────────                          Get/Add/Remove/Set-DnsServer*
@@ -218,7 +229,7 @@ AI Agent (stdio)                          DNS cmdlets (splatted)
 - Next.js App Router with TypeScript and Tailwind CSS v4
 - shadcn/ui components (Radix primitives)
 - Zustand store with localStorage persistence
-- API client with direct bridge calls (bypasses Next.js proxy)
+- Same-origin API client; a server-side `/api/[...path]` route handler adds the bridge token and forwards to the bridge (Host/Origin/fetch-metadata checks guard it)
 - Standalone output for production Docker images
 
 **Bridge** (`server/bridge.ps1`):
@@ -226,6 +237,7 @@ AI Agent (stdio)                          DNS cmdlets (splatted)
 - Splatted parameters for all DNS cmdlet calls (prevents injection)
 - Three credential modes: Kerberos, DPAPI-encrypted, session — with **CIM sessions** for credential-based remote server access
 - Background jobs for long-running operations (BPA, Resolvers)
+- Bearer-token authentication on every endpoint except `/api/health`; saved and session credentials are bound to the hostname they were entered for
 - Path traversal protection on serverId and fileName parameters
 - Graceful degradation — frontend works offline when bridge is unavailable
 

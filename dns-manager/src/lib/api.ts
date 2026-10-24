@@ -6,9 +6,10 @@ import type {
 } from "./types";
 
 const REQUEST_TIMEOUT = 30000;
-// All requests go directly to the bridge to avoid the Next.js dev proxy's ~15s timeout.
-// The bridge has CORS headers so direct calls work from the browser.
-const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://127.0.0.1:8650";
+// Requests go to this app's own /api route (src/app/api/[...path]/route.ts), which adds
+// the bridge token server-side and forwards to the bridge. The browser never holds the
+// token and never talks to the bridge directly.
+const BRIDGE_URL = "";
 
 async function request<T = unknown>(
   method: string,
@@ -232,9 +233,11 @@ export const api = {
     ),
 
   // Credentials
-  storeCredential: (serverId: string, username: string, password: string) =>
+  // `hostname` binds the credential: the bridge refuses to use it for any other host.
+  storeCredential: (serverId: string, hostname: string, username: string, password: string) =>
     request("POST", "/api/credentials/store", {
       serverId,
+      hostname,
       username,
       password,
     }),
@@ -253,11 +256,13 @@ export const api = {
 
   storeSessionCredential: (
     serverId: string,
+    hostname: string,
     username: string,
     password: string
   ) =>
     request("POST", "/api/credentials/session", {
       serverId,
+      hostname,
       username,
       password,
     }),

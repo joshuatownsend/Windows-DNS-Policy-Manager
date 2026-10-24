@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const bridgeUrl = process.env.BRIDGE_URL || "http://127.0.0.1:8650";
-
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
@@ -15,14 +13,6 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
-      },
-    ];
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${bridgeUrl}/api/:path*`,
       },
     ];
   },

@@ -89,3 +89,22 @@ Ensure the credential mode for the target server has been set correctly in the S
 ## Data Looks Stale
 
 The app does not auto-refresh data. After making changes outside this tool (via PowerShell, another admin tool, or replication), click **Refresh** on the relevant tab to reload data from the server.
+
+## "Unauthorized: missing or invalid bridge token"
+
+The bridge requires a token on every request except the health check:
+- The frontend and MCP server read it from `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`, which the bridge rewrites every time it starts.
+- If you see this error after restarting the bridge, reload the page. The frontend picks up the new token automatically.
+- If the bridge runs as a different Windows user (for example, elevated with another admin account), or on another machine, start it with a fixed token (`-Token <value>` or `$env:DNS_BRIDGE_TOKEN`). Then give the frontend and MCP server the same value in `BRIDGE_TOKEN`.
+
+## "Bridge token not found"
+
+The frontend couldn't find the token file and no `BRIDGE_TOKEN` is set. Start the bridge first: it writes the file on startup. In Docker, set `BRIDGE_TOKEN` in `.env`.
+
+## "Host not allowed"
+
+The frontend only answers requests addressed to `localhost`, `127.0.0.1` or `[::1]`, which protects it from DNS-rebinding attacks. To open it under another hostname, add that name to `ALLOWED_HOSTS` (comma-separated) in the frontend's environment.
+
+## Credentials stopped working after editing a server
+
+Saved and session credentials are bound to the hostname they were entered for. Changing a server's hostname or credential mode clears its stored credential. Edit the server again and re-enter the username and password. Credentials saved before this protection existed must also be re-entered once.
