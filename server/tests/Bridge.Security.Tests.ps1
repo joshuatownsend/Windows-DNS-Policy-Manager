@@ -185,3 +185,17 @@ Describe 'Resolve-JobSlot / Resolve-ExpiredJobs (issue #141)' {
         }
     }
 }
+
+Describe 'Assert-PolicyCriterionType (issue #142)' {
+    It 'accepts <_>' -ForEach @('ClientSubnet', 'Fqdn', 'QType', 'ServerInterfaceIP', 'TimeOfDay', 'TransportProtocol', 'InternetProtocol') {
+        Assert-PolicyCriterionType -Type $_ | Should -Be $_
+    }
+
+    It 'normalizes case to the canonical parameter name' {
+        Assert-PolicyCriterionType -Type 'clientsubnet' | Should -Be 'ClientSubnet'
+    }
+
+    It 'rejects parameter names that would retarget or reshape the cmdlet: <_>' -ForEach @('ComputerName', 'CimSession', 'ZoneName', 'Action', 'PassThru', '', 'Fqdn;x') {
+        { Assert-PolicyCriterionType -Type $_ } | Should -Throw
+    }
+}

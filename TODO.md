@@ -11,6 +11,15 @@ a runspace built from `InitialSessionState.CreateRestricted(SessionCapabilities.
 `LanguageMode = ConstrainedLanguage` and only the DnsServer module plus the formatter cmdlets
 visible. Needs testing against CIM-session parameters and DnsServer module import in the
 restricted state. Chosen 2026-10-24 as the follow-up to the allowlist fix.
+### Policy backups don't include criteria
+`Handle-Backup` exports only Name, Action, ProcessingOrder, IsEnabled, Condition, Level and
+ZoneName, so a restored policy comes back without its FQDN/subnet/time-of-day criteria or zone
+scopes, and DENY/IGNORE policies with no criteria match *every* query. The importer
+(`parseBackupFile` in `dns-manager/src/lib/backup-import.ts`) already restores validated
+`criteria`/`scopes` when a file carries them and warns about match-everything policies; the gap
+is on the export side: `Handle-Backup` should emit each policy's criteria (from
+`Get-DnsServerQueryResolutionPolicy`'s `Criteria`/`Content`) in the importer's
+`{ type, operator, values }` shape. Found while fixing #142 (2026-10-24).
 
 ### Move `shadcn` to devDependencies (cuts a recurring class of CVE alerts)
 `dns-manager/package.json` lists `shadcn` under `dependencies`, so the scaffolding CLI's

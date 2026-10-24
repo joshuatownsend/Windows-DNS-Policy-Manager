@@ -188,6 +188,19 @@ function Assert-SafeId {
     return $Id
 }
 
+function Assert-PolicyCriterionType {
+    # Policy criteria arrive as { type, operator, values } and `type` becomes a cmdlet
+    # parameter NAME in the splat. Without this check a request could smuggle in any
+    # parameter -- e.g. type = 'ComputerName' or 'CimSession' to retarget the cmdlet.
+    param([string]$Type)
+    $allowed = @('ClientSubnet', 'Fqdn', 'QType', 'ServerInterfaceIP', 'TimeOfDay', 'TransportProtocol', 'InternetProtocol')
+    $match = $allowed | Where-Object { $_ -eq $Type } | Select-Object -First 1
+    if (-not $match) {
+        throw "Invalid policy criterion type: $Type"
+    }
+    return $match
+}
+
 function Assert-SafeFileName {
     # Strip path components, leaving only the filename. Prevents path traversal via fileName params.
     param([string]$FileName)
@@ -691,7 +704,7 @@ function Handle-PolicyMulti {
 
                 if ($policy.criteria) {
                     foreach ($c in $policy.criteria) {
-                        $paramName = $c.type
+                        $paramName = Assert-PolicyCriterionType -Type $c.type
                         $value = "$($c.operator),$($c.values -join ',')"
                         $splatParams[$paramName] = $value
                     }
@@ -1964,7 +1977,7 @@ function Handle-CreateZoneTransferPolicy {
 
         if ($Body.criteria) {
             foreach ($c in $Body.criteria) {
-                $paramName = $c.type
+                $paramName = Assert-PolicyCriterionType -Type $c.type
                 $value = "$($c.operator),$($c.values -join ',')"
                 $splatParams[$paramName] = $value
             }
@@ -3741,7 +3754,7 @@ function Handle-CreatePolicy {
         # Add criteria parameters
         if ($Body.criteria) {
             foreach ($c in $Body.criteria) {
-                $paramName = $c.type
+                $paramName = Assert-PolicyCriterionType -Type $c.type
                 $value = "$($c.operator),$($c.values -join ',')"
                 $splatParams[$paramName] = $value
             }
