@@ -25,9 +25,26 @@ $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
 $frontendDir = Join-Path $scriptDir 'dns-manager'
 
 function ConvertTo-PSLiteral {
-    # Quote a value as a single-quoted PowerShell literal ('' doubles an embedded quote).
+    # Quote a value as a single-quoted PowerShell literal. PowerShell treats the curly quotes
+    # U+2018-U+201B as single quotes too, so every one of them is doubled, not just ASCII '.
     param([string]$Value)
-    "'" + ($Value -replace "'", "''") + "'"
+    $quotes = "'" + [char]0x2018 + [char]0x2019 + [char]0x201A + [char]0x201B
+    "'" + ($Value -replace "([$quotes])", '$1$1') + "'"
+}
+
+function Test-BridgeCommandLine {
+    # True when a powershell.exe command line runs bridge.ps1, either directly or inside an
+    # -EncodedCommand payload (how this launcher starts it).
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return $false }
+    if ($CommandLine -match 'bridge\.ps1') { return $true }
+    if ($CommandLine -match '-EncodedCommand\s+([A-Za-z0-9+/=]+)') {
+        try {
+            $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($Matches[1]))
+            return $decoded -match 'bridge\.ps1'
+        } catch { return $false }
+    }
+    $false
 }
 
 function ConvertTo-EncodedCommand {
@@ -111,7 +128,7 @@ try {
 try {
     # Method 2: Find orphaned powershell processes running bridge.ps1
     $bridgeProcs = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match 'bridge\.ps1' -and $_.ProcessId -ne $PID }
+        Where-Object { $_.ProcessId -ne $PID -and (Test-BridgeCommandLine $_.CommandLine) }
     foreach ($proc in $bridgeProcs) {
         Write-Host "  Stopping stale bridge process (PID: $($proc.ProcessId))..." -ForegroundColor Yellow
         Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
