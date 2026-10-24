@@ -113,50 +113,73 @@ Describe 'Read-BoundedText (issue #141)' {
     }
 }
 
-Describe 'Test-JobSlot (issue #141)' {
+Describe 'Resolve-JobSlot / Resolve-ExpiredJobs (issue #141)' {
     BeforeEach {
         $now = [datetime]'2026-10-24T12:00:00'
         $registry = [hashtable]::Synchronized(@{})
     }
 
-    It 'allows a new key while under the cap' {
-        $registry['a'] = @{ Job = $null; Added = $now }
-        Test-JobSlot -Registry $registry -Key 'b' -MaxEntries 2 -Now $now | Should -BeTrue
+    It 'reserves a slot for a new key with a Pending placeholder' {
+        Resolve-JobSlot -Registry $registry -Key 'a' -Now $now | Should -Be 'reserved'
+        $registry['a'].Pending | Should -BeTrue
+        $registry['a'].Added | Should -Be $now
     }
 
-    It 'refuses a new key once the cap is reached' {
-        $registry['a'] = @{ Job = $null; Added = $now }
-        $registry['b'] = @{ Job = $null; Added = $now }
-        Test-JobSlot -Registry $registry -Key 'c' -MaxEntries 2 -Now $now | Should -BeFalse
+    It 'reports running while a reservation is still starting' {
+        Resolve-JobSlot -Registry $registry -Key 'a' -Now $now | Should -Be 'reserved'
+        Resolve-JobSlot -Registry $registry -Key 'a' -Now $now | Should -Be 'running'
     }
 
-    It 'lets an existing key reuse its slot at the cap' {
-        $registry['a'] = @{ Job = $null; Added = $now }
-        $registry['b'] = @{ Job = $null; Added = $now }
-        Test-JobSlot -Registry $registry -Key 'a' -MaxEntries 2 -Now $now | Should -BeTrue
+    It 'counts reservations toward the cap, so concurrent starts cannot overshoot it' {
+        Resolve-JobSlot -Registry $registry -Key 'a' -MaxEntries 2 -Now $now | Should -Be 'reserved'
+        Resolve-JobSlot -Registry $registry -Key 'b' -MaxEntries 2 -Now $now | Should -Be 'reserved'
+        Resolve-JobSlot -Registry $registry -Key 'c' -MaxEntries 2 -Now $now | Should -Be 'full'
+        $registry.Count | Should -Be 2
     }
 
-    It 'expires entries older than the TTL, freeing their slots' {
+    It 'lets a key with a finished result start again at the cap' {
+        $registry['a'] = @{ Job = $null; Result = @{ success = $true }; Added = $now }
+        $registry['b'] = @{ Job = $null; Result = $null; Added = $now }
+        Resolve-JobSlot -Registry $registry -Key 'a' -MaxEntries 2 -Now $now | Should -Be 'reserved'
+    }
+
+    It 'reclaims an expired entry for the same key instead of reporting running' {
+        $registry['a'] = @{ Pending = $true; Job = $null; Result = $null; Added = $now.AddMinutes(-31) }
+        Resolve-JobSlot -Registry $registry -Key 'a' -TtlMinutes 30 -Now $now | Should -Be 'reserved'
+        $registry['a'].Added | Should -Be $now
+    }
+
+    It 'expires entries older than the TTL and keeps fresh ones' {
         $registry['old'] = @{ Job = $null; Result = @{ success = $true }; Added = $now.AddMinutes(-31) }
         $registry['new'] = @{ Job = $null; Added = $now.AddMinutes(-5) }
-        Test-JobSlot -Registry $registry -Key 'c' -MaxEntries 2 -TtlMinutes 30 -Now $now | Should -BeTrue
+        Resolve-ExpiredJobs -Registry $registry -TtlMinutes 30 -Now $now
         $registry.ContainsKey('old') | Should -BeFalse
         $registry.ContainsKey('new') | Should -BeTrue
     }
 
     It 'expires entries that have no timestamp' {
         $registry['legacy'] = @{ Job = $null; Result = $null }
-        Test-JobSlot -Registry $registry -Key 'x' -Now $now | Should -BeTrue
+        Resolve-ExpiredJobs -Registry $registry -Now $now
         $registry.Count | Should -Be 0
     }
 
-    It 'stops and removes an expired running job' {
+    It 'stops and removes a hung job even when the same key asks again' {
         $job = Start-Job -ScriptBlock { Start-Sleep -Seconds 60 }
         try {
-            $registry['hung'] = @{ Job = $job; Added = $now.AddMinutes(-45) }
-            Test-JobSlot -Registry $registry -Key 'x' -Now $now | Should -BeTrue
-            $registry.ContainsKey('hung') | Should -BeFalse
+            $registry['hung'] = @{ Job = $job; Result = $null; Added = $now.AddMinutes(-45) }
+            Resolve-JobSlot -Registry $registry -Key 'hung' -Now $now | Should -Be 'reserved'
+            $registry['hung'].Pending | Should -BeTrue
             Get-Job -Id $job.Id -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        } finally {
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'reports running for a live job within the TTL' {
+        $job = Start-Job -ScriptBlock { Start-Sleep -Seconds 60 }
+        try {
+            $registry['live'] = @{ Job = $job; Result = $null; Added = $now.AddMinutes(-1) }
+            Resolve-JobSlot -Registry $registry -Key 'live' -Now $now | Should -Be 'running'
         } finally {
             Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
         }

@@ -2158,15 +2158,11 @@ function Handle-SetServerSettings {
 # POST /api/server/resolvers starts the job, GET /api/server/resolvers polls for results.
 $script:ResolverJobs = [hashtable]::Synchronized(@{})  # keyed by serverId or 'local'
 
-function Test-JobSlot {
-    # Sweep expired entries from a background-job registry, then report whether Key may
-    # start a job. Entries (running or finished) expire TtlMinutes after they were added,
-    # so results nobody polls and jobs that hang are reclaimed. A key that already has an
-    # entry may always reuse its slot; new keys are refused once MaxEntries are held.
+function Resolve-ExpiredJobs {
+    # Remove background-job registry entries older than TtlMinutes (running or finished),
+    # stopping any job still attached. Reclaims results nobody polls and jobs that hang.
     param(
         [hashtable]$Registry,
-        [string]$Key,
-        [int]$MaxEntries = 16,
         [int]$TtlMinutes = 30,
         [datetime]$Now = (Get-Date)
     )
@@ -2183,7 +2179,37 @@ function Test-JobSlot {
                 $Registry.Remove($k)
             }
         }
-        return ($Registry.ContainsKey($Key) -or $Registry.Count -lt $MaxEntries)
+    } finally {
+        [System.Threading.Monitor]::Exit($Registry.SyncRoot)
+    }
+}
+
+function Resolve-JobSlot {
+    # Atomically claim a background-job slot for Key. Under the registry lock it sweeps
+    # expired entries, then returns:
+    #   'running'  - Key already has a live (or still-starting) job; don't start another
+    #   'full'     - MaxEntries are held by other keys
+    #   'reserved' - a Pending placeholder was inserted; the caller must replace it with the
+    #                real job entry, or remove it if starting the job fails
+    param(
+        [hashtable]$Registry,
+        [string]$Key,
+        [int]$MaxEntries = 16,
+        [int]$TtlMinutes = 30,
+        [datetime]$Now = (Get-Date)
+    )
+    [System.Threading.Monitor]::Enter($Registry.SyncRoot)
+    try {
+        Resolve-ExpiredJobs -Registry $Registry -TtlMinutes $TtlMinutes -Now $Now
+        $entry = $Registry[$Key]
+        if ($entry -and ($entry.Pending -or ($entry.Job -and $entry.Job.State -eq 'Running'))) {
+            return 'running'
+        }
+        if (-not $entry -and $Registry.Count -ge $MaxEntries) {
+            return 'full'
+        }
+        $Registry[$Key] = @{ Pending = $true; Job = $null; Result = $null; Added = $Now }
+        return 'reserved'
     } finally {
         [System.Threading.Monitor]::Exit($Registry.SyncRoot)
     }
@@ -2194,18 +2220,18 @@ function Handle-StartResolvers {
         [System.Net.HttpListenerResponse]$Response,
         [System.Net.HttpListenerRequest]$Request
     )
+    $jobKey = $null
     try {
         $p = Resolve-ServerConfigParams -Request $Request
         $qs = $Request.QueryString
         $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
 
-        # If already running for this server, just acknowledge
-        if ($script:ResolverJobs[$jobKey] -and $script:ResolverJobs[$jobKey].Job -and $script:ResolverJobs[$jobKey].Job.State -eq 'Running') {
+        $slot = Resolve-JobSlot -Registry $script:ResolverJobs -Key $jobKey
+        if ($slot -eq 'running') {
             Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
             return
         }
-
-        if (-not (Test-JobSlot -Registry $script:ResolverJobs -Key $jobKey)) {
+        if ($slot -eq 'full') {
             Send-Response -Response $Response -Body @{ success = $false; error = 'Too many background jobs; try again later.' } -StatusCode 429
             return
         }
@@ -2277,6 +2303,10 @@ function Handle-StartResolvers {
 
         Send-Response -Response $Response -Body @{ success = $true; status = 'started' }
     } catch {
+        # Release a reservation whose job never started.
+        if ($jobKey -and $script:ResolverJobs[$jobKey] -and $script:ResolverJobs[$jobKey].Pending) {
+            $script:ResolverJobs.Remove($jobKey)
+        }
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
 }
@@ -2289,7 +2319,13 @@ function Handle-PollResolvers {
     try {
         $qs = $Request.QueryString
         $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+        Resolve-ExpiredJobs -Registry $script:ResolverJobs
         $entry = $script:ResolverJobs[$jobKey]
+
+        if ($entry -and $entry.Pending) {
+            Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
 
         if (-not $entry -or -not $entry.Job) {
             if ($entry -and $entry.Result) {
@@ -2749,20 +2785,21 @@ function Handle-StartBpa {
         [System.Net.HttpListenerResponse]$Response,
         [System.Net.HttpListenerRequest]$Request
     )
+    $jobKey = $null
     try {
         $qs = $Request.QueryString
         $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
 
         # If a BPA job is already running for this server, just acknowledge
-        if ($script:BpaJobs[$jobKey] -and $script:BpaJobs[$jobKey].Job -and $script:BpaJobs[$jobKey].Job.State -eq 'Running') {
+        $slot = Resolve-JobSlot -Registry $script:BpaJobs -Key $jobKey
+        if ($slot -eq 'running') {
             Send-Response -Response $Response -Body @{
                 success = $true
                 status  = 'running'
             }
             return
         }
-
-        if (-not (Test-JobSlot -Registry $script:BpaJobs -Key $jobKey)) {
+        if ($slot -eq 'full') {
             Send-Response -Response $Response -Body @{ success = $false; error = 'Too many background jobs; try again later.' } -StatusCode 429
             return
         }
@@ -2839,6 +2876,10 @@ function Handle-StartBpa {
             status  = 'started'
         }
     } catch {
+        # Release a reservation whose job never started.
+        if ($jobKey -and $script:BpaJobs[$jobKey] -and $script:BpaJobs[$jobKey].Pending) {
+            $script:BpaJobs.Remove($jobKey)
+        }
         Send-Response -Response $Response -Body @{ success = $false; error = $_.Exception.Message } -StatusCode 500
     }
 }
@@ -2851,7 +2892,13 @@ function Handle-PollBpa {
     try {
         $qs = $Request.QueryString
         $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
+        Resolve-ExpiredJobs -Registry $script:BpaJobs
         $entry = $script:BpaJobs[$jobKey]
+
+        if ($entry -and $entry.Pending) {
+            Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
 
         if (-not $entry -or -not $entry.Job) {
             if ($entry -and $entry.Result) {

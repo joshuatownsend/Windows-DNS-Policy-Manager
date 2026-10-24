@@ -21,13 +21,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Bridge request limits (#141).** Bodies over 1 MB are refused with `413`. That applies both
   to the declared `Content-Length` and while reading chunked uploads. Resolver and BPA
   background jobs are capped at 16 per registry, and entries expire after 30 minutes: a hung
-  job is stopped and removed, and an unpolled result is dropped. A full registry returns `429`.
-  The registries are now synchronized hashtables, since pooled runspaces share them.
+  job is stopped and removed (even when the same server asks again), and an unpolled result is
+  dropped. A full registry returns `429`. Slots are reserved atomically under the registry lock,
+  so concurrent starts can't overshoot the cap. The registries are now synchronized hashtables,
+  since pooled runspaces share them.
 
 ### Added
 
 - **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
-  and pwsh 7: 68 cases covering the execute allowlist, body limits and job reaping.
+  and pwsh 7: 71 cases covering the execute allowlist, body limits and job reaping.
 
 ### Changed
 
