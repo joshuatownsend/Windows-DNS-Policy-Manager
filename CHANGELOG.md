@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **`/api/execute` validates against an allowlist of PowerShell syntax (#137).** The checker used
+  to reject a list of known-dangerous constructs and let everything else through. It now accepts
+  only pipelines of allowlisted cmdlets with literal, array, hashtable and `$_` arguments.
+  Script blocks are allowed only as `Select-Object`/`Sort-Object`/`Format-*` calculated
+  properties. Casts, type literals, `$( )`, other variables, dot-sourcing and command names that
+  aren't cmdlet-shaped are rejected, and so is any syntax PowerShell adds later. The specific
+  `[scriptblock]::Create` bypass in the report was already blocked; the cast form
+  `@{e=[scriptblock]"..."}` passed the old checker, though PowerShell refused to run it.
+- **Bridge request limits (#141).** Bodies over 1 MB are refused with `413`. That applies both
+  to the declared `Content-Length` and while reading chunked uploads. Resolver and BPA
+  background jobs are capped at 16 per registry, and entries expire after 30 minutes: a hung
+  job is stopped and removed, and an unpolled result is dropped. A full registry returns `429`.
+  The registries are now synchronized hashtables, since pooled runspaces share them.
+
+### Added
+
+- **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
+  and pwsh 7: 59 cases covering the execute allowlist, body limits and job reaping.
+
 ### Changed
 
 - **Next.js 16.4.1 and React 19.3.1**, plus zustand 5.0.15, `@playwright/test` 1.64.1 and

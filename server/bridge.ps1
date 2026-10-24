@@ -112,12 +112,43 @@ function Send-Preflight {
     $Response.OutputStream.Close()
 }
 
+function Get-MaxRequestBodyBytes {
+    # Largest request body the bridge will read. The biggest legitimate payloads (bulk
+    # policy imports, block lists) are well under this.
+    1MB
+}
+
+function Read-BoundedText {
+    # Read a stream as text, throwing once more than MaxBytes have arrived. Covers chunked
+    # requests, which carry no Content-Length for Route-Request to check up front.
+    param(
+        [System.IO.Stream]$Stream,
+        [System.Text.Encoding]$Encoding,
+        [long]$MaxBytes
+    )
+    $mem = New-Object System.IO.MemoryStream
+    $buffer = New-Object byte[] 65536
+    try {
+        while (($read = $Stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            if ($mem.Length + $read -gt $MaxBytes) {
+                throw [System.IO.InvalidDataException]::new('Request body too large')
+            }
+            $mem.Write($buffer, 0, $read)
+        }
+        return $Encoding.GetString($mem.ToArray())
+    } finally {
+        $mem.Dispose()
+    }
+}
+
 function Read-RequestBody {
     param([System.Net.HttpListenerRequest]$Request)
     if ($Request.HasEntityBody) {
-        $reader = New-Object System.IO.StreamReader($Request.InputStream, $Request.ContentEncoding)
-        $body = $reader.ReadToEnd()
-        $reader.Close()
+        try {
+            $body = Read-BoundedText -Stream $Request.InputStream -Encoding $Request.ContentEncoding -MaxBytes (Get-MaxRequestBodyBytes)
+        } finally {
+            $Request.InputStream.Close()
+        }
         if ($body) {
             return ($body | ConvertFrom-Json)
         }
@@ -168,10 +199,16 @@ function Assert-SafeFileName {
 }
 
 function Test-CommandAllowed {
-    # Validate a /api/execute command string. Returns $true only if every command
-    # invoked anywhere in the input (including inside pipelines and $() subexpressions)
-    # resolves to an allowlisted DNS cmdlet (or a safe read-only formatter), and the
-    # input contains no static method calls or dynamically-named invocations.
+    # Validate a /api/execute command string. The check is an ALLOWLIST at two levels:
+    #   1. Every AST node must be one of a small set of node types (pipelines, commands,
+    #      parameters, constants, hashtables, property access, ...). Anything else -- method
+    #      calls, casts, type literals, $() subexpressions, assignments, redirections,
+    #      control flow, function definitions, or a node type a future PowerShell adds --
+    #      is rejected, so a construct nobody thought of fails closed.
+    #   2. Every command must have a static, cmdlet-shaped name on the DNS allowlist or the
+    #      read-only formatter list.
+    # Script blocks are allowed only as arguments to the formatters (calculated properties,
+    # Sort-Object keys), variables only as $_ / $PSItem / $true / $false / $null.
     param([string]$Command)
 
     # Allowed by NAME PREFIX (covers e.g. Get-DnsServerZone, Get-DnsServerResourceRecord).
@@ -185,10 +222,19 @@ function Test-CommandAllowed {
         'Update-DnsServer', 'Test-DnsServer',
         'Get-DnsClientServerAddress', 'Test-NetConnection', 'Resolve-DnsName', 'Get-Service'
     )
-    # Allowed by EXACT NAME — read-only output shaping used in legitimate pipelines.
-    $allowedExact = @(
+    # Allowed by EXACT NAME -- read-only output shaping used in legitimate pipelines.
+    $formatters = @(
         'Format-Table', 'Format-List', 'Select-Object', 'Sort-Object', 'Out-String'
     )
+    $allowedNodeTypes = @(
+        'ScriptBlockAst', 'NamedBlockAst', 'StatementBlockAst', 'PipelineAst',
+        'CommandAst', 'CommandParameterAst', 'CommandExpressionAst',
+        'StringConstantExpressionAst', 'ConstantExpressionAst', 'ExpandableStringExpressionAst',
+        'ArrayLiteralAst', 'ArrayExpressionAst', 'ParenExpressionAst', 'HashtableAst',
+        'ScriptBlockExpressionAst', 'VariableExpressionAst', 'MemberExpressionAst',
+        'IndexExpressionAst', 'BinaryExpressionAst', 'UnaryExpressionAst'
+    )
+    $allowedVariables = @('_', 'PSItem', 'true', 'false', 'null')
 
     if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
 
@@ -197,37 +243,49 @@ function Test-CommandAllowed {
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$errs)
     if ($errs -and $errs.Count -gt 0) { return $false }
 
-    # Reject side-effecting AST constructs BEFORE allowlisting commands:
-    #   - InvokeMemberExpressionAst: static/instance method calls, e.g. [Diagnostics.Process]::Start(...)
-    #   - AssignmentStatementAst: assignments can redefine an allowlisted command, e.g.
-    #     ${function:Get-DnsServer}='Start-Process calc'; Get-DnsServer  — the CommandAst still
-    #     looks allowlisted but the redefined function body runs arbitrary code.
-    #   - RedirectionAst (base type, covers file + merging redirections): writes arbitrary files,
-    #     e.g. Get-DnsServer > C:\evil.txt  or  Get-DnsServer 2> C:\evil.txt
-    # Legitimate /api/execute commands (DNS cmdlets, optionally piped to a read-only formatter)
-    # contain none of these, so this does not break legitimate use.
-    $sideEffects = $ast.FindAll(
-        { param($n)
-            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -or
-            $n -is [System.Management.Automation.Language.AssignmentStatementAst] -or
-            $n -is [System.Management.Automation.Language.RedirectionAst] }, $true)
-    if ($sideEffects.Count -gt 0) { return $false }
+    $commandCount = 0
+    foreach ($node in $ast.FindAll({ $true }, $true)) {
+        $typeName = $node.GetType().Name
+        if ($allowedNodeTypes -notcontains $typeName) { return $false }
 
-    # Every command invoked anywhere must be allowlisted.
-    $commands = $ast.FindAll(
-        { param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
-    if (-not $commands -or $commands.Count -eq 0) { return $false }
-
-    foreach ($c in $commands) {
-        $name = $c.GetCommandName()
-        if (-not $name) { return $false }   # e.g. `& $var` — dynamic, not statically verifiable
-        $ok = $false
-        foreach ($p in $allowedPrefixes) {
-            if ($name -like "$p*") { $ok = $true; break }
+        switch ($typeName) {
+            'ScriptBlockAst' {
+                # Only the root script and literal { } blocks -- no param() blocks.
+                if ($node.ParamBlock -or $node.BeginBlock -or $node.ProcessBlock -or $node.DynamicParamBlock) { return $false }
+            }
+            'MemberExpressionAst' {
+                # Property reads like $_.Name. Static access ([X]::Prop) needs a type literal,
+                # which is already rejected; the member name itself must be a plain constant.
+                if ($node.Static) { return $false }
+                if ($node.Member -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) { return $false }
+            }
+            'VariableExpressionAst' {
+                if ($node.Splatted) { return $false }
+                $path = $node.VariablePath
+                if (-not $path.IsUnqualified -or $allowedVariables -notcontains $path.UserPath) { return $false }
+            }
+            'ScriptBlockExpressionAst' {
+                $owner = $node.Parent
+                while ($owner -and $owner -isnot [System.Management.Automation.Language.CommandAst]) { $owner = $owner.Parent }
+                if (-not $owner -or $formatters -notcontains $owner.GetCommandName()) { return $false }
+            }
+            'CommandAst' {
+                $commandCount++
+                $name = $node.GetCommandName()
+                # Static and cmdlet-shaped: rejects `& $var`, paths, and script files on PATH.
+                if (-not $name -or $name -notmatch '^[A-Za-z]+-[A-Za-z0-9]+$') { return $false }
+                if ($node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot) { return $false }
+                $ok = $formatters -contains $name
+                if (-not $ok) {
+                    foreach ($p in $allowedPrefixes) {
+                        if ($name -like "$p*") { $ok = $true; break }
+                    }
+                }
+                if (-not $ok) { return $false }
+            }
         }
-        if (-not $ok -and ($allowedExact -notcontains $name)) { return $false }
     }
-    return $true
+    return ($commandCount -gt 0)
 }
 
 function Test-OriginAllowed {
@@ -2081,7 +2139,38 @@ function Handle-SetServerSettings {
 
 # Resolvers use a background job to avoid blocking the single-threaded listener.
 # POST /api/server/resolvers starts the job, GET /api/server/resolvers polls for results.
-$script:ResolverJobs = @{}  # keyed by serverId or 'local'
+$script:ResolverJobs = [hashtable]::Synchronized(@{})  # keyed by serverId or 'local'
+
+function Test-JobSlot {
+    # Sweep expired entries from a background-job registry, then report whether Key may
+    # start a job. Entries (running or finished) expire TtlMinutes after they were added,
+    # so results nobody polls and jobs that hang are reclaimed. A key that already has an
+    # entry may always reuse its slot; new keys are refused once MaxEntries are held.
+    param(
+        [hashtable]$Registry,
+        [string]$Key,
+        [int]$MaxEntries = 16,
+        [int]$TtlMinutes = 30,
+        [datetime]$Now = (Get-Date)
+    )
+    [System.Threading.Monitor]::Enter($Registry.SyncRoot)
+    try {
+        foreach ($k in @($Registry.Keys)) {
+            $entry = $Registry[$k]
+            $added = if ($entry -and $entry.ContainsKey('Added')) { $entry.Added } else { [datetime]::MinValue }
+            if (($Now - $added).TotalMinutes -ge $TtlMinutes) {
+                if ($entry -and $entry.Job) {
+                    try { Stop-Job -Job $entry.Job -ErrorAction SilentlyContinue } catch {}
+                    try { Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue } catch {}
+                }
+                $Registry.Remove($k)
+            }
+        }
+        return ($Registry.ContainsKey($Key) -or $Registry.Count -lt $MaxEntries)
+    } finally {
+        [System.Threading.Monitor]::Exit($Registry.SyncRoot)
+    }
+}
 
 function Handle-StartResolvers {
     param(
@@ -2094,8 +2183,13 @@ function Handle-StartResolvers {
         $jobKey = if ($qs['serverId']) { $qs['serverId'] } else { 'local' }
 
         # If already running for this server, just acknowledge
-        if ($script:ResolverJobs[$jobKey] -and $script:ResolverJobs[$jobKey].Job.State -eq 'Running') {
+        if ($script:ResolverJobs[$jobKey] -and $script:ResolverJobs[$jobKey].Job -and $script:ResolverJobs[$jobKey].Job.State -eq 'Running') {
             Send-Response -Response $Response -Body @{ success = $true; status = 'running' }
+            return
+        }
+
+        if (-not (Test-JobSlot -Registry $script:ResolverJobs -Key $jobKey)) {
+            Send-Response -Response $Response -Body @{ success = $false; error = 'Too many background jobs; try again later.' } -StatusCode 429
             return
         }
 
@@ -2105,6 +2199,7 @@ function Handle-StartResolvers {
         $cimComputerName = if ($p.ContainsKey('CimSession')) { $p['CimSession'].ComputerName } else { $null }
 
         $script:ResolverJobs[$jobKey] = @{
+            Added  = Get-Date
             Job    = Start-Job -ScriptBlock {
                 param($rHost, $rCred, $cimHost)
                 try {
@@ -2197,10 +2292,10 @@ function Handle-PollResolvers {
         Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
 
         if ($result) {
-            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $result }
+            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $result; Added = Get-Date }
             Send-Response -Response $Response -Body $result
         } else {
-            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $null }
+            $script:ResolverJobs[$jobKey] = @{ Job = $null; Result = $null; Added = Get-Date }
             Send-Response -Response $Response -Body @{ success = $false; error = 'Resolver job returned no results.' } -StatusCode 500
         }
     } catch {
@@ -2630,7 +2725,7 @@ function Handle-TestDnsServer {
 
 # BPA runs in a background job to avoid blocking the single-threaded listener.
 # POST /api/server/bpa starts the job, GET /api/server/bpa polls for results.
-$script:BpaJobs = @{}  # keyed by serverId or 'local'
+$script:BpaJobs = [hashtable]::Synchronized(@{})  # keyed by serverId or 'local'
 
 function Handle-StartBpa {
     param(
@@ -2650,6 +2745,11 @@ function Handle-StartBpa {
             return
         }
 
+        if (-not (Test-JobSlot -Registry $script:BpaJobs -Key $jobKey)) {
+            Send-Response -Response $Response -Body @{ success = $false; error = 'Too many background jobs; try again later.' } -StatusCode 429
+            return
+        }
+
         $p = Resolve-ServerConfigParams -Request $Request
         $modelId = 'Microsoft/Windows/DNSServer'
 
@@ -2658,7 +2758,7 @@ function Handle-StartBpa {
         $remoteCred = $bgCred.Credential
 
         # Launch BPA in a background job so the listener stays responsive
-        $script:BpaJobs[$jobKey] = @{ Job = Start-Job -ScriptBlock {
+        $script:BpaJobs[$jobKey] = @{ Added = Get-Date; Job = Start-Job -ScriptBlock {
             param($rHost, $rCred)
             $mid = 'Microsoft/Windows/DNSServer'
             try {
@@ -2755,10 +2855,10 @@ function Handle-PollBpa {
         Remove-Job -Job $entry.Job -Force -ErrorAction SilentlyContinue
 
         if ($result) {
-            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $result }
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $result; Added = Get-Date }
             Send-Response -Response $Response -Body $result
         } else {
-            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $null }
+            $script:BpaJobs[$jobKey] = @{ Job = $null; Result = $null; Added = Get-Date }
             Send-Response -Response $Response -Body @{
                 success = $false
                 error   = 'BPA job completed but returned no results.'
@@ -4272,6 +4372,16 @@ function Route-Request {
         return
     }
 
+    # Refuse oversized bodies before reading them. Chunked bodies (no Content-Length)
+    # are capped while reading, in Read-BoundedText.
+    if ($request.ContentLength64 -gt (Get-MaxRequestBodyBytes)) {
+        Send-Response -Response $response -Body @{
+            success = $false
+            error   = 'Request body too large'
+        } -StatusCode 413
+        return
+    }
+
     Write-Log "$method $path"
 
     try {
@@ -4797,6 +4907,15 @@ function Route-Request {
                 Send-Response -Response $response -Body @{ success = $false; error = "Not found: $path" } -StatusCode 404
             }
         }
+    } catch [System.IO.InvalidDataException] {
+        try {
+            Send-Response -Response $response -Body @{
+                success = $false
+                error   = $_.Exception.Message
+            } -StatusCode 413
+        } catch {
+            # Response may already be closed
+        }
     } catch {
         Write-Log "Unhandled error: $($_.Exception.Message)" 'ERROR'
         try {
@@ -4877,7 +4996,7 @@ try {
 
     # Collect all functions defined in this session into InitialSessionState
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Assert-|Format-)' } | ForEach-Object {
+    Get-ChildItem Function: | Where-Object { $_.Name -match '^(Route-|Handle-|Send-|Read-|Resolve-|ConvertTo-|Write-|Test-|Get-QueryParam|Get-MaxRequestBodyBytes|Assert-|Format-)' } | ForEach-Object {
         $entry = [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($_.Name, $_.Definition)
         $iss.Commands.Add($entry)
     }
@@ -4886,8 +5005,8 @@ try {
     $sharedState = [hashtable]::Synchronized(@{
         SessionCredentials = $script:SessionCredentials
         CredStorePath      = $script:CredStorePath
-        BpaJobs            = @{}
-        ResolverJobs       = @{}
+        BpaJobs            = [hashtable]::Synchronized(@{})
+        ResolverJobs       = [hashtable]::Synchronized(@{})
         AllowedOrigins     = $script:AllowedOrigins
     })
     $iss.Variables.Add(

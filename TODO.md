@@ -4,6 +4,14 @@ No high or medium priority items remain. The following are ideas for future cons
 
 ## Medium Priority
 
+### Run `/api/execute` in a restricted runspace (defense in depth for #137)
+The execute endpoint now validates an allowlist of AST node types before `Invoke-Expression`
+(`Test-CommandAllowed` in `server/bridge.ps1`). Add a second layer: run the validated command in
+a runspace built from `InitialSessionState.CreateRestricted(SessionCapabilities.Language)` with
+`LanguageMode = ConstrainedLanguage` and only the DnsServer module plus the formatter cmdlets
+visible. Needs testing against CIM-session parameters and DnsServer module import in the
+restricted state. Chosen 2026-10-24 as the follow-up to the allowlist fix.
+
 ### Move `shadcn` to devDependencies (cuts a recurring class of CVE alerts)
 `dns-manager/package.json` lists `shadcn` under `dependencies`, so the scaffolding CLI's
 entire subtree lands in the **production** dependency graph: `express`, `hono`, `fast-uri`,
