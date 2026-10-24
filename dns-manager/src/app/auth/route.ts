@@ -1,4 +1,14 @@
-import { bridgeToken, checkProxyRequest, consumeSignInCode, isBridgeToken, sessionCookie } from "@/lib/bridge-proxy";
+import {
+  bridgeToken,
+  checkProxyRequest,
+  consumeSignInCode,
+  isBridgeToken,
+  readBodyCapped,
+  sessionCookie,
+} from "@/lib/bridge-proxy";
+
+/** A sign-in form is one short field; refuse anything bigger before buffering it. */
+const MAX_SIGNIN_BODY_BYTES = 4096;
 
 // Sign-in: issues an HttpOnly session cookie.
 //   GET  /auth?code=...   — one-time code from Start-DNSPolicyManager.ps1 (see consumeSignInCode)
@@ -14,10 +24,12 @@ function redirect(to: string, cookie?: string): Response {
   return new Response(null, { status: 303, headers });
 }
 
-function signIn(request: Request, accept: (token: string) => boolean, failure: string): Response {
-  const rejection = checkProxyRequest("GET", request.headers);
-  if (rejection) return Response.json({ success: false, error: rejection.error }, { status: rejection.status });
+function reject(request: Request): Response | null {
+  const rejection = checkProxyRequest(request.method, request.headers);
+  return rejection ? Response.json({ success: false, error: rejection.error }, { status: rejection.status }) : null;
+}
 
+function signIn(request: Request, accept: (token: string) => boolean, failure: string): Response {
   const token = bridgeToken();
   if (!token) return redirect("/login?error=no-token");
   if (!accept(token)) return redirect(`/login?error=${failure}`);
@@ -27,17 +39,18 @@ function signIn(request: Request, accept: (token: string) => boolean, failure: s
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const rejected = reject(request);
+  if (rejected) return rejected;
   const code = new URL(request.url).searchParams.get("code") || "";
   return signIn(request, () => consumeSignInCode(code), "expired");
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let presented = "";
-  try {
-    const form = await request.formData();
-    presented = String(form.get("token") || "");
-  } catch {
-    // fall through with an empty token
-  }
+  // Host/Origin/fetch-metadata and the declared length are checked before any body is read.
+  const rejected = reject(request);
+  if (rejected) return rejected;
+  const body = await readBodyCapped(request.body, MAX_SIGNIN_BODY_BYTES);
+  if (!body) return Response.json({ success: false, error: "Request body too large" }, { status: 413 });
+  const presented = new URLSearchParams(new TextDecoder().decode(body)).get("token") || "";
   return signIn(request, (token) => isBridgeToken(presented, token), "invalid");
 }

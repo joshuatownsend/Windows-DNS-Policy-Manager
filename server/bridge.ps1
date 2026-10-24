@@ -361,7 +361,12 @@ function ConvertTo-HostKey {
     param([string]$Name)
     $n = "$Name".Trim().TrimEnd('.').ToLowerInvariant()
     $self = @('', 'localhost', '127.0.0.1', '::1', '[::1]', '.', "$env:COMPUTERNAME".ToLowerInvariant())
-    if ($env:USERDNSDOMAIN) { $self += "$env:COMPUTERNAME.$env:USERDNSDOMAIN".ToLowerInvariant() }
+    # The machine's own DNS suffix (not USERDNSDOMAIN, which is the signed-in user's domain and
+    # can name a different machine when user and computer live in different domains).
+    try {
+        $suffix = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().DomainName
+        if ($suffix) { $self += "$env:COMPUTERNAME.$suffix".ToLowerInvariant() }
+    } catch {}
     if ($self -contains $n) { return 'localhost' }
     return $n
 }
@@ -5119,36 +5124,6 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 }
 $script:BridgeToken = $Token
 
-# Write the token where the local frontend and MCP server look for it, readable only by
-# this user (and SYSTEM / Administrators).
-try {
-    $tokenDir = Split-Path -Parent $tokenFile
-    if (-not (Test-Path $tokenDir)) { $null = New-Item -ItemType Directory -Path $tokenDir -Force }
-    # Lock the (empty) file down first, then write the token, so it is never readable through
-    # inherited permissions. Uses the .NET ACL API rather than Set-Acl, which lives in a module
-    # that can fail to load (e.g. when started from pwsh with a 7.x PSModulePath).
-    [System.IO.File]::WriteAllText($tokenFile, '')
-    $acl = New-Object System.Security.AccessControl.FileSecurity
-    $acl.SetAccessRuleProtection($true, $false)
-    $identities = @(
-        [System.Security.Principal.WindowsIdentity]::GetCurrent().User,
-        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')),
-        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544'))
-    )
-    foreach ($id in $identities) {
-        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($id, 'FullControl', 'Allow')))
-    }
-    $fileInfo = New-Object System.IO.FileInfo($tokenFile)
-    if ($fileInfo | Get-Member -Name SetAccessControl -MemberType Method) {
-        $fileInfo.SetAccessControl($acl)                                      # .NET Framework (PS 5.1)
-    } else {
-        [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl) # .NET (pwsh 7)
-    }
-    [System.IO.File]::WriteAllText($tokenFile, $Token)
-} catch {
-    Write-Log "Could not write bridge token file ${tokenFile}: $($_.Exception.Message)" 'WARN'
-}
-
 $scheme = if ($UseHttps) { 'https' } else { 'http' }
 $prefix = "${scheme}://${BindAddress}:${Port}/"
 $listener = $null
@@ -5196,6 +5171,38 @@ if (-not $started) {
     Write-Host '  Fix: Run Start-DNSPolicyManager.ps1 from an elevated PowerShell.' -ForegroundColor Cyan
     Write-Host ''
     exit 1
+}
+
+# Publish the token only once this instance owns the port, so a launch that fails to bind
+# never overwrites the token another running bridge is using.
+# Write the token where the local frontend and MCP server look for it, readable only by
+# this user (and SYSTEM / Administrators).
+try {
+    $tokenDir = Split-Path -Parent $tokenFile
+    if (-not (Test-Path $tokenDir)) { $null = New-Item -ItemType Directory -Path $tokenDir -Force }
+    # Lock the (empty) file down first, then write the token, so it is never readable through
+    # inherited permissions. Uses the .NET ACL API rather than Set-Acl, which lives in a module
+    # that can fail to load (e.g. when started from pwsh with a 7.x PSModulePath).
+    [System.IO.File]::WriteAllText($tokenFile, '')
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    $identities = @(
+        [System.Security.Principal.WindowsIdentity]::GetCurrent().User,
+        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')),
+        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544'))
+    )
+    foreach ($id in $identities) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($id, 'FullControl', 'Allow')))
+    }
+    $fileInfo = New-Object System.IO.FileInfo($tokenFile)
+    if ($fileInfo | Get-Member -Name SetAccessControl -MemberType Method) {
+        $fileInfo.SetAccessControl($acl)                                      # .NET Framework (PS 5.1)
+    } else {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl) # .NET (pwsh 7)
+    }
+    [System.IO.File]::WriteAllText($tokenFile, $Token)
+} catch {
+    Write-Log "Could not write bridge token file ${tokenFile}: $($_.Exception.Message)" 'WARN'
 }
 
 try {
