@@ -72,5 +72,10 @@ frontend reads it.
   Same-user, same-machine setups read `%LOCALAPPDATA%\DNSPolicyManager\bridge.token` automatically.
 - [ ] Opening the app under a hostname other than localhost: set `ALLOWED_HOSTS`
   e.g. `ALLOWED_HOSTS=dns-admin.contoso.com` in the frontend environment (or `.env` for Docker).
+- [ ] Sign each browser in once
+  The launcher does this automatically. For Docker or manual starts, open
+  `http://localhost:10010/auth?token=<token>`, or paste the token on the sign-in page.
+- [ ] Docker deployments reached from other machines: compose now publishes `127.0.0.1:10010` only
+  Change the port mapping to `"10010:10010"`, add the hostname to `ALLOWED_HOSTS`, and put TLS in front.
 
 ---

@@ -6,9 +6,10 @@
     Local HTTP bridge that exposes DNS Server cmdlets as REST API endpoints.
     Binds to 127.0.0.1 by default (port 8650) for security. Zero external dependencies.
     Every endpoint except /api/health requires "Authorization: Bearer <token>". The token
-    comes from -Token, else $env:DNS_BRIDGE_TOKEN, else a random one generated per start; it
-    is written to %LOCALAPPDATA%\DNSPolicyManager\bridge.token (readable by this user only),
-    where the local frontend and MCP server pick it up.
+    comes from -Token, else $env:DNS_BRIDGE_TOKEN, else the existing token file, else a new
+    random one (-RotateToken forces a new one). It is written to
+    %LOCALAPPDATA%\DNSPolicyManager\bridge.token (readable by this user only), where the
+    local frontend and MCP server pick it up.
     Binding anything other than loopback (e.g. -BindAddress 0.0.0.0 for Docker) requires
     -AllowRemote, because credentials then cross the network; add -UseHttps (with a
     certificate bound via netsh http add sslcert) or a TLS proxy on untrusted networks.
@@ -25,7 +26,8 @@ param(
     ),
     [string]$Token = $env:DNS_BRIDGE_TOKEN,
     [switch]$AllowRemote,
-    [switch]$UseHttps
+    [switch]$UseHttps,
+    [switch]$RotateToken
 )
 
 Set-StrictMode -Version Latest
@@ -5094,7 +5096,16 @@ if (($loopbackBinds -notcontains $BindAddress) -and -not $AllowRemote) {
     exit 1
 }
 
-# Bridge token: explicit -Token / DNS_BRIDGE_TOKEN, else a fresh random one per start.
+# Bridge token: explicit -Token / DNS_BRIDGE_TOKEN, else the token file from a previous start
+# (so restarts don't sign every browser out), else a fresh random one.
+$tokenFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\bridge.token'
+$tokenSource = $null
+if ([string]::IsNullOrWhiteSpace($Token) -and -not $RotateToken -and (Test-Path $tokenFile)) {
+    try {
+        $existing = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
+        if ($existing.Length -ge 32) { $Token = $existing; $tokenSource = 'reused' }
+    } catch {}
+}
 if ([string]::IsNullOrWhiteSpace($Token)) {
     $tokenBytes = New-Object byte[] 32
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -5102,7 +5113,7 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
     $rng.Dispose()
     $Token = [Convert]::ToBase64String($tokenBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     $tokenSource = 'generated'
-} else {
+} elseif (-not $tokenSource) {
     $Token = $Token.Trim()
     $tokenSource = 'supplied'
 }
@@ -5110,7 +5121,6 @@ $script:BridgeToken = $Token
 
 # Write the token where the local frontend and MCP server look for it, readable only by
 # this user (and SYSTEM / Administrators).
-$tokenFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\bridge.token'
 try {
     $tokenDir = Split-Path -Parent $tokenFile
     if (-not (Test-Path $tokenDir)) { $null = New-Item -ItemType Directory -Path $tokenDir -Force }

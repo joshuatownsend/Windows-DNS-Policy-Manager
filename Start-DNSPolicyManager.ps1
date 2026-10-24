@@ -54,6 +54,19 @@ function ConvertTo-EncodedCommand {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
 }
 
+function Get-AppUrl {
+    # The frontend signs a browser in by exchanging the bridge token for a session cookie
+    # (/auth). Open that link when the token file is readable; plain URL otherwise.
+    $base = 'http://localhost:10010'
+    $tokenFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\bridge.token'
+    for ($i = 0; $i -lt 10 -and -not (Test-Path $tokenFile); $i++) { Start-Sleep -Milliseconds 300 }
+    try {
+        $token = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
+        if ($token) { return "$base/auth?token=$([Uri]::EscapeDataString($token))" }
+    } catch {}
+    return $base
+}
+
 function Invoke-McpBuild {
     param([string]$McpDir, [int]$BridgePort)
     if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
@@ -98,7 +111,7 @@ try {
     if ($health.status -eq 'ok') {
         Write-Host "  Bridge already running on port $Port" -ForegroundColor Green
         if (-not $NoBrowser) {
-            Start-Process 'http://localhost:10010'
+            Start-Process (Get-AppUrl)
             Write-Host '  Browser opened.' -ForegroundColor Green
         }
         if ($MCP) {
@@ -218,7 +231,7 @@ if ($ready) {
     }
 
     if (-not $NoBrowser) {
-        Start-Process 'http://localhost:10010'
+        Start-Process (Get-AppUrl)
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
 

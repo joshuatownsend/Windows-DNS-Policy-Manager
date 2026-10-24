@@ -174,7 +174,12 @@ docker build -t dns-manager ./dns-manager
 docker run -d -p 10010:10010 -e BRIDGE_TOKEN='<the same string>' dns-manager
 ```
 
-Open [http://localhost:10010](http://localhost:10010). To open the app under another hostname (for example from another machine), list it in `ALLOWED_HOSTS`. The proxy refuses unknown `Host` headers so that a DNS-rebinding page can't drive it.
+Sign in by opening `http://localhost:10010/auth?token=<the same string>` once per browser, or open [http://localhost:10010](http://localhost:10010) and paste the token on the sign-in page.
+
+Compose publishes the port on `127.0.0.1` only. To serve other machines:
+1. Publish `10010:10010` instead.
+2. List the hostname in `ALLOWED_HOSTS`. The proxy refuses unknown `Host` headers so that a DNS-rebinding page can't drive it.
+3. Put TLS in front of the app.
 
 ### Custom bridge address
 
@@ -198,10 +203,17 @@ powershell -ExecutionPolicy Bypass -File server/bridge.ps1 -BindAddress 0.0.0.0 
 
 Every bridge endpoint except `/api/health` requires `Authorization: Bearer <token>`:
 
-- The bridge takes the token from `-Token`, else `DNS_BRIDGE_TOKEN`, else generates a random one at each start.
+- The bridge takes the token from `-Token`, else `DNS_BRIDGE_TOKEN`, else the token file from a previous start, else generates a new random one. `-RotateToken` forces a new one, which also signs every browser out.
 - It writes the token to `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`, readable only by your account, SYSTEM and Administrators.
 - The frontend's server-side `/api` proxy and the MCP server read that file automatically. Set `BRIDGE_TOKEN` when they run as another user or on another machine.
-- The browser never sees the token. It only talks to the frontend's own origin.
+
+The browser never sees the token: it only talks to the frontend's own origin.
+
+To use the proxy, a browser signs in once:
+- **Launcher:** `Start-DNSPolicyManager.ps1` opens `/auth?token=...`, which signs the browser in automatically.
+- **Manual:** paste the token on the `/login` page.
+
+Sign-in sets an HttpOnly, SameSite=Strict session cookie derived from the token. That cookie is what authenticates calls to `/api/*`. The Host, Origin and fetch-metadata checks only harden the proxy against cross-site browser attacks. The dev and production frontends listen on `127.0.0.1` only.
 
 ### Docker Compose reference
 

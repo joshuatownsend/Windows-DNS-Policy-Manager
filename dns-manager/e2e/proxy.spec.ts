@@ -10,6 +10,20 @@ test.describe("Bridge proxy", () => {
     expect((await res.json()).success).toBe(true);
   });
 
+  test("a same-origin browser POST passes the Origin check", async ({ page }) => {
+    // Browsers attach Origin to POST fetches; with Referrer-Policy no-referrer it would be "null".
+    await page.goto("/server");
+    const status = await page.evaluate(async () => {
+      const res = await fetch("/api/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "e2e", action: "DENY" }),
+      });
+      return res.status;
+    });
+    expect(status).toBe(200);
+  });
+
   test("refuses a cross-origin caller", async ({ request }) => {
     const res = await request.post("/api/policies", {
       headers: { Origin: "https://evil.example", "Content-Type": "application/json" },
@@ -39,5 +53,52 @@ test.describe("Bridge proxy", () => {
     await page.goto("/zones");
     await expect(page.locator("text=contoso").first()).toBeVisible({ timeout: 15000 });
     expect(direct).toEqual([]);
+  });
+});
+
+test.describe("Sign-in", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("the proxy refuses callers without a session", async ({ request }) => {
+    const res = await request.get("/api/zones");
+    expect(res.status()).toBe(401);
+    expect((await res.json()).authRequired).toBe(true);
+  });
+
+  test("health stays available before sign-in", async ({ request }) => {
+    expect((await request.get("/api/health")).status()).toBe(200);
+  });
+
+  test("a wrong token does not sign in", async ({ page }) => {
+    await page.goto("/auth?token=wrong");
+    await expect(page).toHaveURL(/\/login\?error=invalid/);
+    await expect(page.getByTestId("login-error")).toBeVisible();
+  });
+
+  test("the launcher link signs in and the app loads data", async ({ page }) => {
+    await page.goto("/auth?token=e2e-bridge-token");
+    await expect(page).toHaveURL(/\/server$/);
+    const cookies = await page.context().cookies();
+    const session = cookies.find((c) => c.name === "dpm_session");
+    expect(session?.httpOnly).toBe(true);
+    expect(session?.value).not.toContain("e2e-bridge-token");
+    const res = await page.request.get("/api/zones");
+    expect(res.status()).toBe(200);
+  });
+
+  test("the login form signs in", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Bridge token").fill("e2e-bridge-token");
+    const [response] = await Promise.all([
+      page.waitForResponse((r) => r.url().endsWith("/auth") && r.request().method() === "POST"),
+      page.getByRole("button", { name: "Sign in" }).click(),
+    ]);
+    expect(response.status()).toBe(303);
+    await expect(page).toHaveURL(/\/server$/);
+  });
+
+  test("an unauthenticated page is sent to sign in", async ({ page }) => {
+    await page.goto("/zones");
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
   });
 });

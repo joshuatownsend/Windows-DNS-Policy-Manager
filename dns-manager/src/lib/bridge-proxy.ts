@@ -1,16 +1,24 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
  * Server-side half of the browser → bridge path. The browser calls same-origin `/api/*`;
- * the route handler checks the request with `checkProxyRequest`, adds the bridge token
- * (which never reaches the browser) and forwards to the PowerShell bridge.
+ * the route handler authenticates the caller with a session cookie (`hasValidSession`),
+ * applies the browser-hardening checks in `checkProxyRequest`, adds the bridge token (which
+ * never reaches the browser) and forwards to the PowerShell bridge.
+ *
+ * The session cookie is the authentication. Host/Origin/Sec-Fetch-Site are forgeable by
+ * non-browser clients, so they only defend browsers against cross-site use and DNS rebinding.
  */
 
 const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "::1"];
 
-/** Largest body the proxy will buffer; the bridge itself refuses anything over 1 MB. */
+/** Largest body the proxy will read; the bridge itself refuses anything over 1 MB. */
 export const MAX_PROXY_BODY_BYTES = 2 * 1024 * 1024;
+
+/** HttpOnly session cookie proving the browser was signed in with the bridge token. */
+export const SESSION_COOKIE = "dpm_session";
 
 export function bridgeUrl(): string {
   return (process.env.BRIDGE_URL || "http://127.0.0.1:8650").replace(/\/+$/, "");
@@ -38,11 +46,11 @@ export interface ProxyRejection {
 }
 
 /**
- * Decide whether a request may be forwarded with the bridge token attached.
+ * Browser-hardening checks, applied in addition to the session cookie:
  *  - Host must be loopback or listed in ALLOWED_HOSTS (blocks DNS-rebinding pages).
  *  - A browser-supplied Origin must be this same origin, and Sec-Fetch-Site (when sent)
  *    must be same-origin or none (blocks cross-site form posts and fetches).
- *  - Bodies must be JSON, which forces a CORS preflight for any cross-origin sender.
+ *  - A declared Content-Length over the cap is refused before reading.
  */
 export function checkProxyRequest(method: string, headers: Headers): ProxyRejection | null {
   const host = headers.get("host");
@@ -69,17 +77,49 @@ export function checkProxyRequest(method: string, headers: Headers): ProxyReject
   }
 
   const upper = method.toUpperCase();
-  if (upper !== "GET" && upper !== "HEAD") {
-    const length = Number(headers.get("content-length") || "0");
-    if (length > MAX_PROXY_BODY_BYTES) {
-      return { status: 413, error: "Request body too large" };
-    }
-    const type = headers.get("content-type") || "";
-    if (length > 0 && !type.toLowerCase().startsWith("application/json")) {
-      return { status: 415, error: "Request body must be application/json" };
-    }
+  if (upper !== "GET" && upper !== "HEAD" && Number(headers.get("content-length") || "0") > MAX_PROXY_BODY_BYTES) {
+    return { status: 413, error: "Request body too large" };
   }
   return null;
+}
+
+/**
+ * A non-empty body must be JSON. That forces a CORS preflight for any cross-origin sender,
+ * so a page on another site can't submit one with a plain form or "simple" fetch.
+ */
+export function checkBodyType(contentType: string | null, bodyBytes: number): ProxyRejection | null {
+  if (bodyBytes > 0 && !(contentType || "").toLowerCase().startsWith("application/json")) {
+    return { status: 415, error: "Request body must be application/json" };
+  }
+  return null;
+}
+
+/** Read a request body, giving up (null) once it passes `max` bytes — Content-Length or not. */
+export async function readBodyCapped(
+  body: ReadableStream<Uint8Array> | null,
+  max = MAX_PROXY_BODY_BYTES,
+): Promise<Uint8Array | null> {
+  if (!body) return new Uint8Array(0);
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
 }
 
 /** Rebuild the bridge path from route segments, re-encoding each one. */
@@ -100,7 +140,7 @@ let cachedToken: { path: string; mtimeMs: number; token: string } | null = null;
 
 /**
  * The bridge token: BRIDGE_TOKEN, else the file the bridge writes on start (re-read when it
- * changes, since a restarted bridge generates a new token). Null when neither exists.
+ * changes, e.g. after `-RotateToken`). Null when neither exists.
  */
 export function bridgeToken(): string | null {
   const fromEnv = process.env.BRIDGE_TOKEN?.trim();
@@ -117,4 +157,44 @@ export function bridgeToken(): string | null {
   } catch {
     return null;
   }
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/** True when `presented` is the bridge token (constant-time). */
+export function isBridgeToken(presented: string, token: string): boolean {
+  return presented.length > 0 && safeEqual(presented.trim(), token);
+}
+
+/**
+ * Session cookie value for a bridge token. Derived (HMAC) rather than the token itself, so
+ * the cookie can't be replayed against the bridge, and it stops working when the token rotates.
+ */
+export function sessionValue(token: string): string {
+  return createHmac("sha256", token).update("dpm-ui-session-v1").digest("base64url");
+}
+
+function cookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq !== -1 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+export function hasValidSession(cookieHeader: string | null, token: string): boolean {
+  const value = cookieValue(cookieHeader, SESSION_COOKIE);
+  return !!value && safeEqual(value, sessionValue(token));
+}
+
+/** Set-Cookie header value for a signed-in session. */
+export function sessionCookie(token: string, secure: boolean): string {
+  const attrs = [`${SESSION_COOKIE}=${sessionValue(token)}`, "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=2592000"];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
 }

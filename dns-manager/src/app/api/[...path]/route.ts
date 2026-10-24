@@ -1,7 +1,15 @@
-import { bridgePath, bridgeToken, bridgeUrl, checkProxyRequest } from "@/lib/bridge-proxy";
+import {
+  bridgePath,
+  bridgeToken,
+  bridgeUrl,
+  checkBodyType,
+  checkProxyRequest,
+  hasValidSession,
+  readBodyCapped,
+} from "@/lib/bridge-proxy";
 
 // Proxies every browser /api/* call to the PowerShell bridge, adding the bridge token
-// server-side. See src/lib/bridge-proxy.ts for the request checks.
+// server-side. Callers must hold the session cookie set by /auth. See src/lib/bridge-proxy.ts.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -28,19 +36,34 @@ async function proxy(request: Request, { params }: Context): Promise<Response> {
     });
   }
 
-  const search = new URL(request.url).search;
+  // The health probe stays open so the header can show bridge status before sign-in.
+  if (target !== "/api/health" && !hasValidSession(request.headers.get("cookie"), token)) {
+    return json(401, {
+      success: false,
+      authRequired: true,
+      error: "Not signed in. Open the sign-in link the launcher printed, or sign in at /login.",
+    });
+  }
+
   const method = request.method.toUpperCase();
-  const body = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
+  let body: Uint8Array | undefined;
+  if (method !== "GET" && method !== "HEAD") {
+    const read = await readBodyCapped(request.body);
+    if (!read) return json(413, { success: false, error: "Request body too large" });
+    const typeRejection = checkBodyType(request.headers.get("content-type"), read.byteLength);
+    if (typeRejection) return json(typeRejection.status, { success: false, error: typeRejection.error });
+    body = read.byteLength > 0 ? read : undefined;
+  }
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${bridgeUrl()}${target}${search}`, {
+    upstream = await fetch(`${bridgeUrl()}${target}${new URL(request.url).search}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": request.headers.get("content-type") || "application/json",
       },
-      body: body && body.byteLength > 0 ? body : undefined,
+      body: body as BodyInit | undefined,
       cache: "no-store",
       redirect: "manual",
     });

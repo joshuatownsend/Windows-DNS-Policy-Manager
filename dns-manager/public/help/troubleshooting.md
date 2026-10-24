@@ -94,8 +94,12 @@ The app does not auto-refresh data. After making changes outside this tool (via 
 
 The bridge requires a token on every request except the health check:
 - The frontend and MCP server read it from `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`, which the bridge rewrites every time it starts.
-- If you see this error after restarting the bridge, reload the page. The frontend picks up the new token automatically.
+- The bridge reuses the same token across restarts. If you rotated it (`-RotateToken`), sign in again: the frontend reads the new file automatically.
 - If the bridge runs as a different Windows user (for example, elevated with another admin account), or on another machine, start it with a fixed token (`-Token <value>` or `$env:DNS_BRIDGE_TOKEN`). Then give the frontend and MCP server the same value in `BRIDGE_TOKEN`.
+
+## Sent to the "Sign in" page
+
+The app proxies every call to the bridge, and the proxy only serves browsers that have signed in. `Start-DNSPolicyManager.ps1` opens a link that signs you in automatically. Otherwise, paste the contents of `%LOCALAPPDATA%\DNSPolicyManager\bridge.token` (or your Docker `BRIDGE_TOKEN`) into the sign-in form. You stay signed in across bridge restarts until the token is rotated with `-RotateToken`.
 
 ## "Bridge token not found"
 

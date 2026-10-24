@@ -2,7 +2,17 @@ import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { bridgePath, bridgeToken, checkProxyRequest } from "./bridge-proxy";
+import {
+  bridgePath,
+  bridgeToken,
+  checkBodyType,
+  checkProxyRequest,
+  hasValidSession,
+  isBridgeToken,
+  readBodyCapped,
+  sessionCookie,
+  sessionValue,
+} from "./bridge-proxy";
 
 function headers(init: Record<string, string>): Headers {
   return new Headers(init);
@@ -43,17 +53,6 @@ describe("checkProxyRequest", () => {
 
   it.each(["same-origin", "none"])("accepts Sec-Fetch-Site %s", (site) => {
     expect(checkProxyRequest("GET", headers({ host: "localhost:10010", "sec-fetch-site": site }))).toBeNull();
-  });
-
-  it("rejects non-JSON bodies", () => {
-    const h = headers({ host: "localhost:10010", "content-type": "text/plain", "content-length": "10" });
-    expect(checkProxyRequest("POST", h)?.status).toBe(415);
-  });
-
-  it("accepts JSON bodies and empty bodies", () => {
-    const json = headers({ host: "localhost:10010", "content-type": "application/json; charset=utf-8", "content-length": "10" });
-    expect(checkProxyRequest("PUT", json)).toBeNull();
-    expect(checkProxyRequest("DELETE", headers({ host: "localhost:10010" }))).toBeNull();
   });
 
   it("rejects oversized bodies", () => {
@@ -105,5 +104,66 @@ describe("bridgeToken", () => {
   it("returns null when there is no token anywhere", () => {
     process.env.BRIDGE_TOKEN_FILE = join(dir, "missing.token");
     expect(bridgeToken()).toBeNull();
+  });
+});
+
+describe("checkBodyType", () => {
+  it("rejects a non-JSON body whatever Content-Length said", () => {
+    expect(checkBodyType("text/plain", 10)?.status).toBe(415);
+    expect(checkBodyType(null, 1)?.status).toBe(415);
+  });
+
+  it("accepts JSON and empty bodies", () => {
+    expect(checkBodyType("application/json; charset=utf-8", 10)).toBeNull();
+    expect(checkBodyType("text/plain", 0)).toBeNull();
+  });
+});
+
+describe("readBodyCapped", () => {
+  function stream(chunks: number[]): ReadableStream<Uint8Array> {
+    return new ReadableStream({
+      start(c) {
+        for (const n of chunks) c.enqueue(new Uint8Array(n));
+        c.close();
+      },
+    });
+  }
+
+  it("reads a body under the cap", async () => {
+    expect((await readBodyCapped(stream([3, 4]), 10))?.byteLength).toBe(7);
+  });
+
+  it("stops past the cap even without Content-Length (chunked)", async () => {
+    expect(await readBodyCapped(stream([6, 6]), 10)).toBeNull();
+  });
+
+  it("treats a missing body as empty", async () => {
+    expect((await readBodyCapped(null))?.byteLength).toBe(0);
+  });
+});
+
+describe("session cookie", () => {
+  it("validates only the derived value for the current token", () => {
+    const cookie = `other=1; dpm_session=${sessionValue("tok-A")}`;
+    expect(hasValidSession(cookie, "tok-A")).toBe(true);
+    expect(hasValidSession(cookie, "tok-B")).toBe(false);
+    expect(hasValidSession("dpm_session=tok-A", "tok-A")).toBe(false);
+    expect(hasValidSession(null, "tok-A")).toBe(false);
+  });
+
+  it("never puts the token itself in the cookie", () => {
+    const header = sessionCookie("super-secret-token", false);
+    expect(header).not.toContain("super-secret-token");
+    expect(header).toContain("HttpOnly");
+    expect(header).toContain("SameSite=Strict");
+    expect(header).not.toContain("Secure");
+    expect(sessionCookie("t", true)).toContain("Secure");
+  });
+
+  it("compares sign-in tokens exactly", () => {
+    expect(isBridgeToken("tok-A", "tok-A")).toBe(true);
+    expect(isBridgeToken(" tok-A ", "tok-A")).toBe(true);
+    expect(isBridgeToken("tok-a", "tok-A")).toBe(false);
+    expect(isBridgeToken("", "tok-A")).toBe(false);
   });
 });

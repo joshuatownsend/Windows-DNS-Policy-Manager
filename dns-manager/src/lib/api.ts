@@ -35,7 +35,14 @@ async function request<T = unknown>(
     const res = await fetch(url, opts);
     clearTimeout(timeoutId);
     try {
-      return await res.json();
+      const data = await res.json();
+      // The /api proxy needs a signed-in session; send the user to sign in once. A full page
+      // load (not client navigation) so the app restarts cleanly with the new cookie after.
+      if (res.status === 401 && data?.authRequired && typeof window !== "undefined" && window.location.pathname !== "/login") {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- non-React module; a full load is intended
+        window.location.href = "/login";
+      }
+      return data;
     } catch {
       return {
         success: false,

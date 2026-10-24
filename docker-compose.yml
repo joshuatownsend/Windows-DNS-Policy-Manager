@@ -21,7 +21,9 @@ services:
     build:
       context: ./dns-manager
     ports:
-      - "10010:10010"
+      # Loopback only by default. To serve other machines, publish "10010:10010" instead,
+      # list the hostname in ALLOWED_HOSTS, and put TLS in front (see README).
+      - "127.0.0.1:10010:10010"
     environment:
       - NODE_ENV=production
       - PORT=10010

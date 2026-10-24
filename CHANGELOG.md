@@ -19,9 +19,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
     SYSTEM and Administrators.
   - The browser no longer calls the bridge. It calls the app's own `/api/*`, and a server-side
     route handler adds the token and forwards the request.
-  - That handler only serves loopback hosts, or names listed in `ALLOWED_HOSTS`, which blocks
+  - That handler requires a signed-in session: an HttpOnly, SameSite=Strict cookie derived from
+    the token. The launcher opens a `/auth?token=...` link that signs in automatically; otherwise
+    paste the token on the new `/login` page.
+  - The handler also only serves loopback hosts, or names listed in `ALLOWED_HOSTS`, which blocks
     DNS rebinding. It refuses cross-origin `Origin`, cross-site `Sec-Fetch-Site` and non-JSON
-    bodies.
+    bodies, and caps bodies at 2 MB while reading.
+  - The bridge reuses its token file across restarts, so sessions survive a restart;
+    `-RotateToken` issues a new one.
+  - The frontend's `dev` and `start` scripts listen on `127.0.0.1`, and Docker Compose publishes
+    the port on `127.0.0.1` by default.
+  - The `Referrer-Policy` header is now `same-origin` (was `no-referrer`), so same-origin POSTs
+    keep a real `Origin` header.
   - The bridge no longer sends `Access-Control-Allow-Origin: *`. The MCP server reads the token
     file, or `BRIDGE_TOKEN`.
 - **Credentials are bound to their host (#139).** Saved (DPAPI) and session credentials record
