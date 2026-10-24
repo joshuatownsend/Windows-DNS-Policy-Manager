@@ -100,7 +100,17 @@ interface DnsStore {
   // PowerShell output
   psOutput: string[];
   addPsOutput: (line: string) => void;
+  /** Append many lines in one state update (bulk operations). */
+  addPsOutputLines: (lines: string[]) => void;
   clearPsOutput: () => void;
+}
+
+/** The PowerShell tab keeps only the most recent lines so bulk imports can't grow it without bound. */
+export const MAX_PS_OUTPUT_LINES = 2000;
+
+export function appendCapped(existing: string[], lines: string[], max = MAX_PS_OUTPUT_LINES): string[] {
+  const next = existing.concat(lines);
+  return next.length > max ? next.slice(next.length - max) : next;
 }
 
 const initialWizardState: WizardState = {
@@ -235,7 +245,9 @@ export const useStore = create<DnsStore>()(
       // PowerShell output
       psOutput: [],
       addPsOutput: (line) =>
-        set((st) => ({ psOutput: [...st.psOutput, line] })),
+        set((st) => ({ psOutput: appendCapped(st.psOutput, [line]) })),
+      addPsOutputLines: (lines) =>
+        set((st) => ({ psOutput: appendCapped(st.psOutput, lines) })),
       clearPsOutput: () => set({ psOutput: [] }),
     }),
     {

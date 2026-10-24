@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 
 import type { BackupData } from "@/lib/types";
+import { parseBackupFile, toCreatePolicyBody, type ParsedBackup } from "@/lib/backup-import";
+import { checkImportFile, MAX_IMPORT_ENTRIES } from "@/lib/import-limits";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -53,7 +55,7 @@ export default function BackupPage() {
 
   // ── Import state ──
   const importFileRef = useRef<HTMLInputElement>(null);
-  const [importData, setImportData] = useState<BackupData | null>(null);
+  const [importData, setImportData] = useState<ParsedBackup | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [dragOverImport, setDragOverImport] = useState(false);
@@ -161,18 +163,26 @@ export default function BackupPage() {
       toast.error("Please select a .json file");
       return;
     }
+    const sizeError = checkImportFile(file);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string) as BackupData;
-        if (!data.policies && !data.zonePolicies && !data.serverPolicies) {
-          toast.error("Invalid backup file: no policies found");
-          return;
-        }
-        setImportData(data);
-        toast.success("Backup file loaded");
-      } catch {
-        toast.error("Failed to parse JSON file");
+      const result = parseBackupFile(e.target?.result as string);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const { backup } = result;
+      setImportData(backup);
+      toast.success("Backup file loaded");
+      if (backup.skipped > 0) {
+        toast.warning(`${backup.skipped} entries without a valid name or action were skipped.`);
+      }
+      if (backup.truncated) {
+        toast.warning(`Only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} policies were read.`);
       }
     };
     reader.readAsText(file);
@@ -193,11 +203,8 @@ export default function BackupPage() {
   async function handleImportAll() {
     if (!importData) return;
 
-    const allPolicies = [
-      ...(importData.policies || []),
-      ...(importData.zonePolicies || []),
-      ...(importData.serverPolicies || []),
-    ];
+    const allPolicies = importData.policies;
+    const target = getActiveServerParams();
 
     if (allPolicies.length === 0) {
       toast.error("No policies to import");
@@ -213,12 +220,12 @@ export default function BackupPage() {
     for (let i = 0; i < allPolicies.length; i++) {
       const policy = allPolicies[i];
       try {
-        const res = await api.addPolicy(policy as Record<string, unknown>);
+        const res = await api.addPolicy(toCreatePolicyBody(policy, target));
         if (res.success) {
           successCount++;
         } else {
           failCount++;
-          toast.error(`Failed to import "${policy.Name}": ${res.error}`);
+          toast.error(`Failed to import "${policy.name}": ${res.error}`);
         }
       } catch {
         failCount++;
@@ -242,9 +249,7 @@ export default function BackupPage() {
   // ------------------------------------------------------------------
 
   const importPolicyCount = importData
-    ? (importData.policies?.length ?? 0) +
-      (importData.zonePolicies?.length ?? 0) +
-      (importData.serverPolicies?.length ?? 0)
+    ? importData.policies.length
     : 0;
 
   // ------------------------------------------------------------------
@@ -502,9 +507,15 @@ export default function BackupPage() {
                 <h3 className="text-sm font-semibold text-foreground">
                   Backup Summary
                 </h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <span className="text-muted-foreground/60">Server:</span>{" "}
+                    <span className="text-muted-foreground/60">Import to:</span>{" "}
+                    <span className="text-foreground font-medium" data-testid="import-target">
+                      {getActiveServerParams().server}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground/60">Exported from:</span>{" "}
                     <span className="text-foreground">
                       {importData.server || "Unknown"}
                     </span>

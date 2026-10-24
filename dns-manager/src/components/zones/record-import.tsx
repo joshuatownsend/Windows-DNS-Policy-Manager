@@ -22,6 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Upload } from "lucide-react";
+import { parseCsvLine } from "@/lib/csv";
+import { MAX_IMPORT_ENTRIES, checkImportFile } from "@/lib/import-limits";
 
 interface ParsedRecord {
   hostName: string;
@@ -63,8 +65,9 @@ function parseCsv(text: string): ParsedRecord[] {
   const startIdx = first.includes("hostname") && first.includes("recordtype") ? 1 : 0;
 
   const records: ParsedRecord[] = [];
-  for (let i = startIdx; i < lines.length; i++) {
-    const parts = lines[i].split(",").map((p) => p.trim().replace(/^"|"$/g, ""));
+  const end = Math.min(lines.length, startIdx + MAX_IMPORT_ENTRIES);
+  for (let i = startIdx; i < end; i++) {
+    const parts = parseCsvLine(lines[i]);
     if (parts.length < 3) {
       records.push({ hostName: parts[0] || "", recordType: "", data: "", ttl: "", valid: false, error: "Too few columns" });
       continue;
@@ -104,11 +107,19 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
       toast.error("Please select a .csv or .txt file");
       return;
     }
+    const sizeError = checkImportFile(file);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const parsed = parseCsv(e.target?.result as string);
       setRecords(parsed);
       if (parsed.length === 0) toast.warning("No records found in file.");
+      else if (parsed.length >= MAX_IMPORT_ENTRIES) {
+        toast.warning(`Only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} records were read.`);
+      }
     };
     reader.readAsText(file);
   }, []);

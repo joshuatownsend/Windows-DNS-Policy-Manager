@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Policy backup import can no longer be retargeted by the file (#142).** Backups are now
+  validated field by field: only name, action, processing order, zone and condition are read,
+  so `server`, `serverId` or `credentialMode` hidden inside a policy entry are dropped. Imports
+  always go to the active server, which the preview now shows as **Import to**. (Previously the
+  import sent no target at all and fell back to the bridge's own host.)
+- **CSV export neutralizes spreadsheet formulas (#150).** Every cell is quoted, and values that
+  start with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'`. The record importer
+  now parses quoted CSV properly and strips that prefix again, so export → import round-trips,
+  including TXT data that contains commas.
+- **The frontend refuses to be framed (#151):** `X-Frame-Options: DENY` and
+  `Content-Security-Policy: frame-ancestors 'none'`, plus `nosniff` and `no-referrer`.
+- **Import size limits (#149).** Backup, blocklist and record imports reject files over 10 MB
+  and read at most 10,000 entries. The PowerShell tab keeps the latest 2,000 lines, and bulk
+  blocklist runs add output in batches instead of copying the whole log once per domain.
+
 ### Changed
 
 - **Next.js 16.4.1 and React 19.3.1**, plus zustand 5.0.15, `@playwright/test` 1.64.1 and
