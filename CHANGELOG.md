@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   and read at most 10,000 entries. The PowerShell tab keeps the latest 25,000 lines (enough for a full
   10,000-domain generate run), and bulk
   blocklist runs add output in batches instead of copying the whole log once per domain.
+- **Release supply chain pinned (#140, #144).** Every GitHub Action is pinned to a full commit SHA
+  (with a version comment Dependabot keeps current), and the Docker base image is pinned by digest
+  in all three stages, with a new Dependabot `docker` entry to refresh it. `build.yml` now runs
+  with a read-only token, and `packages: write` is scoped to the GHCR push job alone. A new CI job
+  builds and smoke-tests the container on every PR, so a bad base image fails before release.
+- **Launcher no longer splices install paths into elevated PowerShell source (#148).** The bridge
+  and frontend windows are started with `-EncodedCommand`, and paths are passed as escaped
+  single-quoted literals, so an apostrophe in the install path can't inject commands into the
+  elevated bridge process.
 
 ### Changed
 
@@ -37,6 +46,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   turns `react-hooks/set-state-in-effect` into an error. The Zones tab now resets the record page
   during render when the filter or zone changes, instead of in an effect, so the old page is never
   shown against the new record list.
+- **Next.js 16.4.3, vitest 5, sonner 2.0.8 and `@types/react-dom` 19.3** (one batch replacing
+  Dependabot PRs #169–#172). Vitest 5 needed no test changes.
 
 ## [0.6.4] - 2026-10-17
 
