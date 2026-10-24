@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   turns `react-hooks/set-state-in-effect` into an error. The Zones tab now resets the record page
   during render when the filter or zone changes, instead of in an effect, so the old page is never
   shown against the new record list.
+- **Next.js 16.4.3, vitest 5, sonner 2.0.8 and `@types/react-dom` 19.3** (one batch replacing
+  Dependabot PRs #169–#172). Vitest 5 needed no test changes.
 
 ## [0.6.4] - 2026-10-17
 
