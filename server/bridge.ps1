@@ -235,6 +235,17 @@ function Test-CommandAllowed {
         'IndexExpressionAst', 'BinaryExpressionAst', 'UnaryExpressionAst'
     )
     $allowedVariables = @('_', 'PSItem', 'true', 'false', 'null')
+    # Operators: comparison, logical, arithmetic and string formatting only. Excluded on
+    # purpose: -as / -is (type conversion runs constructors -- 'C:\x' -as 'IO.StreamWriter'
+    # truncates a file), -replace (takes a script block in pwsh 7), -split, bitwise/shift.
+    $allowedBinaryOperators = @(
+        'Ieq', 'Ine', 'Igt', 'Ige', 'Ilt', 'Ile', 'Ilike', 'Inotlike', 'Imatch', 'Inotmatch',
+        'Icontains', 'Inotcontains', 'Iin', 'Inotin',
+        'Ceq', 'Cne', 'Cgt', 'Cge', 'Clt', 'Cle', 'Clike', 'Cnotlike', 'Cmatch', 'Cnotmatch',
+        'Ccontains', 'Cnotcontains', 'Cin', 'Cnotin',
+        'And', 'Or', 'Xor', 'Plus', 'Minus', 'Multiply', 'Divide', 'Rem', 'Join', 'Format'
+    )
+    $allowedUnaryOperators = @('Not', 'Exclaim', 'Minus', 'Plus')
 
     if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
 
@@ -252,6 +263,12 @@ function Test-CommandAllowed {
             'ScriptBlockAst' {
                 # Only the root script and literal { } blocks -- no param() blocks.
                 if ($node.ParamBlock -or $node.BeginBlock -or $node.ProcessBlock -or $node.DynamicParamBlock) { return $false }
+            }
+            'BinaryExpressionAst' {
+                if ($allowedBinaryOperators -notcontains $node.Operator.ToString()) { return $false }
+            }
+            'UnaryExpressionAst' {
+                if ($allowedUnaryOperators -notcontains $node.TokenKind.ToString()) { return $false }
             }
             'MemberExpressionAst' {
                 # Property reads like $_.Name. Static access ([X]::Prop) needs a type literal,

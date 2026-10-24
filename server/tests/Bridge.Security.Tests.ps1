@@ -23,6 +23,10 @@ Describe 'Test-CommandAllowed (issue #137)' {
             'Get-DnsServerStatistics | Select-Object -ExpandProperty QueryStatistics'
             'Resolve-DnsName -Name example.com -Type AAAA'
             'Get-Service DNS'
+            'Get-DnsServerZone | Sort-Object { -not $_.IsAutoCreated }, ZoneName'
+            'Get-DnsServerZone | Select-Object @{n="Label";e={ "{0} ({1})" -f $_.ZoneName, $_.ZoneType }}'
+            'Get-DnsServerResourceRecord -ZoneName contoso.com | Select-Object @{n="Ttl";e={ $_.TimeToLive.TotalSeconds / 60 }}'
+            'Get-DnsServerZone | Format-Table @{n="Ad";e={ $_.IsDsIntegrated -and $_.ZoneType -eq "Primary" }}'
         ) {
             Test-CommandAllowed $_ | Should -BeTrue
         }
@@ -65,6 +69,12 @@ Describe 'Test-CommandAllowed (issue #137)' {
             'Get-DnsServerZone 2> C:\evil.txt'
             'if ($true) { Get-DnsServerZone }'
             'foreach ($z in 1) { Get-DnsServerZone }'
+            # Operators that convert types or take script blocks
+            'Get-DnsServerZone | Select-Object @{n="x";e={ "C:\temp\x.txt" -as "System.IO.StreamWriter" }}'
+            'Get-DnsServerZone | Select-Object @{n="x";e={ $_ -is "System.Object" }}'
+            'Get-DnsServerZone | Select-Object @{n="x";e={ $_.ZoneName -replace "a", { "b" } }}'
+            'Get-DnsServerZone | Select-Object @{n="x";e={ $_.ZoneName -split "." }}'
+            'Get-DnsServerZone | Select-Object @{n="x";e={ -split $_.ZoneName }}'
             # Script blocks passed to non-formatter commands
             'Get-DnsServerZone -ZoneName { Start-Process calc }'
             # Degenerate input
