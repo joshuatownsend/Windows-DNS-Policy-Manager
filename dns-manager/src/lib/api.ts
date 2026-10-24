@@ -4,6 +4,8 @@ import type {
   CredentialMode,
   DohConfig,
 } from "./types";
+import { useStore } from "./store";
+import { describeBlockedCall, DRY_RUN_ERROR, isMutatingCall } from "./dry-run";
 
 const REQUEST_TIMEOUT = 30000;
 // All requests go directly to the bridge to avoid the Next.js dev proxy's ~15s timeout.
@@ -16,6 +18,13 @@ async function request<T = unknown>(
   body?: unknown,
   timeout?: number
 ): Promise<ApiResponse<T> & Record<string, unknown>> {
+  // Dry Run: hold back anything that would change a DNS server (see src/lib/dry-run.ts).
+  const store = useStore.getState();
+  if (store.executionMode !== "execute" && isMutatingCall(method, path, body)) {
+    store.addPsOutput(`[${new Date().toLocaleTimeString()}] ${describeBlockedCall(method, path, body)}`);
+    return { success: false, dryRun: true, error: DRY_RUN_ERROR };
+  }
+
   const opts: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
