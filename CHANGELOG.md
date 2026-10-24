@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
+- **Policy backup import can no longer be retargeted by the file (#142).** Backups are now
+  validated field by field. Only name, action, processing order, zone, condition, criteria,
+  zone scopes and recursion settings are read, so `server`, `serverId` or `credentialMode`
+  hidden inside a policy entry are dropped. Imports always go to the active server, which the
+  preview shows as **Import to** and keeps current when you switch servers. (Previously the
+  import sent no target at all and fell back to the bridge's own host.)
+  - A policy whose criteria or scopes are malformed is skipped rather than imported without them.
+  - The preview warns about DENY/IGNORE policies with no criteria, which would match every query.
+  - The bridge now refuses policy criterion types outside the seven DNS policy criteria. A
+    criterion's `type` becomes a cmdlet parameter name, so `ComputerName` could otherwise have
+    been smuggled in.
+- **CSV export neutralizes spreadsheet formulas (#150).** Every cell is quoted, and values that
+  start with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'`. The record importer
+  now parses quoted CSV properly and strips that prefix again, so export → import round-trips,
+  including TXT data that contains commas.
+- **The frontend refuses to be framed (#151):** `X-Frame-Options: DENY` and
+  `Content-Security-Policy: frame-ancestors 'none'`, plus `nosniff` and `no-referrer`.
+- **Import size limits (#149).** Backup, blocklist and record imports reject files over 10 MB
+  and read at most 10,000 entries. The PowerShell tab keeps the latest 25,000 lines (enough for a full
+  10,000-domain generate run), and bulk
+  blocklist runs add output in batches instead of copying the whole log once per domain.
 - **Release supply chain pinned (#140, #144).** Every GitHub Action is pinned to a full commit SHA
   (with a version comment Dependabot keeps current), and the Docker base image is pinned by digest
   in all three stages, with a new Dependabot `docker` entry to refresh it. `build.yml` now runs

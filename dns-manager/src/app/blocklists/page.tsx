@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 
 import type { PolicyAction } from "@/lib/types";
+import { checkImportFile, MAX_IMPORT_ENTRIES } from "@/lib/import-limits";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -65,6 +66,7 @@ export default function BlocklistsPage() {
   const bridgeConnected = useStore((s) => s.bridgeConnected);
   const executionMode = useStore((s) => s.executionMode);
   const addPsOutput = useStore((s) => s.addPsOutput);
+  const addPsOutputLines = useStore((s) => s.addPsOutputLines);
 
   // ── Quick Block ──
   const [quickDomain, setQuickDomain] = useState("");
@@ -176,12 +178,20 @@ export default function BlocklistsPage() {
   // ── Bulk import handler ──
   const handleFileLoad = useCallback((file: File) => {
     if (!file.name.endsWith(".txt")) { toast.error("Please select a .txt file"); return; }
+    const sizeError = checkImportFile(file);
+    if (sizeError) { toast.error(sizeError); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const parsed = parseBlocklist(e.target?.result as string);
-      if (parsed.length === 0) { toast.error("No domains found"); return; }
+      const all = parseBlocklist(e.target?.result as string);
+      if (all.length === 0) { toast.error("No domains found"); return; }
+      const parsed = all.slice(0, MAX_IMPORT_ENTRIES);
       setDomains(parsed);
       toast.success(`Loaded ${parsed.length} domains`);
+      if (all.length > parsed.length) {
+        toast.warning(
+          `File has ${all.length.toLocaleString()} domains; only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} were loaded.`,
+        );
+      }
     };
     reader.readAsText(file);
   }, []);
@@ -195,6 +205,7 @@ export default function BlocklistsPage() {
     const p = getServerParams();
     let successCount = 0;
     let failCount = 0;
+    let pendingLines: string[] = [];
 
     for (let i = 0; i < domains.length; i++) {
       const domain = domains[i];
@@ -211,7 +222,7 @@ export default function BlocklistsPage() {
       };
 
       const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${bulkAction} -Fqdn "EQ,${domain}" -ZoneName "${bulkZone.trim()}" -ProcessingOrder ${bulkStartOrder + i}`;
-      addPsOutput(`[${new Date().toLocaleTimeString()}] ${command}`);
+      pendingLines.push(`[${new Date().toLocaleTimeString()}] ${command}`);
 
       if (executionMode === "execute" && bridgeConnected) {
         try {
@@ -224,6 +235,8 @@ export default function BlocklistsPage() {
       }
       if ((i + 1) % 10 === 0 || i === domains.length - 1) {
         setBulkProgress({ done: i + 1, total: domains.length });
+        addPsOutputLines(pendingLines);
+        pendingLines = [];
       }
     }
 
