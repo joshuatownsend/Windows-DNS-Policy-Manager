@@ -24,6 +24,19 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridgeScript = Join-Path $scriptDir 'server\bridge.ps1'
 $frontendDir = Join-Path $scriptDir 'dns-manager'
 
+function ConvertTo-PSLiteral {
+    # Quote a value as a single-quoted PowerShell literal ('' doubles an embedded quote).
+    param([string]$Value)
+    "'" + ($Value -replace "'", "''") + "'"
+}
+
+function ConvertTo-EncodedCommand {
+    # -EncodedCommand takes UTF-16LE base64, so the child process receives the script text
+    # verbatim with no command-line quoting layer for a path to break out of.
+    param([string]$Script)
+    [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
+}
+
 function Invoke-McpBuild {
     param([string]$McpDir, [int]$BridgePort)
     if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
@@ -117,10 +130,10 @@ Write-Host "  Starting bridge on port $Port..." -ForegroundColor Yellow
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
-$bridgeCmd = "& '$bridgeScript' -Port $Port *>&1 | Tee-Object -FilePath '$logFile'; pause"
+$bridgeCmd = "& $(ConvertTo-PSLiteral $bridgeScript) -Port $Port *>&1 | Tee-Object -FilePath $(ConvertTo-PSLiteral $logFile); pause"
 $startArgs = @{
     FilePath     = 'powershell'
-    ArgumentList = "-NoProfile -ExecutionPolicy Bypass -Command `"$bridgeCmd`""
+    ArgumentList = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand $bridgeCmd)"
     PassThru     = $true
     WindowStyle  = 'Normal'
 }
@@ -182,8 +195,8 @@ if ($ready) {
     }
     if (Test-Path (Join-Path $frontendDir 'node_modules')) {
         Write-Host '  Starting Next.js frontend...' -ForegroundColor Yellow
-        $devCmd = "Set-Location '$frontendDir'; npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
-        Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"$devCmd`"" -WindowStyle Normal
+        $devCmd = "Set-Location -LiteralPath $(ConvertTo-PSLiteral $frontendDir); npm run dev; Write-Host 'Frontend exited. Press any key to close.' -ForegroundColor Yellow; pause"
+        Start-Process powershell -ArgumentList "-NoProfile -NoExit -EncodedCommand $(ConvertTo-EncodedCommand $devCmd)" -WindowStyle Normal
         Start-Sleep -Milliseconds 3000
     }
 

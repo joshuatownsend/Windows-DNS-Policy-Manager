@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **Release supply chain pinned (#140, #144).** Every GitHub Action is pinned to a full commit SHA
+  (with a version comment Dependabot keeps current), and the Docker base image is pinned by digest
+  in all three stages, with a new Dependabot `docker` entry to refresh it. `build.yml` now runs
+  with a read-only token, and `packages: write` is scoped to the GHCR push job alone. A new CI job
+  builds and smoke-tests the container on every PR, so a bad base image fails before release.
+- **Launcher no longer splices install paths into elevated PowerShell source (#148).** The bridge
+  and frontend windows are started with `-EncodedCommand`, and paths are passed as escaped
+  single-quoted literals, so an apostrophe in the install path can't inject commands into the
+  elevated bridge process.
+
 ### Changed
 
 - **Next.js 16.4.1 and React 19.3.1**, plus zustand 5.0.15, `@playwright/test` 1.64.1 and
