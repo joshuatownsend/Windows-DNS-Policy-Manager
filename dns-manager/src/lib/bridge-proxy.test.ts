@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import {
   bridgeToken,
   checkBodyType,
   checkProxyRequest,
+  consumeSignInCode,
   hasValidSession,
   isBridgeToken,
   readBodyCapped,
@@ -165,5 +166,49 @@ describe("session cookie", () => {
     expect(isBridgeToken(" tok-A ", "tok-A")).toBe(true);
     expect(isBridgeToken("tok-a", "tok-A")).toBe(false);
     expect(isBridgeToken("", "tok-A")).toBe(false);
+  });
+});
+
+describe("consumeSignInCode", () => {
+  let dir: string;
+  let file: string;
+  const saved = process.env.SIGNIN_CODE_FILE;
+  const code = "k".repeat(43);
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "dpm-code-"));
+    file = join(dir, "signin.code");
+    process.env.SIGNIN_CODE_FILE = file;
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    process.env.SIGNIN_CODE_FILE = saved;
+  });
+
+  it("accepts a fresh matching code exactly once", () => {
+    writeFileSync(file, code);
+    expect(consumeSignInCode(code)).toBe(true);
+    expect(existsSync(file)).toBe(false);
+    expect(consumeSignInCode(code)).toBe(false);
+  });
+
+  it("burns the code on a wrong guess", () => {
+    writeFileSync(file, code);
+    expect(consumeSignInCode("x".repeat(43))).toBe(false);
+    expect(existsSync(file)).toBe(false);
+    expect(consumeSignInCode(code)).toBe(false);
+  });
+
+  it("refuses an expired code", () => {
+    writeFileSync(file, code);
+    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+    utimesSync(file, sixMinutesAgo, sixMinutesAgo);
+    expect(consumeSignInCode(code)).toBe(false);
+  });
+
+  it("refuses short codes and missing files", () => {
+    writeFileSync(file, "short");
+    expect(consumeSignInCode("short")).toBe(false);
+    expect(consumeSignInCode(code)).toBe(false);
   });
 });

@@ -174,7 +174,7 @@ docker build -t dns-manager ./dns-manager
 docker run -d -p 10010:10010 -e BRIDGE_TOKEN='<the same string>' dns-manager
 ```
 
-Sign in by opening `http://localhost:10010/auth?token=<the same string>` once per browser, or open [http://localhost:10010](http://localhost:10010) and paste the token on the sign-in page.
+Open [http://localhost:10010](http://localhost:10010) and paste the token on the sign-in page (once per browser).
 
 Compose publishes the port on `127.0.0.1` only. To serve other machines:
 1. Publish `10010:10010` instead.
@@ -210,7 +210,7 @@ Every bridge endpoint except `/api/health` requires `Authorization: Bearer <toke
 The browser never sees the token: it only talks to the frontend's own origin.
 
 To use the proxy, a browser signs in once:
-- **Launcher:** `Start-DNSPolicyManager.ps1` opens `/auth?token=...`, which signs the browser in automatically.
+- **Launcher:** `Start-DNSPolicyManager.ps1` signs the browser in automatically. It writes a single-use code (valid 5 minutes) to a user-only file and opens `/auth?code=...`, so the token itself never appears in a URL or browser history.
 - **Manual:** paste the token on the `/login` page.
 
 Sign-in sets an HttpOnly, SameSite=Strict session cookie derived from the token. That cookie is what authenticates calls to `/api/*`. The Host, Origin and fetch-metadata checks only harden the proxy against cross-site browser attacks. The dev and production frontends listen on `127.0.0.1` only.

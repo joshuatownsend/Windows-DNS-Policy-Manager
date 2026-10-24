@@ -9,6 +9,7 @@ import http from "http";
 import { spawn } from "child_process";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
+import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,10 @@ const resolvers = load("resolvers");
 // The browser reaches the mock bridge only through the app's /api proxy, which must attach
 // this token. The mock refuses anything else, like the real bridge.
 const BRIDGE_TOKEN = "e2e-bridge-token";
+
+// One-time sign-in codes (the launcher's /auth?code= link) are read from this file. Playwright
+// inherits the env var, so tests can write a code and open the link.
+process.env.SIGNIN_CODE_FILE = join(tmpdir(), `dpm-e2e-signin-${process.pid}.code`);
 
 // ── Start mock bridge on :8650 ──
 const bridge = http.createServer((req, res) => {

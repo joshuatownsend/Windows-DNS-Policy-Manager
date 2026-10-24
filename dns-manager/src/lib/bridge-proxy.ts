@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -190,6 +190,40 @@ function cookieValue(cookieHeader: string | null, name: string): string | null {
 export function hasValidSession(cookieHeader: string | null, token: string): boolean {
   const value = cookieValue(cookieHeader, SESSION_COOKIE);
   return !!value && safeEqual(value, sessionValue(token));
+}
+
+/** How long a launcher sign-in code stays valid. */
+export const SIGNIN_CODE_MAX_AGE_MS = 5 * 60 * 1000;
+
+export function signInCodeFile(): string | null {
+  if (process.env.SIGNIN_CODE_FILE) return process.env.SIGNIN_CODE_FILE;
+  if (process.env.LOCALAPPDATA) return join(process.env.LOCALAPPDATA, "DNSPolicyManager", "signin.code");
+  return null;
+}
+
+/**
+ * Check a one-time sign-in code. Start-DNSPolicyManager.ps1 writes a random code to a
+ * user-only file and opens /auth?code=<code>, so the long-lived bridge token never appears in
+ * a URL or browser history. The file is deleted on any use (match or not) and codes older
+ * than SIGNIN_CODE_MAX_AGE_MS are refused, so a link from history can't be replayed.
+ */
+export function consumeSignInCode(presented: string, now = Date.now()): boolean {
+  const file = signInCodeFile();
+  if (!file || !presented) return false;
+  let expected: string;
+  let mtimeMs: number;
+  try {
+    mtimeMs = statSync(/*turbopackIgnore: true*/ file).mtimeMs;
+    expected = readFileSync(/*turbopackIgnore: true*/ file, "utf8").trim();
+  } catch {
+    return false;
+  }
+  try {
+    rmSync(/*turbopackIgnore: true*/ file, { force: true });
+  } catch {
+    // A code that can't be deleted is still only honoured while fresh.
+  }
+  return expected.length >= 32 && now - mtimeMs <= SIGNIN_CODE_MAX_AGE_MS && safeEqual(presented.trim(), expected);
 }
 
 /** Set-Cookie header value for a signed-in session. */

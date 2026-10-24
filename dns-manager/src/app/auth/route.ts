@@ -1,9 +1,9 @@
-import { bridgeToken, checkProxyRequest, isBridgeToken, sessionCookie } from "@/lib/bridge-proxy";
+import { bridgeToken, checkProxyRequest, consumeSignInCode, isBridgeToken, sessionCookie } from "@/lib/bridge-proxy";
 
-// Sign-in: exchanges the bridge token for an HttpOnly session cookie.
-//   GET  /auth?token=...   — the link Start-DNSPolicyManager.ps1 opens
-//   POST /auth (form)      — the /login page
-// The token itself never goes into the cookie or back to the page.
+// Sign-in: issues an HttpOnly session cookie.
+//   GET  /auth?code=...   — one-time code from Start-DNSPolicyManager.ps1 (see consumeSignInCode)
+//   POST /auth (form)     — the bridge token pasted on the /login page
+// The bridge token is never accepted in a URL, and never goes into the cookie or back to the page.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -14,20 +14,21 @@ function redirect(to: string, cookie?: string): Response {
   return new Response(null, { status: 303, headers });
 }
 
-function signIn(request: Request, presented: string): Response {
+function signIn(request: Request, accept: (token: string) => boolean, failure: string): Response {
   const rejection = checkProxyRequest("GET", request.headers);
   if (rejection) return Response.json({ success: false, error: rejection.error }, { status: rejection.status });
 
   const token = bridgeToken();
   if (!token) return redirect("/login?error=no-token");
-  if (!isBridgeToken(presented, token)) return redirect("/login?error=invalid");
+  if (!accept(token)) return redirect(`/login?error=${failure}`);
 
   const secure = new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
   return redirect("/server", sessionCookie(token, secure));
 }
 
 export async function GET(request: Request): Promise<Response> {
-  return signIn(request, new URL(request.url).searchParams.get("token") || "");
+  const code = new URL(request.url).searchParams.get("code") || "";
+  return signIn(request, () => consumeSignInCode(code), "expired");
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -38,5 +39,5 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     // fall through with an empty token
   }
-  return signIn(request, presented);
+  return signIn(request, (token) => isBridgeToken(presented, token), "invalid");
 }

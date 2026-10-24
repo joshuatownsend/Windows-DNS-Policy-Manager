@@ -10,6 +10,7 @@ import { KeyRound } from "lucide-react";
 
 const ERRORS: Record<string, string> = {
   invalid: "That token doesn't match the bridge's current token.",
+  expired: "That sign-in link has already been used or has expired. Run the launcher again, or paste the token below.",
   "no-token": "The frontend can't find the bridge token. Start the bridge first, or set BRIDGE_TOKEN for the frontend.",
 };
 

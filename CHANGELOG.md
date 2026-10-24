@@ -20,8 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   - The browser no longer calls the bridge. It calls the app's own `/api/*`, and a server-side
     route handler adds the token and forwards the request.
   - That handler requires a signed-in session: an HttpOnly, SameSite=Strict cookie derived from
-    the token. The launcher opens a `/auth?token=...` link that signs in automatically; otherwise
-    paste the token on the new `/login` page.
+    the token. The launcher signs in automatically with a single-use, 5-minute code
+    (`/auth?code=...`), so the token never appears in a URL. Otherwise, paste the token on the
+    new `/login` page.
   - The handler also only serves loopback hosts, or names listed in `ALLOWED_HOSTS`, which blocks
     DNS rebinding. It refuses cross-origin `Origin`, cross-site `Sec-Fetch-Site` and non-JSON
     bodies, and caps bodies at 2 MB while reading.

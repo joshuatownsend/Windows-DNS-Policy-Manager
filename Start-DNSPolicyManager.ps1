@@ -55,16 +55,35 @@ function ConvertTo-EncodedCommand {
 }
 
 function Get-AppUrl {
-    # The frontend signs a browser in by exchanging the bridge token for a session cookie
-    # (/auth). Open that link when the token file is readable; plain URL otherwise.
+    # Sign the browser in with a one-time code rather than the bridge token, so the long-lived
+    # token never lands in a URL or browser history. The frontend's /auth accepts the code once,
+    # within 5 minutes, and deletes the file. Falls back to the plain URL (sign-in page).
     $base = 'http://localhost:10010'
-    $tokenFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\bridge.token'
-    for ($i = 0; $i -lt 10 -and -not (Test-Path $tokenFile); $i++) { Start-Sleep -Milliseconds 300 }
+    $codeFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\signin.code'
     try {
-        $token = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
-        if ($token) { return "$base/auth?token=$([Uri]::EscapeDataString($token))" }
-    } catch {}
-    return $base
+        $bytes = New-Object byte[] 32
+        $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+        $rng.GetBytes($bytes)
+        $rng.Dispose()
+        $code = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        $dir = Split-Path -Parent $codeFile
+        if (-not (Test-Path $dir)) { $null = New-Item -ItemType Directory -Path $dir -Force }
+        [System.IO.File]::WriteAllText($codeFile, '')
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $acl.SetAccessRuleProtection($true, $false)
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($me, 'FullControl', 'Allow')))
+        $fileInfo = New-Object System.IO.FileInfo($codeFile)
+        if ($fileInfo | Get-Member -Name SetAccessControl -MemberType Method) {
+            $fileInfo.SetAccessControl($acl)
+        } else {
+            [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl)
+        }
+        [System.IO.File]::WriteAllText($codeFile, $code)
+        return "$base/auth?code=$code"
+    } catch {
+        return $base
+    }
 }
 
 function Invoke-McpBuild {
