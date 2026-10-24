@@ -56,6 +56,12 @@ function parseDataForType(type: string, data: string): Record<string, unknown> {
   }
 }
 
+function countDataLines(text: string): number {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#"));
+  const first = (lines[0] || "").toLowerCase();
+  return first.includes("hostname") && first.includes("recordtype") ? lines.length - 1 : lines.length;
+}
+
 function parseCsv(text: string): ParsedRecord[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#"));
   if (lines.length === 0) return [];
@@ -65,8 +71,7 @@ function parseCsv(text: string): ParsedRecord[] {
   const startIdx = first.includes("hostname") && first.includes("recordtype") ? 1 : 0;
 
   const records: ParsedRecord[] = [];
-  const end = Math.min(lines.length, startIdx + MAX_IMPORT_ENTRIES);
-  for (let i = startIdx; i < end; i++) {
+  for (let i = startIdx; i < lines.length && records.length < MAX_IMPORT_ENTRIES; i++) {
     const parts = parseCsvLine(lines[i]);
     if (parts.length < 3) {
       records.push({ hostName: parts[0] || "", recordType: "", data: "", ttl: "", valid: false, error: "Too few columns" });
@@ -114,10 +119,11 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const parsed = parseCsv(e.target?.result as string);
+      const text = e.target?.result as string;
+      const parsed = parseCsv(text);
       setRecords(parsed);
       if (parsed.length === 0) toast.warning("No records found in file.");
-      else if (parsed.length >= MAX_IMPORT_ENTRIES) {
+      else if (countDataLines(text) > parsed.length) {
         toast.warning(`Only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} records were read.`);
       }
     };

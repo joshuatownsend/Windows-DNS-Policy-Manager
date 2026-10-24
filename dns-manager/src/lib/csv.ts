@@ -1,11 +1,15 @@
+/** Leading characters that make a spreadsheet treat a cell as a formula, plus `'` itself. */
+const NEEDS_PREFIX = /^[=+\-@\t\r']/;
+
 /**
  * Format one CSV cell. Always quotes (so commas, quotes and newlines can't break the row)
  * and prefixes a `'` to values a spreadsheet would treat as a formula — those starting
- * with `=`, `+`, `-`, `@`, tab or carriage return (OWASP CSV injection guidance).
+ * with `=`, `+`, `-`, `@`, tab or carriage return (OWASP CSV injection guidance). A value
+ * that already starts with `'` gets one too, so `parseCsvLine` can always strip exactly one.
  */
 export function csvCell(value: unknown): string {
   let s = value === null || value === undefined ? "" : String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (NEEDS_PREFIX.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 
@@ -19,31 +23,39 @@ export function csvRow(values: unknown[]): string {
  */
 export function parseCsvLine(line: string): string[] {
   const cells: string[] = [];
-  let cur = "";
+  // Whitespace outside quotes is trimmed; whitespace inside quotes is data (e.g. TXT values).
+  let quotedPart = "";
+  let unquotedPart = "";
+  let sawQuote = false;
   let quoted = false;
+  const finish = () => {
+    const value = sawQuote ? quotedPart + unquotedPart.trimEnd() : unquotedPart.trim();
+    cells.push(sawQuote && NEEDS_PREFIX.test(value.slice(1)) && value.startsWith("'") ? value.slice(1) : value);
+    quotedPart = "";
+    unquotedPart = "";
+    sawQuote = false;
+  };
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (quoted) {
       if (ch === '"' && line[i + 1] === '"') {
-        cur += '"';
+        quotedPart += '"';
         i++;
       } else if (ch === '"') {
         quoted = false;
       } else {
-        cur += ch;
+        quotedPart += ch;
       }
-    } else if (ch === '"') {
+    } else if (ch === '"' && !sawQuote && unquotedPart.trim() === "") {
       quoted = true;
+      sawQuote = true;
+      unquotedPart = "";
     } else if (ch === ",") {
-      cells.push(cur);
-      cur = "";
+      finish();
     } else {
-      cur += ch;
+      unquotedPart += ch;
     }
   }
-  cells.push(cur);
-  return cells.map((c) => {
-    const t = c.trim();
-    return /^'[=+\-@\t\r]/.test(t) ? t.slice(1) : t;
-  });
+  finish();
+  return cells;
 }

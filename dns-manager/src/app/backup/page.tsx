@@ -39,6 +39,8 @@ import { checkImportFile, MAX_IMPORT_ENTRIES } from "@/lib/import-limits";
 
 export default function BackupPage() {
   const servers = useStore((s) => s.servers);
+  // Subscribed (not read via getState) so the "Import to" preview follows server switches.
+  const activeServerId = useStore((s) => s.activeServerId);
   const executionMode = useStore((s) => s.executionMode);
   const addPsOutput = useStore((s) => s.addPsOutput);
   const bridgeConnected = useStore((s) => s.bridgeConnected);
@@ -86,7 +88,7 @@ export default function BackupPage() {
   }
 
   function getActiveServerParams() {
-    const active = servers.find((s) => s.id === useStore.getState().activeServerId);
+    const active = servers.find((s) => s.id === activeServerId);
     if (!active) return { server: exportServer || "localhost" };
     return { server: active.hostname, serverId: active.id, credentialMode: active.credentialMode };
   }
@@ -179,7 +181,7 @@ export default function BackupPage() {
       setImportData(backup);
       toast.success("Backup file loaded");
       if (backup.skipped > 0) {
-        toast.warning(`${backup.skipped} entries without a valid name or action were skipped.`);
+        toast.warning(`${backup.skipped} entries with an invalid name, action, criterion or scope were skipped.`);
       }
       if (backup.truncated) {
         toast.warning(`Only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} policies were read.`);
@@ -535,6 +537,14 @@ export default function BackupPage() {
                     </Badge>
                   </div>
                 </div>
+                {importData.matchAll.length > 0 && (
+                  <p className="text-xs text-amber-500" data-testid="import-match-all-warning">
+                    {importData.matchAll.length} DENY/IGNORE{" "}
+                    {importData.matchAll.length === 1 ? "policy has" : "policies have"} no criteria
+                    and will apply to every query: {importData.matchAll.slice(0, 5).join(", ")}
+                    {importData.matchAll.length > 5 ? ", …" : ""}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-3">

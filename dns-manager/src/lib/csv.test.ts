@@ -51,3 +51,17 @@ describe("parseCsvLine", () => {
     expect(parseCsvLine(csvRow(values))).toEqual(values);
   });
 });
+
+describe("csv round-trip edge cases", () => {
+  it("preserves whitespace inside quoted cells", () => {
+    expect(parseCsvLine('"txt","TXT","  padded  ","3600"')).toEqual(["txt", "TXT", "  padded  ", "3600"]);
+  });
+
+  it("still trims whitespace outside quotes", () => {
+    expect(parseCsvLine(' www , A ,"1.2.3.4" ')).toEqual(["www", "A", "1.2.3.4"]);
+  });
+
+  it.each(["'=literal", "'plain", "''double", "=formula", "  spaced  ", "'"])("round-trips %j", (value) => {
+    expect(parseCsvLine(csvRow([value]))).toEqual([value]);
+  });
+});

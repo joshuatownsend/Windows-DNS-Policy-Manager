@@ -56,6 +56,45 @@ describe("parseBackupFile", () => {
   });
 });
 
+describe("parseBackupFile criteria and scopes", () => {
+  it("keeps valid criteria and scopes", () => {
+    const b = parse({
+      policies: [
+        {
+          Name: "Geo",
+          Action: "ALLOW",
+          criteria: [{ type: "clientsubnet", operator: "eq", values: ["EuropeSubnet"] }],
+          scopes: [{ name: "EuropeScope", weight: 1 }],
+        },
+      ],
+    });
+    expect(b.policies[0].criteria).toEqual([{ type: "ClientSubnet", operator: "EQ", values: ["EuropeSubnet"] }]);
+    expect(b.policies[0].scopes).toEqual([{ name: "EuropeScope", weight: 1 }]);
+  });
+
+  it("accepts the form shape with a single value", () => {
+    const b = parse({ policies: [{ Name: "F", Action: "DENY", Criteria: [{ type: "Fqdn", operator: "EQ", value: "*.ads.example" }] }] });
+    expect(b.policies[0].criteria).toEqual([{ type: "Fqdn", operator: "EQ", values: ["*.ads.example"] }]);
+    expect(b.matchAll).toEqual([]);
+  });
+
+  it.each([
+    ["a parameter-name criterion type", { type: "ComputerName", operator: "EQ", values: ["evil-host"] }],
+    ["an unknown operator", { type: "Fqdn", operator: "LIKE", values: ["x"] }],
+    ["empty values", { type: "Fqdn", operator: "EQ", values: [] }],
+    ["a non-object criterion", "Fqdn,EQ,x"],
+  ])("skips a policy with %s instead of importing it looser", (_label, criterion) => {
+    const b = parse({ policies: [{ Name: "P", Action: "DENY", criteria: [criterion] }] });
+    expect(b.policies).toEqual([]);
+    expect(b.skipped).toBe(1);
+  });
+
+  it("flags DENY/IGNORE policies without criteria", () => {
+    const b = parse({ policies: [{ Name: "Bare", Action: "DENY" }, { Name: "Ok", Action: "ALLOW" }] });
+    expect(b.matchAll).toEqual(["Bare"]);
+  });
+});
+
 describe("toCreatePolicyBody", () => {
   it("targets the given server", () => {
     expect(

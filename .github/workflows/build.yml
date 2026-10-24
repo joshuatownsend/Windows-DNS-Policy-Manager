@@ -42,6 +42,10 @@ jobs:
         working-directory: dns-manager
         run: npm run lint
 
+      - name: Unit tests
+        working-directory: dns-manager
+        run: npm test
+
       - name: Install Playwright browsers
         working-directory: dns-manager
         run: npx playwright install chromium --with-deps

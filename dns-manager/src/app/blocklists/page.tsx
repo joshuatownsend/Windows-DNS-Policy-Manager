@@ -182,12 +182,15 @@ export default function BlocklistsPage() {
     if (sizeError) { toast.error(sizeError); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const parsed = parseBlocklist(e.target?.result as string);
-      if (parsed.length === 0) { toast.error("No domains found"); return; }
+      const all = parseBlocklist(e.target?.result as string);
+      if (all.length === 0) { toast.error("No domains found"); return; }
+      const parsed = all.slice(0, MAX_IMPORT_ENTRIES);
       setDomains(parsed);
       toast.success(`Loaded ${parsed.length} domains`);
-      if (parsed.length >= MAX_IMPORT_ENTRIES) {
-        toast.warning(`Only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} domains were read.`);
+      if (all.length > parsed.length) {
+        toast.warning(
+          `File has ${all.length.toLocaleString()} domains; only the first ${MAX_IMPORT_ENTRIES.toLocaleString()} were loaded.`,
+        );
       }
     };
     reader.readAsText(file);

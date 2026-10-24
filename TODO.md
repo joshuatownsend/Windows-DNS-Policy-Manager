@@ -7,9 +7,12 @@ No high or medium priority items remain. The following are ideas for future cons
 ### Policy backups don't include criteria
 `Handle-Backup` exports only Name, Action, ProcessingOrder, IsEnabled, Condition, Level and
 ZoneName, so a restored policy comes back without its FQDN/subnet/time-of-day criteria or zone
-scopes, and DENY/IGNORE policies with no criteria match *every* query. Export `Criteria` and
-`Content` and teach `parseBackupFile` (`dns-manager/src/lib/backup-import.ts`) to whitelist them;
-until then, warn in the import preview. Found while fixing #142 (2026-10-24).
+scopes, and DENY/IGNORE policies with no criteria match *every* query. The importer
+(`parseBackupFile` in `dns-manager/src/lib/backup-import.ts`) already restores validated
+`criteria`/`scopes` when a file carries them and warns about match-everything policies; the gap
+is on the export side: `Handle-Backup` should emit each policy's criteria (from
+`Get-DnsServerQueryResolutionPolicy`'s `Criteria`/`Content`) in the importer's
+`{ type, operator, values }` shape. Found while fixing #142 (2026-10-24).
 
 ### Move `shadcn` to devDependencies (cuts a recurring class of CVE alerts)
 `dns-manager/package.json` lists `shadcn` under `dependencies`, so the scaffolding CLI's

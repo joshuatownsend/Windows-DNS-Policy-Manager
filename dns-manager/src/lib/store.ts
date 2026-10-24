@@ -105,8 +105,12 @@ interface DnsStore {
   clearPsOutput: () => void;
 }
 
-/** The PowerShell tab keeps only the most recent lines so bulk imports can't grow it without bound. */
-export const MAX_PS_OUTPUT_LINES = 2000;
+/**
+ * The PowerShell tab keeps only the most recent lines so it can't grow without bound. Sized
+ * well above MAX_IMPORT_ENTRIES so a maximal bulk generate run (one line per domain) is kept
+ * in full -- in Generate mode the tab holds the only copy of those commands.
+ */
+export const MAX_PS_OUTPUT_LINES = 25_000;
 
 export function appendCapped(existing: string[], lines: string[], max = MAX_PS_OUTPUT_LINES): string[] {
   const next = existing.concat(lines);
