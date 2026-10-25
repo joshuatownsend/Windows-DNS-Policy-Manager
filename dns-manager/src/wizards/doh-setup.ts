@@ -7,7 +7,7 @@
 // (only the DNS Server cmdlets can). The admin runs this on the server in an elevated
 // session. The live enable/disable toggle on the DoH tab uses the bridge instead.
 
-import { psEscape } from "./command-generator";
+import { psEscape } from "../lib/ps-escape";
 
 /** Maximum URI templates accepted by Set-DnsServerEncryptionProtocol. */
 export const MAX_DOH_TEMPLATES = 3;

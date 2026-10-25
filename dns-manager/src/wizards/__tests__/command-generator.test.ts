@@ -78,7 +78,7 @@ describe("generateCommands escaping", () => {
     expect(out).toContain('-FQDN "EQ,a.com,b.com"');
   });
 
-  it("newline-delimited blocklist domains are split correctly (psEscape preserves newlines)", () => {
+  it("newline-delimited blocklist domains are split correctly", () => {
     const out = generateCommands("blocklist", { blocklistDomains: "a.com\nb.com" });
     expect(out).toContain("EQ,a.com,b.com");
   });
@@ -97,5 +97,47 @@ describe("generateCommands escaping", () => {
     expect(out).not.toContain('-MasterServers "h"$(x)"');
     // Backtick-escaped form must appear
     expect(out).toContain('-MasterServers "h`"`$(x)"');
+  });
+});
+
+describe("generateCommands injection hardening (issue #147)", () => {
+  it("only emits a known action in the unquoted -Action position", () => {
+    const out = generateCommands("blocklist", { blocklistDomains: "a.com", blocklistAction: "DENY; Remove-DnsServerZone x" });
+    expect(out).toContain("-Action IGNORE");
+    expect(out).not.toContain("Remove-DnsServerZone");
+  });
+
+  it("only emits integers inside the TTL expression", () => {
+    const out = generateCommands("loadbalancing", {
+      zone: "contoso.com",
+      lbTtl: "60)); Remove-Item C:/x; ((",
+      backends: [{ name: "A", ip: "10.0.0.1", weight: "2; calc" }],
+    });
+    expect(out).toContain("FromSeconds(60)");
+    expect(out).not.toContain("Remove-Item");
+    expect(out).toContain('-ZoneScope "AScope,2"');
+  });
+
+  it("keeps a multi-line value from escaping a comment line", () => {
+    const out = generateCommands("geolocation", { zone: "contoso.com\nRemove-DnsServerZone -Name contoso.com -Force" });
+    const commandLines = out.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+    expect(commandLines.some((l) => l.startsWith("Remove-DnsServerZone"))).toBe(false);
+  });
+
+  it("escapes curly double quotes", () => {
+    const out = generateCommands("blocklist", { blocklistDomains: "a.com", blocklistPolicyName: "x\u201D; calc; \u201C" });
+    expect(out).toContain("`\u201D");
+    expect(out).toContain("`\u201C");
+  });
+
+  it("only emits AND/OR for the filter condition", () => {
+    const out = generateCommands("queryfilter", {
+      filterCriteria: ["FQDN", "QType"],
+      filterFqdns: "a.com",
+      filterQTypes: "A",
+      filterCondition: "OR; calc",
+    });
+    expect(out).toContain("-Condition AND");
+    expect(out).not.toContain("calc");
   });
 });
