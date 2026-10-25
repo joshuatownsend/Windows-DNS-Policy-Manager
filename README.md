@@ -134,7 +134,9 @@ Session credentials (username/password) are intentionally not supported in the M
 
 - All tools are **read-only** — no write operations on DNS servers
 - The bridge's `/api/execute` endpoint (arbitrary PowerShell) is **not exposed** through MCP
-- Generated PowerShell commands (offline command generator, both the web UI and the MCP `dns_generate_policy_commands` tool) escape user input against injection (`$`, `` ` ``, `"`) before interpolation
+- Generated PowerShell commands (wizards, Create Policy, Blocklists and the MCP `dns_generate_policy_commands` tool) go through one shared helper (`dns-manager/src/lib/ps-escape.ts`, mirrored in `mcp-server/src/lib/`):
+  - Strings are escaped for double-quoted use: `` ` ``, `$`, `"` and the curly double quotes, with line breaks flattened.
+  - Unquoted positions (actions, conditions, criterion types, numbers) accept only a fixed vocabulary or an integer.
 - The bridge must be running for live queries; the offline command generator works independently
 
 ## Running with Docker

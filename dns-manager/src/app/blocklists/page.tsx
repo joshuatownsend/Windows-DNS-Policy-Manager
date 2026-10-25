@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 
 import type { PolicyAction } from "@/lib/types";
+import { POLICY_ACTIONS, psEnum, psEscape, psInt } from "@/lib/ps-escape";
 import { checkImportFile, MAX_IMPORT_ENTRIES } from "@/lib/import-limits";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -150,14 +151,15 @@ export default function BlocklistsPage() {
     const policyData: Record<string, unknown> = {
       name: `Block_${sanitized}`,
       action: quickAction,
-      fqdn: `EQ,${quickDomain.trim()}`,
+      // The bridge builds the policy from `criteria`; without it the policy matches every query.
+      criteria: [{ type: "Fqdn", operator: "EQ", values: [quickDomain.trim()] }],
       zoneName: quickZone.trim(),
       server: p.server,
       serverId: p.serverId,
       credentialMode: p.credentialMode,
     };
 
-    const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${quickAction} -Fqdn "EQ,${quickDomain.trim()}" -ZoneName "${quickZone.trim()}"`;
+    const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${psEnum(quickAction, POLICY_ACTIONS, "DENY")} -Fqdn "EQ,${psEscape(quickDomain.trim())}" -ZoneName "${psEscape(quickZone.trim())}"`;
     addPsOutput(`[${new Date().toLocaleTimeString()}] ${command}`);
 
     if (executionMode === "execute" && bridgeConnected) {
@@ -213,7 +215,7 @@ export default function BlocklistsPage() {
       const policyData: Record<string, unknown> = {
         name: `Block_${sanitized}`,
         action: bulkAction,
-        fqdn: `EQ,${domain}`,
+        criteria: [{ type: "Fqdn", operator: "EQ", values: [domain] }],
         zoneName: bulkZone.trim(),
         processingOrder: String(bulkStartOrder + i),
         server: p.server,
@@ -221,7 +223,7 @@ export default function BlocklistsPage() {
         credentialMode: p.credentialMode,
       };
 
-      const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${bulkAction} -Fqdn "EQ,${domain}" -ZoneName "${bulkZone.trim()}" -ProcessingOrder ${bulkStartOrder + i}`;
+      const command = `Add-DnsServerQueryResolutionPolicy -Name "Block_${sanitized}" -Action ${psEnum(bulkAction, POLICY_ACTIONS, "DENY")} -Fqdn "EQ,${psEscape(domain)}" -ZoneName "${psEscape(bulkZone.trim())}" -ProcessingOrder ${psInt(bulkStartOrder, 1, 1) + i}`;
       pendingLines.push(`[${new Date().toLocaleTimeString()}] ${command}`);
 
       if (executionMode === "execute" && bridgeConnected) {

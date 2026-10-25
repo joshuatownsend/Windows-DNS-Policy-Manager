@@ -19,17 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface Criterion {
-  type: string;
-  operator: string;
-  value: string;
-}
-
-interface Scope {
-  scopeName: string;
-  weight: number;
-}
+import { buildCommand, type Criterion, type Scope } from "@/lib/policy-command";
 
 const CRITERIA_TYPES = [
   "ClientSubnet",
@@ -45,71 +35,6 @@ function getServerParams() {
   const server = useStore.getState().getActiveServer();
   if (!server) return { server: undefined, serverId: undefined, credentialMode: undefined };
   return { server: server.hostname, serverId: server.id, credentialMode: server.credentialMode };
-}
-
-function buildCommand(
-  policyType: PolicyType,
-  name: string,
-  action: PolicyAction,
-  processingOrder: string,
-  isEnabled: boolean,
-  zoneName: string,
-  applyToZone: boolean,
-  condition: string,
-  criteria: Criterion[],
-  scopes: Scope[],
-  recursionScope: string,
-  serverHostname?: string
-): string {
-  const serverParam =
-    serverHostname && serverHostname !== "localhost"
-      ? ` -ComputerName "${serverHostname}"`
-      : "";
-
-  let cmdlet = "";
-  if (policyType === "QueryResolution") cmdlet = "Add-DnsServerQueryResolutionPolicy";
-  else if (policyType === "Recursion") cmdlet = "Add-DnsServerRecursionPolicy";
-  else cmdlet = "Add-DnsServerZoneTransferPolicy";
-
-  let cmd = `${cmdlet} -Name "${name}" -Action ${action}`;
-  cmd += ` -ProcessingOrder ${processingOrder || "1"}`;
-
-  if (!isEnabled) cmd += " -IsEnabled $false";
-
-  // Zone
-  if (policyType !== "Recursion" && zoneName && applyToZone) {
-    cmd += ` -ZoneName "${zoneName}"`;
-  }
-
-  // Criteria
-  const validCriteria = criteria.filter((c) => c.type && c.value);
-  validCriteria.forEach((c) => {
-    cmd += ` -${c.type} "${c.operator},${c.value}"`;
-  });
-
-  // Condition
-  if (validCriteria.length > 1) {
-    cmd += ` -Condition ${condition}`;
-  }
-
-  // Scopes (QueryResolution only)
-  if (policyType === "QueryResolution" && scopes.length > 0) {
-    const validScopes = scopes.filter((s) => s.scopeName);
-    if (validScopes.length > 0) {
-      const scopeStr = validScopes
-        .map((s) => `${s.scopeName},${s.weight}`)
-        .join(";");
-      cmd += ` -ZoneScope "${scopeStr}"`;
-    }
-  }
-
-  // Recursion scope
-  if (policyType === "Recursion" && recursionScope) {
-    cmd += ` -RecursionScope "${recursionScope}"`;
-  }
-
-  cmd += serverParam;
-  return cmd;
 }
 
 export default function CreatePolicyPage() {
