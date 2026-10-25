@@ -56,6 +56,10 @@ describe("isReadOnlyCommand", () => {
     "Add-DnsServerResourceRecordA -ZoneName x -Name www -IPv4Address 10.0.0.1",
     "Get-DnsServerZone; Remove-DnsServerZone -Name x",
     'Get-DnsServerZone -ZoneName "Block-Ads"',
+    "Get-DnsServerZone; Remove`-DnsServerZone -Name example.test -Force",
+    "Get-DnsServerZone; Remove-`DnsServerZone -Name example.test -Force",
+    "Get-DnsServerZone; R`emove-DnsServerZone -Name example.test -Force",
+    "Get-DnsServerZone; Remove\u2013DnsServerZone -Name example.test",
     "",
     "just text",
   ])("does not treat %j as read-only", (cmd) => {

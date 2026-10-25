@@ -23,10 +23,15 @@ const READ_ONLY_VERBS = new Set(["get", "resolve", "test", "show", "select", "so
 
 /**
  * True when every Verb-Noun token in a command uses a read-only verb. Errs toward "not
- * read-only": a hyphenated word inside a string argument counts as a command too.
+ * read-only": a hyphenated word inside a string argument counts as a command too, and any
+ * backtick makes the whole command count as a change, because PowerShell drops escape
+ * backticks from command names (``Remove`-DnsServerZone`` runs Remove-DnsServerZone).
  */
 export function isReadOnlyCommand(command: string): boolean {
-  const names = command.match(/(?<![-\w])[A-Za-z]+-[A-Za-z0-9]+/g) ?? [];
+  if (command.includes("`")) return false;
+  // Treat Unicode dashes as hyphens so they can't split a verb from its noun either.
+  const normalized = command.replace(/[\u2010-\u2015\u2212]/g, "-");
+  const names = normalized.match(/(?<![-\w])[A-Za-z]+-[A-Za-z0-9]+/g) ?? [];
   return names.length > 0 && names.every((n) => READ_ONLY_VERBS.has(n.split("-")[0].toLowerCase()));
 }
 
