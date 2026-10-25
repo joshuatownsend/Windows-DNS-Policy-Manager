@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-24
+
 ### Security
 
 - **MCP server dependencies:** `body-parser` 2.4.0 (GHSA-27r3-jxmh-p828, high: DoS via trailing
