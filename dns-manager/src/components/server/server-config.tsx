@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { EditableField } from "./editable-field";
@@ -100,7 +100,7 @@ function ConfigSection({
 export function ServerConfig() {
   const bridgeConnected = useStore((s) => s.bridgeConnected);
   const serverConfig = useStore((s) => s.serverConfig);
-  const setServerConfig = useStore((s) => s.setServerConfig);
+  const setServerConfig = useEpochGuarded((s) => s.setServerConfig);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
   const setL = (key: string, v: boolean) => setLoading((p) => ({ ...p, [key]: v }));

@@ -9,6 +9,8 @@ import { HelpPanel } from "./help-panel";
 import { DnsLookupPanel } from "./dns-lookup-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
+import type { Zone } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,8 +85,29 @@ function ServerSwitcher() {
   );
 }
 
+/**
+ * Keep the active server's zone list (used by the Wizards' zone pickers and the Server tab)
+ * loaded: it is cleared on every server switch, so fetch it again for the new server.
+ */
+function useActiveServerZones() {
+  const serverEpoch = useStore((s) => s.serverEpoch);
+  const bridgeConnected = useStore((s) => s.bridgeConnected);
+  useEffect(() => {
+    const state = useStore.getState();
+    const server = state.getActiveServer();
+    if (!bridgeConnected || !server) return;
+    const epoch = state.serverEpoch;
+    void api.listZones(server.hostname, server.id, server.credentialMode).then((res) => {
+      if (res.success && useStore.getState().serverEpoch === epoch) {
+        useStore.getState().setServerZones(((res as { zones?: Zone[] }).zones) ?? []);
+      }
+    });
+  }, [serverEpoch, bridgeConnected]);
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
+  useActiveServerZones();
   // Remount the page whenever the active server (or its host) changes, so no page keeps
   // showing - or acting on - objects loaded from the previous server (#143).
   const serverEpoch = useStore((s) => s.serverEpoch);

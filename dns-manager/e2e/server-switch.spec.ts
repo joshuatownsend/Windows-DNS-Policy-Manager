@@ -24,7 +24,10 @@ test.describe("Server switching", () => {
   });
 
   test("a late response from the previous server is discarded", async ({ page }) => {
+    // Switch only once A's zone request is in flight, so the guard is actually exercised.
+    const aRequest = page.waitForRequest((r) => r.url().includes("/api/zones?") && r.url().includes("serverId=srv-a"));
     await page.goto("/zones");
+    await aRequest;
     await page.getByRole("button", { name: /Active server: dns-a/ }).click();
     await page.getByRole("menuitem", { name: /dns-b/ }).click();
 

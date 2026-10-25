@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
@@ -312,3 +313,22 @@ export const useStore = create<DnsStore>()(
     }
   )
 );
+
+/**
+ * A store setter that only applies while the server the calling component mounted under is
+ * still the active one. Pages remount on every serverEpoch change, but async work started by
+ * the old instance keeps running; through this setter it can no longer write the previous
+ * server's data into the shared store (#143).
+ */
+export function useEpochGuarded<A extends unknown[]>(
+  pick: (s: DnsStore) => (...args: A) => void,
+): (...args: A) => void {
+  const [mountEpoch] = useState(() => useStore.getState().serverEpoch);
+  const setter = useStore(pick);
+  return useCallback(
+    (...args: A) => {
+      if (useStore.getState().serverEpoch === mountEpoch) setter(...args);
+    },
+    [setter, mountEpoch],
+  );
+}

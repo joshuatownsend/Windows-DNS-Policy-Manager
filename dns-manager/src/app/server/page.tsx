@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useCallback, useEffect, useState } from "react";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { CredentialMode, Server, ZoneSummary } from "@/lib/types";
 import { toast } from "sonner";
@@ -117,6 +117,10 @@ const EMPTY_FORM: ServerFormState = {
 // Page component
 // ---------------------------------------------------------------------------
 
+// Module scope, not a ref: the page remounts on every server switch (#143), and removing the
+// last server must not make a fresh mount re-add a localhost entry.
+let defaultServerBootstrapped = false;
+
 export default function ServerPage() {
   const {
     servers,
@@ -142,8 +146,8 @@ export default function ServerPage() {
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [testingAll, setTestingAll] = useState(false);
 
-  const didInit = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const setServerZonesGuarded = useEpochGuarded((s) => s.setServerZones);
 
   // Prevent hydration mismatch — Zustand persist loads from localStorage
   // after SSR, so server/client HTML differ until mounted.
@@ -153,8 +157,8 @@ export default function ServerPage() {
   // ── Bootstrap default localhost server ────────────────────
   // Wait until mounted (persist hydration complete) before checking.
   useEffect(() => {
-    if (!mounted || didInit.current) return;
-    didInit.current = true;
+    if (!mounted || defaultServerBootstrapped) return;
+    defaultServerBootstrapped = true;
 
     if (servers.length === 0) {
       const def = makeDefaultServer();
@@ -191,6 +195,10 @@ export default function ServerPage() {
           credentialMode: server.credentialMode,
         });
 
+        // The active server changed mid-test and the result was discarded: treat it as
+        // cancelled rather than marking the server offline.
+        if (res.stale) return;
+
         if (res.success) {
           const zones = (res.zones as ZoneSummary[] | undefined) ?? [];
           const serverInfo = (res.serverInfo as Server["serverInfo"]) ?? null;
@@ -203,7 +211,7 @@ export default function ServerPage() {
 
           // If this is the active server, update zone list
           if (server.id === activeServerId) {
-            setServerZones(
+            setServerZonesGuarded(
               zones.map((z) => ({
                 ZoneName: z.ZoneName,
                 ZoneType: z.ZoneType,
@@ -241,7 +249,7 @@ export default function ServerPage() {
         });
       }
     },
-    [activeServerId, updateServer, setServerZones]
+    [activeServerId, updateServer, setServerZonesGuarded]
   );
 
   // ── Test all servers ──────────────────────────────────────
