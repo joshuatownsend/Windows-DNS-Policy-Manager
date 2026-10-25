@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useStore } from "@/lib/store";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -59,9 +59,9 @@ export default function ObjectsPage() {
   const clientSubnets = useStore((s) => s.clientSubnets);
   const zoneScopes = useStore((s) => s.zoneScopes);
   const recursionScopes = useStore((s) => s.recursionScopes);
-  const setClientSubnets = useStore((s) => s.setClientSubnets);
-  const setZoneScopes = useStore((s) => s.setZoneScopes);
-  const setRecursionScopes = useStore((s) => s.setRecursionScopes);
+  const setClientSubnets = useEpochGuarded((s) => s.setClientSubnets);
+  const setZoneScopes = useEpochGuarded((s) => s.setZoneScopes);
+  const setRecursionScopes = useEpochGuarded((s) => s.setRecursionScopes);
 
   // Section open state
   const [subnetsOpen, setSubnetsOpen] = useState(true);

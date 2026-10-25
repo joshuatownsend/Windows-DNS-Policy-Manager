@@ -8,6 +8,11 @@ import { useStore } from "./store";
 import { describeBlockedCall, DRY_RUN_ERROR, isMutatingCall } from "./dry-run";
 
 const REQUEST_TIMEOUT = 30000;
+
+/** Calls whose answers don't belong to the active DNS server (kept across server switches). */
+const SERVER_INDEPENDENT = /^\/api\/(health|utilities\/|credentials\/)/;
+
+export const STALE_SERVER_ERROR = "The active server changed while this request was running; its response was discarded.";
 // Requests go to this app's own /api route (src/app/api/[...path]/route.ts), which adds
 // the bridge token server-side and forwards to the bridge. The browser never holds the
 // token and never talks to the bridge directly.
@@ -25,6 +30,9 @@ async function request<T = unknown>(
     store.addPsOutput(`[${new Date().toLocaleTimeString()}] ${describeBlockedCall(method, path, body)}`);
     return { success: false, dryRun: true, error: DRY_RUN_ERROR };
   }
+  // Responses must not land on screen once the user has moved to another server (#143).
+  const epoch = store.serverEpoch;
+  const serverBound = !SERVER_INDEPENDENT.test(path);
 
   const opts: RequestInit = {
     method,
@@ -50,6 +58,9 @@ async function request<T = unknown>(
       if (res.status === 401 && data?.authRequired && typeof window !== "undefined" && window.location.pathname !== "/login") {
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- non-React module; a full load is intended
         window.location.href = "/login";
+      }
+      if (serverBound && useStore.getState().serverEpoch !== epoch) {
+        return { success: false, stale: true, error: STALE_SERVER_ERROR };
       }
       return data;
     } catch {

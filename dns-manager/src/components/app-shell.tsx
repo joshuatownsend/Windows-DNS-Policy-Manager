@@ -9,6 +9,8 @@ import { HelpPanel } from "./help-panel";
 import { DnsLookupPanel } from "./dns-lookup-panel";
 import { useBridgeHealth } from "@/lib/use-bridge-health";
 import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
+import type { Zone } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +62,7 @@ function ServerSwitcher() {
             <DropdownMenuItem
               key={s.id}
               className={isActive ? "bg-cyan-500/10 text-cyan-400" : ""}
-              onSelect={() => setActiveServerId(s.id)}
+              onClick={() => setActiveServerId(s.id)}
             >
               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status]}`} />
               <div className="min-w-0 flex-1">
@@ -83,8 +85,32 @@ function ServerSwitcher() {
   );
 }
 
+/**
+ * Keep the active server's zone list (used by the Wizards' zone pickers and the Server tab)
+ * loaded: it is cleared on every server switch, so fetch it again for the new server.
+ */
+function useActiveServerZones() {
+  const serverEpoch = useStore((s) => s.serverEpoch);
+  const bridgeConnected = useStore((s) => s.bridgeConnected);
+  useEffect(() => {
+    const state = useStore.getState();
+    const server = state.getActiveServer();
+    if (!bridgeConnected || !server) return;
+    const epoch = state.serverEpoch;
+    void api.listZones(server.hostname, server.id, server.credentialMode).then((res) => {
+      if (res.success && useStore.getState().serverEpoch === epoch) {
+        useStore.getState().setServerZones(((res as { zones?: Zone[] }).zones) ?? []);
+      }
+    });
+  }, [serverEpoch, bridgeConnected]);
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
+  useActiveServerZones();
+  // Remount the page whenever the active server (or its host) changes, so no page keeps
+  // showing - or acting on - objects loaded from the previous server (#143).
+  const serverEpoch = useStore((s) => s.serverEpoch);
   const [helpOpen, setHelpOpen] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
 
@@ -173,7 +199,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Tabs + Content ──────────────────────────────── */}
       <div className="mx-auto max-w-[1400px] px-6 pt-1">
         <TabNav />
-        <main className="py-6 animate-fade-in">{children}</main>
+        <main key={serverEpoch} className="py-6 animate-fade-in">{children}</main>
       </div>
 
       {/* ── DNS Lookup slide-over ─────────────────────────── */}

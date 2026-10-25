@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
+- **Objects from one server can't be acted on against another (#143).** Pages used to keep data
+  loaded from server A after the header switched to server B, while their buttons sent changes
+  to B. That could remove "B's" records or policies using A's names, or overwrite B's block list
+  with A's.
+  - Switching servers, or changing the active server's hostname or credential mode, now clears
+    all loaded server data and reloads the current tab.
+  - A response that arrives from the previous server after the switch is discarded.
+
 - **Generated PowerShell can't be hijacked by input (#147).** Every command generator now uses
   one shared helper, mirrored in the MCP server and kept identical by a test. That covers the
   wizards, DoH setup, Create Policy, Blocklists and the MCP `dns_generate_policy_commands` tool.
@@ -121,6 +129,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The header's server switcher didn't switch.** Its menu items listened for `onSelect`, which
+  the Base UI menu never fires, so picking a server did nothing. They now use `onClick`.
 - **Blocklist "Block" in Live mode blocked the whole zone.** The page sent the domain as `fqdn`,
   a field the bridge's policy endpoint ignores, so it created a DENY/IGNORE policy with no
   criteria, which matches every query. It now sends an `Fqdn` criterion.

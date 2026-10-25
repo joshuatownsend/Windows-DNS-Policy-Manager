@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { Policy } from "@/lib/types";
 import { toast } from "sonner";
@@ -175,7 +175,7 @@ function PolicyCard({
 
 export default function PoliciesPage() {
   const policies = useStore((s) => s.policies);
-  const setPolicies = useStore((s) => s.setPolicies);
+  const setPolicies = useEpochGuarded((s) => s.setPolicies);
   const bridgeConnected = useStore((s) => s.bridgeConnected);
 
   const [zoneTransferPolicies, setZoneTransferPolicies] = useState<Policy[]>(

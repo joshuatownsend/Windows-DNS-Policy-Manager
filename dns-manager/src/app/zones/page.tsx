@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useStore } from "@/lib/store";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { Zone, DnsRecord, RecordType } from "@/lib/types";
 import { toast } from "sonner";
@@ -264,15 +264,16 @@ function recordToFormData(record: DnsRecord): RecordFormData {
 export default function ZonesPage() {
   const {
     zones,
-    setZones,
     selectedZone,
-    setSelectedZone,
     zoneRecords,
-    setZoneRecords,
     zoneRecordFilter,
     setZoneRecordFilter,
     bridgeConnected,
   } = useStore();
+  // Guarded: async loads from before a server switch must not write into the new server's view.
+  const setZones = useEpochGuarded((s) => s.setZones);
+  const setSelectedZone = useEpochGuarded((s) => s.setSelectedZone);
+  const setZoneRecords = useEpochGuarded((s) => s.setZoneRecords);
 
   const [zoneSearch, setZoneSearch] = useState("");
   const [zoneFilters, setZoneFilters] = useState<{

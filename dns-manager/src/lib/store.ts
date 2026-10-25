@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
@@ -38,6 +39,12 @@ interface DnsStore {
   removeServer: (id: string) => void;
   setActiveServerId: (id: string | null) => void;
   getActiveServer: () => Server | undefined;
+  /**
+   * Bumped whenever the server that data on screen belongs to changes: a different active
+   * server, or the active server's hostname / credential mode edited. Pages remount on it and
+   * the API client drops responses to requests made under an older epoch.
+   */
+  serverEpoch: number;
 
   // Server zones (shown on server tab)
   serverZones: Zone[];
@@ -112,6 +119,31 @@ interface DnsStore {
  */
 export const MAX_PS_OUTPUT_LINES = 25_000;
 
+/** Everything loaded from a DNS server. Cleared whenever `serverEpoch` changes. */
+export function serverScopedReset() {
+  return {
+    serverZones: [] as Zone[],
+    serverConfig: {
+      settings: null,
+      forwarders: null,
+      recursion: null,
+      cache: null,
+      blocklist: null,
+      diagnostics: null,
+      statistics: null,
+    },
+    policies: [] as Policy[],
+    selectedPolicy: null,
+    clientSubnets: [] as ClientSubnet[],
+    zoneScopes: {} as Record<string, ZoneScope[]>,
+    recursionScopes: [] as RecursionScope[],
+    zones: [] as Zone[],
+    selectedZone: null,
+    zoneRecords: [] as DnsRecord[],
+    blocklistData: null,
+  };
+}
+
 export function appendCapped(existing: string[], lines: string[], max = MAX_PS_OUTPUT_LINES): string[] {
   const next = existing.concat(lines);
   return next.length > max ? next.slice(next.length - max) : next;
@@ -141,17 +173,34 @@ export const useStore = create<DnsStore>()(
       setServers: (servers) => set({ servers }),
       addServer: (s) => set((st) => ({ servers: [...st.servers, s] })),
       updateServer: (id, partial) =>
-        set((st) => ({
-          servers: st.servers.map((s) =>
-            s.id === id ? { ...s, ...partial } : s
-          ),
-        })),
+        set((st) => {
+          const before = st.servers.find((s) => s.id === id);
+          // Re-pointing the active server at another host (or credentials) invalidates
+          // everything loaded from it, exactly like switching servers.
+          const retargeted =
+            id === st.activeServerId &&
+            !!before &&
+            ((partial.hostname !== undefined && partial.hostname !== before.hostname) ||
+              (partial.credentialMode !== undefined && partial.credentialMode !== before.credentialMode));
+          return {
+            servers: st.servers.map((s) => (s.id === id ? { ...s, ...partial } : s)),
+            ...(retargeted ? { serverEpoch: st.serverEpoch + 1, ...serverScopedReset() } : {}),
+          };
+        }),
       removeServer: (id) =>
         set((st) => ({
           servers: st.servers.filter((s) => s.id !== id),
-          activeServerId: st.activeServerId === id ? null : st.activeServerId,
+          ...(st.activeServerId === id
+            ? { activeServerId: null, serverEpoch: st.serverEpoch + 1, ...serverScopedReset() }
+            : {}),
         })),
-      setActiveServerId: (id) => set({ activeServerId: id }),
+      setActiveServerId: (id) =>
+        set((st) =>
+          st.activeServerId === id
+            ? {}
+            : { activeServerId: id, serverEpoch: st.serverEpoch + 1, ...serverScopedReset() },
+        ),
+      serverEpoch: 0,
       getActiveServer: () => {
         const { servers, activeServerId } = get();
         return servers.find((s) => s.id === activeServerId);
@@ -264,3 +313,22 @@ export const useStore = create<DnsStore>()(
     }
   )
 );
+
+/**
+ * A store setter that only applies while the server the calling component mounted under is
+ * still the active one. Pages remount on every serverEpoch change, but async work started by
+ * the old instance keeps running; through this setter it can no longer write the previous
+ * server's data into the shared store (#143).
+ */
+export function useEpochGuarded<A extends unknown[]>(
+  pick: (s: DnsStore) => (...args: A) => void,
+): (...args: A) => void {
+  const [mountEpoch] = useState(() => useStore.getState().serverEpoch);
+  const setter = useStore(pick);
+  return useCallback(
+    (...args: A) => {
+      if (useStore.getState().serverEpoch === mountEpoch) setter(...args);
+    },
+    [setter, mountEpoch],
+  );
+}

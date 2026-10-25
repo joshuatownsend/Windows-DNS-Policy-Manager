@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useEpochGuarded, useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { getServerParams } from "@/lib/utils";
 import { toast } from "sonner";
@@ -50,7 +50,7 @@ const sp = getServerParams;
 
 export default function DnssecPage() {
   const zones = useStore((s) => s.zones);
-  const setZones = useStore((s) => s.setZones);
+  const setZones = useEpochGuarded((s) => s.setZones);
   const bridgeConnected = useStore((s) => s.bridgeConnected);
 
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
