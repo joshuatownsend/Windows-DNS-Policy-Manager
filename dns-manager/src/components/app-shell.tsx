@@ -60,7 +60,7 @@ function ServerSwitcher() {
             <DropdownMenuItem
               key={s.id}
               className={isActive ? "bg-cyan-500/10 text-cyan-400" : ""}
-              onSelect={() => setActiveServerId(s.id)}
+              onClick={() => setActiveServerId(s.id)}
             >
               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status]}`} />
               <div className="min-w-0 flex-1">
@@ -85,6 +85,9 @@ function ServerSwitcher() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   useBridgeHealth();
+  // Remount the page whenever the active server (or its host) changes, so no page keeps
+  // showing - or acting on - objects loaded from the previous server (#143).
+  const serverEpoch = useStore((s) => s.serverEpoch);
   const [helpOpen, setHelpOpen] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
 
@@ -173,7 +176,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Tabs + Content ──────────────────────────────── */}
       <div className="mx-auto max-w-[1400px] px-6 pt-1">
         <TabNav />
-        <main className="py-6 animate-fade-in">{children}</main>
+        <main key={serverEpoch} className="py-6 animate-fade-in">{children}</main>
       </div>
 
       {/* ── DNS Lookup slide-over ─────────────────────────── */}

@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
+- **Objects from one server can't be acted on against another (#143).** Pages used to keep data
+  loaded from server A after the header switched to server B, while their buttons sent changes
+  to B. That could remove "B's" records or policies using A's names, or overwrite B's block list
+  with A's.
+  - Switching servers, or changing the active server's hostname or credential mode, now clears
+    all loaded server data and reloads the current tab.
+  - A response that arrives from the previous server after the switch is discarded.
+
 - **Dry Run actually prevents DNS changes (#146).** The header toggle defaults to Dry Run, but
   most pages used to send changes anyway. The API client now holds back every request that would
   change a DNS server while Dry Run is on: records, zones, policies, server settings, DNSSEC,
@@ -107,6 +115,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Pester tests for the bridge** (`server/tests/`), run in CI under both Windows PowerShell 5.1
   and pwsh 7: 86 cases covering the execute allowlist, body limits, job reaping and policy
   criterion types.
+
+### Fixed
+
+- **The header's server switcher didn't switch.** Its menu items listened for `onSelect`, which
+  the Base UI menu never fires, so picking a server did nothing. They now use `onClick`.
 
 ### Changed
 
