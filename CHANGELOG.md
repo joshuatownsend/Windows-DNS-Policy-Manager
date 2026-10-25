@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- **MCP server dependencies:** `body-parser` 2.4.0 (GHSA-27r3-jxmh-p828, high: DoS via trailing
+  bytes after a compressed body) and `fast-uri` 3.1.9 (GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr,
+  GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp). Both come in through `@modelcontextprotocol/sdk`.
+  Replaces Dependabot #181.
+
+### Changed
+
+- `lucide-react` 1.61 (Dependabot #177).
+
 ## [0.7.0] - 2026-10-24
 
 > **Upgrade notes:** saved and session credentials must be re-entered once, Docker setups need a
