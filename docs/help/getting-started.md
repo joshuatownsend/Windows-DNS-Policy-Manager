@@ -62,7 +62,7 @@ If the bridge isn't running, the app still works as a command generator:
 
 When the bridge is connected, a toggle appears in the header:
 
-- **Dry Run** (default) — Commands are generated and shown in the PowerShell tab, but not executed on the server. Use this to review before applying.
+- **Dry Run** (default) — Nothing on the server changes. Pages that build PowerShell (Create Policy, Blocklists, Wizards) show the commands in the PowerShell tab. Every other change (editing records, zones, policies, server settings, DNSSEC, DoH, imports) is stopped before it is sent. The page shows "Dry Run is on" and the PowerShell tab logs what was held back. Reading data, testing connections, exports, lookups and read-only (`Get-*`) commands still work. Use this to look around and review before applying.
 - **Live** — Commands are generated AND executed on the server immediately.
 
 ## Interface Overview

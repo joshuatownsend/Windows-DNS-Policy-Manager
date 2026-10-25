@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
+- **Dry Run actually prevents DNS changes (#146).** The header toggle defaults to Dry Run, but
+  most pages used to send changes anyway. The API client now holds back every request that would
+  change a DNS server while Dry Run is on: records, zones, policies, server settings, DNSSEC,
+  DoH and imports. Pages report "Dry Run is on", and the PowerShell tab logs each request that
+  was held back.
+  - Reads, connection tests, exports, DNS lookups, credential management and read-only
+    PowerShell (`Get-*`, `Resolve-*`, `Test-*` and formatters) still work.
+  - Switch to **Live** to apply changes.
 - **The bridge requires a bearer token (#138).** Every endpoint except `/api/health` now needs
   `Authorization: Bearer <token>`.
   - The token comes from `-Token`, else `DNS_BRIDGE_TOKEN`, else a random one generated at each
