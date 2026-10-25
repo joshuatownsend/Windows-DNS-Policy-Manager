@@ -310,11 +310,33 @@ export default function ServerPage() {
     try {
       if (editingServerId) {
         // Update existing
+        const previous = servers.find((s) => s.id === editingServerId);
+        const targetChanged =
+          !!previous &&
+          (previous.hostname.trim().toLowerCase() !== trimmedHostname.toLowerCase() ||
+            previous.credentialMode !== form.credentialMode);
+        const enteringNewCredential =
+          form.credentialMode !== "currentUser" && !!form.username && !!form.password;
+
+        // A stored credential is bound to the host it was entered for. When the host or mode
+        // changes it must be revoked first; if that can't be confirmed, keep the old settings.
+        const mustRevoke = targetChanged && !!previous && previous.credentialMode !== "currentUser";
+        if (mustRevoke && !(await revokeCredential(editingServerId))) return;
+
         updateServer(editingServerId, {
           name: trimmedName,
           hostname: trimmedHostname,
           credentialMode: form.credentialMode,
         });
+
+        if (mustRevoke) {
+          updateServer(editingServerId, { hasCredential: false });
+          if (!enteringNewCredential && form.credentialMode !== "currentUser") {
+            toast.warning("Stored credentials were cleared because the host or mode changed", {
+              description: "Edit the server again to enter credentials for the new host.",
+            });
+          }
+        }
 
         // Store credentials if provided
         if (
@@ -330,6 +352,7 @@ export default function ServerPage() {
           if (bridgeConnected) {
             const res = await storeFn(
               editingServerId,
+              trimmedHostname,
               form.username,
               form.password
             );
@@ -374,7 +397,7 @@ export default function ServerPage() {
               ? api.storeCredential
               : api.storeSessionCredential;
 
-          const res = await storeFn(newId, form.username, form.password);
+          const res = await storeFn(newId, trimmedHostname, form.username, form.password);
           if (res.success) {
             updateServer(newId, { hasCredential: true });
           }
@@ -390,10 +413,28 @@ export default function ServerPage() {
     }
   };
 
-  const handleRemove = (server: Server) => {
-    if (bridgeConnected && server.credentialMode === "savedCredential") {
-      api.deleteCredential(server.id);
+  /**
+   * Revoke a server's saved and session credentials on the bridge. Returns false (after telling
+   * the user) when revocation can't be confirmed, so callers keep the server as it was instead
+   * of dropping the only record of a credential that is still stored.
+   */
+  const revokeCredential = async (serverId: string): Promise<boolean> => {
+    if (!bridgeConnected) {
+      toast.error("Connect to the bridge first", {
+        description: "This server has stored credentials that must be revoked before its host, mode or entry changes.",
+      });
+      return false;
     }
+    const res = await api.deleteCredential(serverId);
+    if (!res.success) {
+      toast.error("Could not revoke stored credentials", { description: res.error });
+      return false;
+    }
+    return true;
+  };
+
+  const handleRemove = async (server: Server) => {
+    if (server.credentialMode !== "currentUser" && !(await revokeCredential(server.id))) return;
     removeServer(server.id);
     toast.success(`Removed ${server.name}`);
   };

@@ -3,6 +3,9 @@
  * All methods return the parsed JSON response body.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://127.0.0.1:8650";
 const DEFAULT_SERVER = process.env.DNS_DEFAULT_SERVER || "";
 const DEFAULT_SERVER_ID = process.env.DNS_SERVER_ID || "";
@@ -31,6 +34,24 @@ function buildQuery(params: Record<string, string | undefined>): string {
   return str ? `?${str}` : "";
 }
 
+/**
+ * Bridge bearer token: BRIDGE_TOKEN, else BRIDGE_TOKEN_FILE, else the file the bridge writes
+ * on start (%LOCALAPPDATA%\DNSPolicyManager\bridge.token). Read per request so a bridge
+ * restart (which rotates a generated token) doesn't break a running MCP server.
+ */
+function bridgeToken(): string | undefined {
+  if (process.env.BRIDGE_TOKEN?.trim()) return process.env.BRIDGE_TOKEN.trim();
+  const file =
+    process.env.BRIDGE_TOKEN_FILE ||
+    (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "DNSPolicyManager", "bridge.token") : undefined);
+  if (!file) return undefined;
+  try {
+    return readFileSync(file, "utf8").trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function request(
   path: string,
   params: Record<string, string | undefined> = {},
@@ -42,7 +63,11 @@ async function request(
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const token = bridgeToken();
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     const bodyText = await res.text();
     if (!res.ok) {
       return { success: false, error: `Bridge returned ${res.status}: ${bodyText.slice(0, 500)}` };

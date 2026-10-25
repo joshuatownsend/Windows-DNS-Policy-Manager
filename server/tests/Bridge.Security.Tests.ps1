@@ -199,3 +199,103 @@ Describe 'Assert-PolicyCriterionType (issue #142)' {
         { Assert-PolicyCriterionType -Type $_ } | Should -Throw
     }
 }
+
+Describe 'Test-BearerToken (issue #138)' {
+    It 'accepts the exact token' {
+        Test-BearerToken -Header 'Bearer s3cr3t-T0ken' -Token 's3cr3t-T0ken' | Should -BeTrue
+    }
+
+    It 'accepts a case-insensitive scheme' {
+        Test-BearerToken -Header 'bearer s3cr3t-T0ken' -Token 's3cr3t-T0ken' | Should -BeTrue
+    }
+
+    It 'rejects <Label>' -ForEach @(
+        @{ Label = 'a missing header'; Header = $null }
+        @{ Label = 'an empty header'; Header = '' }
+        @{ Label = 'a wrong token'; Header = 'Bearer s3cr3t-T0kem' }
+        @{ Label = 'a prefix of the token'; Header = 'Bearer s3cr3t' }
+        @{ Label = 'a longer token'; Header = 'Bearer s3cr3t-T0ken-extra' }
+        @{ Label = 'a different scheme'; Header = 'Basic s3cr3t-T0ken' }
+        @{ Label = 'a bare token'; Header = 's3cr3t-T0ken' }
+    ) {
+        Test-BearerToken -Header $Header -Token 's3cr3t-T0ken' | Should -BeFalse
+    }
+
+    It 'never authorizes when no token is configured' {
+        Test-BearerToken -Header 'Bearer ' -Token '' | Should -BeFalse
+    }
+}
+
+Describe 'Test-SameHost (issue #139)' {
+    It 'treats <A> and <B> as the same host' -ForEach @(
+        @{ A = 'dns01.contoso.com'; B = 'DNS01.CONTOSO.COM' }
+        @{ A = 'dns01.contoso.com.'; B = 'dns01.contoso.com' }
+        @{ A = 'localhost'; B = '127.0.0.1' }
+        @{ A = 'localhost'; B = $env:COMPUTERNAME }
+        @{ A = '.'; B = 'localhost' }
+    ) {
+        Test-SameHost $A $B | Should -BeTrue
+    }
+
+    It 'treats <A> and <B> as different hosts' -ForEach @(
+        @{ A = 'dns01.contoso.com'; B = 'dns02.contoso.com' }
+        @{ A = 'dns01'; B = 'dns01.contoso.com' }
+        @{ A = 'localhost'; B = 'attacker.example' }
+    ) {
+        Test-SameHost $A $B | Should -BeFalse
+    }
+}
+
+Describe 'Resolve-StoredCredential host binding (issue #139)' {
+    BeforeAll {
+        $script:CredStorePath = Join-Path ([System.IO.Path]::GetTempPath()) ("dpm-cred-test-" + [guid]::NewGuid())
+        $null = New-Item -ItemType Directory -Path $script:CredStorePath
+        function Save-TestCred([string]$Id, [string]$BoundHost) {
+            $data = @{ Username = 'CONTOSO\admin'; Password = (ConvertTo-SecureString 'P@ss' -AsPlainText -Force | ConvertFrom-SecureString) }
+            if ($BoundHost) { $data.Hostname = $BoundHost }
+            $data | ConvertTo-Json | Set-Content -Path (Join-Path $script:CredStorePath "$Id.cred")
+        }
+        Save-TestCred 'srv-bound' 'dns01.contoso.com'
+        Save-TestCred 'srv-legacy' $null
+        $script:SessionCredentials = @{
+            'srv-session' = @{
+                Credential = New-Object System.Management.Automation.PSCredential('CONTOSO\ops', (ConvertTo-SecureString 'x' -AsPlainText -Force))
+                Hostname   = 'dns02.contoso.com'
+            }
+        }
+    }
+
+    AfterAll {
+        Remove-Item -LiteralPath $script:CredStorePath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'releases a saved credential to the host it was stored for' {
+        $cred = Resolve-StoredCredential -ServerId 'srv-bound' -CredentialMode 'savedCredential' -Hostname 'DNS01.contoso.com'
+        $cred.UserName | Should -Be 'CONTOSO\admin'
+    }
+
+    It 'refuses a saved credential for a different host' {
+        { Resolve-StoredCredential -ServerId 'srv-bound' -CredentialMode 'savedCredential' -Hostname 'attacker.example' } |
+            Should -Throw '*stored for host*'
+    }
+
+    It 'refuses a legacy saved credential with no bound host' {
+        { Resolve-StoredCredential -ServerId 'srv-legacy' -CredentialMode 'savedCredential' -Hostname 'dns01.contoso.com' } |
+            Should -Throw '*predates host binding*'
+    }
+
+    It 'releases a session credential only to its host' {
+        (Resolve-StoredCredential -ServerId 'srv-session' -CredentialMode 'session' -Hostname 'dns02.contoso.com').UserName |
+            Should -Be 'CONTOSO\ops'
+        { Resolve-StoredCredential -ServerId 'srv-session' -CredentialMode 'session' -Hostname 'dns01.contoso.com' } |
+            Should -Throw '*entered for host*'
+    }
+
+    It 'returns nothing for currentUser mode' {
+        Resolve-StoredCredential -ServerId 'srv-bound' -CredentialMode 'currentUser' -Hostname 'anything' | Should -BeNullOrEmpty
+    }
+
+    It 'rejects path-traversal server IDs' {
+        { Resolve-StoredCredential -ServerId '..\..\x' -CredentialMode 'savedCredential' -Hostname 'h' } | Should -Throw
+    }
+}

@@ -5,7 +5,14 @@
 .DESCRIPTION
     Local HTTP bridge that exposes DNS Server cmdlets as REST API endpoints.
     Binds to 127.0.0.1 by default (port 8650) for security. Zero external dependencies.
-    Use -BindAddress 0.0.0.0 to listen on all interfaces (required for Docker networking).
+    Every endpoint except /api/health requires "Authorization: Bearer <token>". The token
+    comes from -Token, else $env:DNS_BRIDGE_TOKEN, else the existing token file, else a new
+    random one (-RotateToken forces a new one). It is written to
+    %LOCALAPPDATA%\DNSPolicyManager\bridge.token (readable by this user only), where the
+    local frontend and MCP server pick it up.
+    Binding anything other than loopback (e.g. -BindAddress 0.0.0.0 for Docker) requires
+    -AllowRemote, because credentials then cross the network; add -UseHttps (with a
+    certificate bound via netsh http add sslcert) or a TLS proxy on untrusted networks.
 .NOTES
     Run with: powershell -ExecutionPolicy Bypass -File bridge.ps1
     Stop with: Ctrl+C
@@ -16,7 +23,11 @@ param(
     [string]$BindAddress = '127.0.0.1',
     [string[]]$AllowedOrigins = @(
         'http://localhost:10010', 'http://127.0.0.1:10010'
-    )
+    ),
+    [string]$Token = $env:DNS_BRIDGE_TOKEN,
+    [switch]$AllowRemote,
+    [switch]$UseHttps,
+    [switch]$RotateToken
 )
 
 Set-StrictMode -Version Latest
@@ -87,11 +98,8 @@ function Send-Response {
         $Response.StatusCode = $StatusCode
         $Response.ContentType = 'application/json; charset=utf-8'
         $Response.ContentLength64 = $buffer.Length
-
-        # CORS headers - safe because localhost-only
-        $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-        $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+        # No CORS headers: browsers reach the bridge only through the frontend's server-side
+        # /api proxy, so a page on another origin can't read bridge responses.
 
         $Response.OutputStream.Write($buffer, 0, $buffer.Length)
         $Response.OutputStream.Close()
@@ -102,12 +110,10 @@ function Send-Response {
 }
 
 function Send-Preflight {
+    # Answer CORS preflights without granting anything: no Access-Control-Allow-* headers,
+    # so cross-origin browser requests are refused.
     param([System.Net.HttpListenerResponse]$Response)
     $Response.StatusCode = 204
-    $Response.Headers.Add('Access-Control-Allow-Origin', '*')
-    $Response.Headers.Add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    $Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
-    $Response.Headers.Add('Access-Control-Max-Age', '86400')
     $Response.ContentLength64 = 0
     $Response.OutputStream.Close()
 }
@@ -329,6 +335,47 @@ function Test-OriginAllowed {
     return ($script:AllowedOrigins -contains $origin)
 }
 
+function Test-BearerToken {
+    # Constant-time check of an "Authorization: Bearer <token>" header value.
+    param([string]$Header, [string]$Token)
+    if ([string]::IsNullOrEmpty($Token) -or [string]::IsNullOrEmpty($Header)) { return $false }
+    if (-not $Header.StartsWith('Bearer ', [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $presented = [System.Text.Encoding]::UTF8.GetBytes($Header.Substring(7).Trim())
+    $expected = [System.Text.Encoding]::UTF8.GetBytes($Token)
+    $diff = $presented.Length -bxor $expected.Length
+    for ($i = 0; $i -lt $expected.Length; $i++) {
+        $b = if ($i -lt $presented.Length) { $presented[$i] } else { 0 }
+        $diff = $diff -bor ($b -bxor $expected[$i])
+    }
+    return ($diff -eq 0)
+}
+
+function Test-RequestAuthorized {
+    param([System.Net.HttpListenerRequest]$Request, [string]$Token)
+    return (Test-BearerToken -Header $Request.Headers['Authorization'] -Token $Token)
+}
+
+function ConvertTo-HostKey {
+    # Normalize a hostname for comparison: case-insensitive, no trailing dot, and every name
+    # for this machine (localhost, loopback, ".", NetBIOS name, FQDN) folds to "localhost".
+    param([string]$Name)
+    $n = "$Name".Trim().TrimEnd('.').ToLowerInvariant()
+    $self = @('', 'localhost', '127.0.0.1', '::1', '[::1]', '.', "$env:COMPUTERNAME".ToLowerInvariant())
+    # The machine's own DNS suffix (not USERDNSDOMAIN, which is the signed-in user's domain and
+    # can name a different machine when user and computer live in different domains).
+    try {
+        $suffix = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().DomainName
+        if ($suffix) { $self += "$env:COMPUTERNAME.$suffix".ToLowerInvariant() }
+    } catch {}
+    if ($self -contains $n) { return 'localhost' }
+    return $n
+}
+
+function Test-SameHost {
+    param([string]$A, [string]$B)
+    return ((ConvertTo-HostKey $A) -eq (ConvertTo-HostKey $B))
+}
+
 # ── Credential Infrastructure ────────────────────────────────────────────────
 
 $script:AllowedOrigins = $AllowedOrigins
@@ -348,25 +395,8 @@ function Resolve-ServerCredential {
     # Validate serverId to prevent path traversal
     if ($ServerId) { $null = Assert-SafeId -Id $ServerId -ParamName 'serverId' }
 
-    # Resolve the PSCredential object (if any)
-    $cred = $null
-    switch ($CredentialMode) {
-        'savedCredential' {
-            $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
-            if (-not (Test-Path $credFile)) {
-                throw "No saved credential found for server '$ServerId'"
-            }
-            $credData = Get-Content $credFile -Raw | ConvertFrom-Json
-            $securePass = $credData.Password | ConvertTo-SecureString
-            $cred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-        }
-        'session' {
-            if ($script:SessionCredentials.ContainsKey($ServerId)) {
-                $cred = $script:SessionCredentials[$ServerId]
-            }
-        }
-        # 'currentUser' — no credential needed, Kerberos/NTLM handles auth
-    }
+    # Resolve the PSCredential object (if any), bound to the host it was entered for
+    $cred = Resolve-StoredCredential -ServerId $ServerId -CredentialMode $CredentialMode -Hostname $Hostname
 
     if ($isRemote -and $cred) {
         # DNS Server cmdlets don't accept -Credential; they need -CimSession.
@@ -383,6 +413,47 @@ function Resolve-ServerCredential {
     return $params
 }
 
+function Resolve-StoredCredential {
+    # Load the saved (DPAPI) or session credential for ServerId, refusing to release it for any
+    # host other than the one it was stored for -- the caller picks serverId and hostname
+    # independently, so without this a request could present a privileged credential to an
+    # arbitrary machine. Returns $null for currentUser mode or a missing session credential.
+    param(
+        [string]$ServerId,
+        [string]$CredentialMode,
+        [string]$Hostname
+    )
+    if ($ServerId) { $null = Assert-SafeId -Id $ServerId -ParamName 'serverId' }
+    switch ($CredentialMode) {
+        'savedCredential' {
+            $credFile = Join-Path $script:CredStorePath "$ServerId.cred"
+            if (-not (Test-Path $credFile)) {
+                throw "No saved credential found for server '$ServerId'"
+            }
+            $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+            $boundHost = if ($credData.PSObject.Properties['Hostname']) { $credData.Hostname } else { $null }
+            if (-not $boundHost) {
+                throw "The saved credential for server '$ServerId' predates host binding. Re-enter it on the Server tab."
+            }
+            if (-not (Test-SameHost $boundHost $Hostname)) {
+                throw "The saved credential for server '$ServerId' was stored for host '$boundHost', not '$Hostname'. Re-enter it on the Server tab."
+            }
+            $securePass = $credData.Password | ConvertTo-SecureString
+            return (New-Object System.Management.Automation.PSCredential($credData.Username, $securePass))
+        }
+        'session' {
+            if (-not $script:SessionCredentials.ContainsKey($ServerId)) { return $null }
+            $entry = $script:SessionCredentials[$ServerId]
+            if (-not (Test-SameHost $entry.Hostname $Hostname)) {
+                throw "The session credential for server '$ServerId' was entered for host '$($entry.Hostname)', not '$Hostname'. Re-enter it on the Server tab."
+            }
+            return $entry.Credential
+        }
+    }
+    # 'currentUser' -- no credential needed, Kerberos/NTLM handles auth
+    return $null
+}
+
 function Resolve-BackgroundJobCredential {
     # Extract hostname + credential from resolved params for use with Invoke-Command
     # in background jobs (CimSession can't cross job boundaries).
@@ -397,16 +468,8 @@ function Resolve-BackgroundJobCredential {
         $qs = $Request.QueryString
         $sid = $qs['serverId']
         $cm  = $qs['credentialMode']
-        if ($sid) { $null = Assert-SafeId -Id $sid -ParamName 'serverId' }
-        if ($cm -eq 'savedCredential' -and $sid) {
-            $credFile = Join-Path $script:CredStorePath "$sid.cred"
-            if (Test-Path $credFile) {
-                $credData = Get-Content $credFile -Raw | ConvertFrom-Json
-                $securePass = $credData.Password | ConvertTo-SecureString
-                $remoteCred = New-Object System.Management.Automation.PSCredential($credData.Username, $securePass)
-            }
-        } elseif ($cm -eq 'session' -and $sid -and $script:SessionCredentials.ContainsKey($sid)) {
-            $remoteCred = $script:SessionCredentials[$sid]
+        if ($sid -and $cm -in @('savedCredential', 'session')) {
+            $remoteCred = Resolve-StoredCredential -ServerId $sid -CredentialMode $cm -Hostname $remoteHost
         }
     } elseif ($ResolvedParams.ContainsKey('ComputerName')) {
         $remoteHost = $ResolvedParams['ComputerName']
@@ -421,10 +484,10 @@ function Handle-StoreCredential {
     )
 
     try {
-        if (-not $Body -or -not $Body.serverId -or -not $Body.username -or -not $Body.password) {
+        if (-not $Body -or -not $Body.serverId -or -not $Body.hostname -or -not $Body.username -or -not $Body.password) {
             Send-Response -Response $Response -Body @{
                 success = $false
-                error   = 'serverId, username, and password are required'
+                error   = 'serverId, hostname, username, and password are required'
             } -StatusCode 400
             return
         }
@@ -440,9 +503,11 @@ function Handle-StoreCredential {
         $secureString = ConvertTo-SecureString $Body.password -AsPlainText -Force
         $encrypted = $secureString | ConvertFrom-SecureString
 
+        # Hostname binds the credential to one machine (see Resolve-StoredCredential).
         $credData = @{
             Username = $Body.username
             Password = $encrypted
+            Hostname = "$($Body.hostname)".Trim()
         }
 
         $credFile = Join-Path $script:CredStorePath "$($Body.serverId).cred"
@@ -479,10 +544,18 @@ function Handle-CheckCredential {
     $null = Assert-SafeId -Id $serverId -ParamName 'serverId'
     $credFile = Join-Path $script:CredStorePath "$serverId.cred"
     $exists = Test-Path $credFile
+    $boundHost = $null
+    if ($exists) {
+        try {
+            $credData = Get-Content $credFile -Raw | ConvertFrom-Json
+            if ($credData.PSObject.Properties['Hostname']) { $boundHost = $credData.Hostname }
+        } catch {}
+    }
 
     Send-Response -Response $Response -Body @{
-        success = $true
-        exists  = $exists
+        success  = $true
+        exists   = $exists
+        hostname = $boundHost
     }
 }
 
@@ -516,17 +589,18 @@ function Handle-SessionCredential {
     )
 
     try {
-        if (-not $Body -or -not $Body.serverId -or -not $Body.username -or -not $Body.password) {
+        if (-not $Body -or -not $Body.serverId -or -not $Body.hostname -or -not $Body.username -or -not $Body.password) {
             Send-Response -Response $Response -Body @{
                 success = $false
-                error   = 'serverId, username, and password are required'
+                error   = 'serverId, hostname, username, and password are required'
             } -StatusCode 400
             return
         }
 
+        $null = Assert-SafeId -Id $Body.serverId -ParamName 'serverId'
         $securePass = ConvertTo-SecureString $Body.password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential($Body.username, $securePass)
-        $script:SessionCredentials[$Body.serverId] = $cred
+        $script:SessionCredentials[$Body.serverId] = @{ Credential = $cred; Hostname = "$($Body.hostname)".Trim() }
 
         Write-Log "Session credential cached for server '$($Body.serverId)'"
 
@@ -4449,6 +4523,15 @@ function Route-Request {
         return
     }
 
+    # Every endpoint but the health probe needs the bridge token.
+    if ($path -ne '/api/health' -and -not (Test-RequestAuthorized -Request $request -Token $script:BridgeToken)) {
+        Send-Response -Response $response -Body @{
+            success = $false
+            error   = 'Unauthorized: missing or invalid bridge token'
+        } -StatusCode 401
+        return
+    }
+
     # Refuse oversized bodies before reading them. Chunked bodies (no Content-Length)
     # are capped while reading, in Read-BoundedText.
     if ($request.ContentLength64 -gt (Get-MaxRequestBodyBytes)) {
@@ -5008,7 +5091,41 @@ function Route-Request {
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-$prefix = "http://${BindAddress}:${Port}/"
+$loopbackBinds = @('127.0.0.1', 'localhost', '::1', '[::1]')
+if (($loopbackBinds -notcontains $BindAddress) -and -not $AllowRemote) {
+    Write-Host ''
+    Write-Host "  ERROR: -BindAddress $BindAddress exposes the bridge beyond this machine." -ForegroundColor Red
+    Write-Host '  Saved/session credentials and DNS changes would then cross the network. Re-run with' -ForegroundColor Yellow
+    Write-Host '  -AllowRemote to confirm, and prefer -UseHttps or a TLS reverse proxy on untrusted networks.' -ForegroundColor Yellow
+    Write-Host ''
+    exit 1
+}
+
+# Bridge token: explicit -Token / DNS_BRIDGE_TOKEN, else the token file from a previous start
+# (so restarts don't sign every browser out), else a fresh random one.
+$tokenFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\bridge.token'
+$tokenSource = $null
+if ([string]::IsNullOrWhiteSpace($Token) -and -not $RotateToken -and (Test-Path $tokenFile)) {
+    try {
+        $existing = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
+        if ($existing.Length -ge 32) { $Token = $existing; $tokenSource = 'reused' }
+    } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($Token)) {
+    $tokenBytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($tokenBytes)
+    $rng.Dispose()
+    $Token = [Convert]::ToBase64String($tokenBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    $tokenSource = 'generated'
+} elseif (-not $tokenSource) {
+    $Token = $Token.Trim()
+    $tokenSource = 'supplied'
+}
+$script:BridgeToken = $Token
+
+$scheme = if ($UseHttps) { 'https' } else { 'http' }
+$prefix = "${scheme}://${BindAddress}:${Port}/"
 $listener = $null
 
 # Remove stale URL ACL reservations that can block HttpListener
@@ -5023,9 +5140,9 @@ try {
 # Try binding with multiple prefix formats for compatibility
 $prefixes = @($prefix)
 if ($BindAddress -eq '127.0.0.1') {
-    $prefixes += "http://localhost:${Port}/"
+    $prefixes += "${scheme}://localhost:${Port}/"
 } elseif ($BindAddress -eq '0.0.0.0') {
-    $prefixes = @("http://+:${Port}/")
+    $prefixes = @("${scheme}://+:${Port}/")
 }
 $started = $false
 
@@ -5056,10 +5173,46 @@ if (-not $started) {
     exit 1
 }
 
+# Publish the token only once this instance owns the port, so a launch that fails to bind
+# never overwrites the token another running bridge is using.
+# Write the token where the local frontend and MCP server look for it, readable only by
+# this user (and SYSTEM / Administrators).
+try {
+    $tokenDir = Split-Path -Parent $tokenFile
+    if (-not (Test-Path $tokenDir)) { $null = New-Item -ItemType Directory -Path $tokenDir -Force }
+    # Lock the (empty) file down first, then write the token, so it is never readable through
+    # inherited permissions. Uses the .NET ACL API rather than Set-Acl, which lives in a module
+    # that can fail to load (e.g. when started from pwsh with a 7.x PSModulePath).
+    [System.IO.File]::WriteAllText($tokenFile, '')
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    $identities = @(
+        [System.Security.Principal.WindowsIdentity]::GetCurrent().User,
+        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')),
+        (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544'))
+    )
+    foreach ($id in $identities) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($id, 'FullControl', 'Allow')))
+    }
+    $fileInfo = New-Object System.IO.FileInfo($tokenFile)
+    if ($fileInfo | Get-Member -Name SetAccessControl -MemberType Method) {
+        $fileInfo.SetAccessControl($acl)                                      # .NET Framework (PS 5.1)
+    } else {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl) # .NET (pwsh 7)
+    }
+    [System.IO.File]::WriteAllText($tokenFile, $Token)
+} catch {
+    Write-Log "Could not write bridge token file ${tokenFile}: $($_.Exception.Message)" 'WARN'
+}
+
 try {
     Write-Host ''
     Write-Host '  DNS Policy Manager - PowerShell Bridge' -ForegroundColor Cyan
     Write-Host "  Listening on $prefix" -ForegroundColor Green
+    Write-Host "  Bridge token ($tokenSource) written to $tokenFile" -ForegroundColor Gray
+    if (-not $UseHttps -and ($loopbackBinds -notcontains $BindAddress)) {
+        Write-Host '  WARNING: plain HTTP on a network interface - credentials are sent unencrypted.' -ForegroundColor Yellow
+    }
     Write-Host "  DNS Module: $(if (Test-DnsModule) { 'Available' } else { 'Not Found' })" -ForegroundColor $(if (Test-DnsModule) { 'Green' } else { 'Yellow' })
     Write-Host '  Press Ctrl+C to stop' -ForegroundColor DarkGray
     Write-Host ''
@@ -5085,6 +5238,7 @@ try {
         BpaJobs            = [hashtable]::Synchronized(@{})
         ResolverJobs       = [hashtable]::Synchronized(@{})
         AllowedOrigins     = $script:AllowedOrigins
+        BridgeToken        = $script:BridgeToken
     })
     $iss.Variables.Add(
         [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
@@ -5139,6 +5293,7 @@ try {
             $script:BpaJobs            = $state.BpaJobs
             $script:ResolverJobs       = $state.ResolverJobs
             $script:AllowedOrigins     = $state.AllowedOrigins
+            $script:BridgeToken        = $state.BridgeToken
             $script:RequestCimSessions = @()
 
             try {

@@ -8,9 +8,10 @@ import { useStore } from "./store";
 import { describeBlockedCall, DRY_RUN_ERROR, isMutatingCall } from "./dry-run";
 
 const REQUEST_TIMEOUT = 30000;
-// All requests go directly to the bridge to avoid the Next.js dev proxy's ~15s timeout.
-// The bridge has CORS headers so direct calls work from the browser.
-const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://127.0.0.1:8650";
+// Requests go to this app's own /api route (src/app/api/[...path]/route.ts), which adds
+// the bridge token server-side and forwards to the bridge. The browser never holds the
+// token and never talks to the bridge directly.
+const BRIDGE_URL = "";
 
 async function request<T = unknown>(
   method: string,
@@ -43,7 +44,14 @@ async function request<T = unknown>(
     const res = await fetch(url, opts);
     clearTimeout(timeoutId);
     try {
-      return await res.json();
+      const data = await res.json();
+      // The /api proxy needs a signed-in session; send the user to sign in once. A full page
+      // load (not client navigation) so the app restarts cleanly with the new cookie after.
+      if (res.status === 401 && data?.authRequired && typeof window !== "undefined" && window.location.pathname !== "/login") {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- non-React module; a full load is intended
+        window.location.href = "/login";
+      }
+      return data;
     } catch {
       return {
         success: false,
@@ -241,9 +249,11 @@ export const api = {
     ),
 
   // Credentials
-  storeCredential: (serverId: string, username: string, password: string) =>
+  // `hostname` binds the credential: the bridge refuses to use it for any other host.
+  storeCredential: (serverId: string, hostname: string, username: string, password: string) =>
     request("POST", "/api/credentials/store", {
       serverId,
+      hostname,
       username,
       password,
     }),
@@ -262,11 +272,13 @@ export const api = {
 
   storeSessionCredential: (
     serverId: string,
+    hostname: string,
     username: string,
     password: string
   ) =>
     request("POST", "/api/credentials/session", {
       serverId,
+      hostname,
       username,
       password,
     }),

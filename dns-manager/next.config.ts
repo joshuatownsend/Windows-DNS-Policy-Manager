@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const bridgeUrl = process.env.BRIDGE_URL || "http://127.0.0.1:8650";
-
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
@@ -13,16 +11,10 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "no-referrer" },
+          // same-origin, not no-referrer: under no-referrer browsers send `Origin: null` on
+          // same-origin POSTs, which the /api proxy's Origin check must refuse.
+          { key: "Referrer-Policy", value: "same-origin" },
         ],
-      },
-    ];
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${bridgeUrl}/api/:path*`,
       },
     ];
   },
