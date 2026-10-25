@@ -89,6 +89,12 @@ export function PolicyReorderDialog({ open, onOpenChange, policies, zone, onSave
         undefined,
         newOrder
       );
+      if (result.dryRun) {
+        // Dry Run holds back every change the same way: say so once and stop.
+        toast.warning(String(result.error));
+        setSaving(false);
+        return;
+      }
       if (result.success) ok++;
       else fail++;
     }

@@ -40,3 +40,42 @@ Incidental observation (pre-existing, not a Node 24 regression): the runtime use
 called without `-G nodejs`. Harmless for a single-process container; noted in `TODO.md`.
 
 ---
+
+## 2026-10-24 17:35 | bridge-auth | Bridge token authentication and credential host binding (#138, #139, #145)
+
+Applies once the bridge-auth PR is merged and released (v0.7.0). Local one-command launches
+(`Start-DNSPolicyManager.ps1`) need no action: the bridge writes its token file and the
+frontend reads it.
+
+- [ ] Re-enter saved/session credentials for every server that uses them
+  Credentials are now bound to the hostname they were stored for. Ones saved before this
+  release have no bound host, so the bridge refuses them until they are re-entered once.
+  Server tab → edit each server → enter username and password → Save.
+- [ ] Docker deployments: create a `.env` next to `docker-compose.yml` with a shared token
+  `BRIDGE_TOKEN=<long random string>` (e.g. `openssl rand -base64 32`)
+  `docker compose up` now fails fast if it is missing.
+- [ ] Docker deployments: restart the host bridge with the same token and an explicit remote opt-in
+  `$env:DNS_BRIDGE_TOKEN = '<same string>'`
+  `powershell -ExecutionPolicy Bypass -File server/bridge.ps1 -BindAddress 0.0.0.0 -AllowRemote`
+  (The container reaches the bridge over Docker's network, so loopback-only binding no longer works for Docker.)
+- [ ] Docker deployments: rebuild the image (`docker compose up -d --build`)
+  `BRIDGE_URL` moved from a build arg to a runtime environment variable, so old images still
+  carry the removed rewrite.
+- [ ] Anyone running the bridge with `-BindAddress 0.0.0.0` (or another non-loopback address): add `-AllowRemote`
+  Without it the bridge now exits with an error.
+- [ ] Optional, recommended for remote bridges: serve the bridge over HTTPS
+  Bind a certificate to the port, then start with `-UseHttps`:
+  `netsh http add sslcert ipport=0.0.0.0:8650 certhash=<cert thumbprint> appid={<any GUID>}`
+  See: https://learn.microsoft.com/windows/win32/http/add-sslcert
+- [ ] MCP server registrations on another machine or under another Windows user: add the token
+  `claude mcp add dns-policy-manager -e BRIDGE_URL=... -e BRIDGE_TOKEN=<token> -- node /path/to/mcp-server/dist/index.js`
+  Same-user, same-machine setups read `%LOCALAPPDATA%\DNSPolicyManager\bridge.token` automatically.
+- [ ] Opening the app under a hostname other than localhost: set `ALLOWED_HOSTS`
+  e.g. `ALLOWED_HOSTS=dns-admin.contoso.com` in the frontend environment (or `.env` for Docker).
+- [ ] Sign each browser in once
+  The launcher does this automatically (single-use code). For Docker or manual starts, open
+  http://localhost:10010 and paste the token on the sign-in page.
+- [ ] Docker deployments reached from other machines: compose now publishes `127.0.0.1:10010` only
+  Change the port mapping to `"10010:10010"`, add the hostname to `ALLOWED_HOSTS`, and put TLS in front.
+
+---

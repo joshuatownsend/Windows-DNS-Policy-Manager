@@ -159,6 +159,13 @@ export function RecordImportDialog({ open, onOpenChange, zoneName, onImported }:
         timeToLive: r.ttl,
         ...sp,
       });
+      if (result.dryRun) {
+        // Dry Run holds back every record the same way: say so once and stop.
+        toast.warning(String(result.error));
+        setImporting(false);
+        setProgress(null);
+        return;
+      }
       if (result.success) ok++;
       else fail++;
       setProgress({ done: i + 1, total: validRecords.length });

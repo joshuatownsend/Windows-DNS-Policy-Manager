@@ -9,6 +9,7 @@ import http from "http";
 import { spawn } from "child_process";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
+import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,14 +22,24 @@ const policies = load("policies");
 const records = load("records");
 const resolvers = load("resolvers");
 
+// The browser reaches the mock bridge only through the app's /api proxy, which must attach
+// this token. The mock refuses anything else, like the real bridge.
+const BRIDGE_TOKEN = "e2e-bridge-token";
+
+// One-time sign-in codes (the launcher's /auth?code= link) are read from this file. Playwright
+// inherits the env var, so tests can write a code and open the link.
+process.env.SIGNIN_CODE_FILE = join(tmpdir(), `dpm-e2e-signin-${process.pid}.code`);
+
 // ── Start mock bridge on :8650 ──
 const bridge = http.createServer((req, res) => {
   res.setHeader("Content-Type", "application/json");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
   const u = req.url || "";
+  if (!u.startsWith("/api/health") && req.headers.authorization !== `Bearer ${BRIDGE_TOKEN}`) {
+    res.writeHead(401);
+    res.end(JSON.stringify({ success: false, error: "Unauthorized: missing or invalid bridge token" }));
+    return;
+  }
   let b = { success: true };
   if (u.includes("/api/health")) b = health;
   else if (u.includes("/api/connect")) b = connect;
@@ -68,6 +79,7 @@ console.log("Mock bridge started on :8650");
 const nextServer = spawn("node", ["node_modules/next/dist/bin/next", "start", "--port", "10010"], {
   cwd: join(__dirname, ".."),
   stdio: "pipe",
+  env: { ...process.env, BRIDGE_URL: "http://127.0.0.1:8650", BRIDGE_TOKEN },
 });
 
 // Wait for server to be ready

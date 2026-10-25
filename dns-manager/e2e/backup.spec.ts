@@ -20,6 +20,9 @@ test.describe("Backup Tab", () => {
     });
 
     await page.goto("/backup");
+    // Imports change the DNS server, so they only run in Live mode.
+    await page.getByRole("switch", { name: /Execution mode/ }).click();
+    await page.getByRole("button", { name: "Enable Live Mode" }).click();
     const backup = {
       backupDate: "2026-10-24T10:00:00Z",
       server: "benign-host",

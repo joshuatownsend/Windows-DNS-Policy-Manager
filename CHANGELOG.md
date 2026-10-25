@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+> **Upgrade notes:** saved and session credentials must be re-entered once, Docker setups need a
+> shared `BRIDGE_TOKEN`, and non-loopback bridge binds need `-AllowRemote`. See `MANUAL_STEPS.md`.
+
 ### Security
 
 - **Generated PowerShell can't be hijacked by input (#147).** Every command generator now uses
@@ -19,6 +22,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
     `[TimeSpan]::FromSeconds(...)`.
   - Blocklists and Create Policy previously interpolated raw input. Create Policy's command also
     runs through `/api/execute` in Live mode.
+- **Dry Run actually prevents DNS changes (#146).** The header toggle defaults to Dry Run, but
+  most pages used to send changes anyway. The API client now holds back every request that would
+  change a DNS server while Dry Run is on: records, zones, policies, server settings, DNSSEC,
+  DoH and imports. Pages report "Dry Run is on", and the PowerShell tab logs each request that
+  was held back.
+  - Reads, connection tests, exports, DNS lookups, credential management and read-only
+    PowerShell (`Get-*`, `Resolve-*`, `Test-*` and formatters) still work.
+  - Switch to **Live** to apply changes.
+- **The bridge requires a bearer token (#138).** Every endpoint except `/api/health` now needs
+  `Authorization: Bearer <token>`.
+  - The token comes from `-Token`, else `DNS_BRIDGE_TOKEN`, else a random one generated at each
+    start.
+  - It is written to `%LOCALAPPDATA%\DNSPolicyManager\bridge.token`, readable only by the user,
+    SYSTEM and Administrators.
+  - The browser no longer calls the bridge. It calls the app's own `/api/*`, and a server-side
+    route handler adds the token and forwards the request.
+  - That handler requires a signed-in session: an HttpOnly, SameSite=Strict cookie derived from
+    the token. The launcher signs in automatically with a single-use, 5-minute code
+    (`/auth?code=...`), so the token never appears in a URL. Otherwise, paste the token on the
+    new `/login` page.
+  - The handler also only serves loopback hosts, or names listed in `ALLOWED_HOSTS`, which blocks
+    DNS rebinding. It refuses cross-origin `Origin`, cross-site `Sec-Fetch-Site` and non-JSON
+    bodies, and caps bodies at 2 MB while reading.
+  - The bridge reuses its token file across restarts, so sessions survive a restart;
+    `-RotateToken` issues a new one.
+  - The frontend's `dev` and `start` scripts listen on `127.0.0.1`, and Docker Compose publishes
+    the port on `127.0.0.1` by default.
+  - The `Referrer-Policy` header is now `same-origin` (was `no-referrer`), so same-origin POSTs
+    keep a real `Origin` header.
+  - The bridge no longer sends `Access-Control-Allow-Origin: *`. The MCP server reads the token
+    file, or `BRIDGE_TOKEN`.
+- **Credentials are bound to their host (#139).** Saved (DPAPI) and session credentials record
+  the hostname they were entered for. The bridge refuses to use them for any other host, so a
+  request can no longer pair one server's credential with an arbitrary machine.
+  - Changing a server's hostname or credential mode in the Server tab revokes its stored
+    credential.
+  - Removing a server clears session credentials as well as saved ones.
+  - Credentials saved before this release must be re-entered once.
+- **Remote binds are opt-in (#145).** `-BindAddress` with anything but loopback now requires
+  `-AllowRemote`, and the bridge warns when it serves plain HTTP on a network interface.
+  `-UseHttps` serves `https://` once a certificate is bound with `netsh http add sslcert`. The
+  README documents the TLS/proxy requirement for remote setups.
 
 - **`/api/execute` validates against an allowlist of PowerShell syntax (#137).** The checker used
   to reject a list of known-dangerous constructs and let everything else through. It now accepts
@@ -81,6 +126,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   criteria, which matches every query. It now sends an `Fqdn` criterion.
 
 ### Changed
+
+- **Docker:** `BRIDGE_URL` is now a runtime environment variable (it was a build argument), and
+  the frontend needs `BRIDGE_TOKEN`. `docker compose` reads it from `.env`.
 
 - **Next.js 16.4.1 and React 19.3.1**, plus zustand 5.0.15, `@playwright/test` 1.64.1 and
   `@types/node` 24.19.2 (one batch replacing Dependabot PRs #163–#167). `eslint-config-next` 16.4

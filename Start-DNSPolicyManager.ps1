@@ -54,6 +54,38 @@ function ConvertTo-EncodedCommand {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Script))
 }
 
+function Get-AppUrl {
+    # Sign the browser in with a one-time code rather than the bridge token, so the long-lived
+    # token never lands in a URL or browser history. The frontend's /auth accepts the code once,
+    # within 5 minutes, and deletes the file. Falls back to the plain URL (sign-in page).
+    $base = 'http://localhost:10010'
+    $codeFile = Join-Path $env:LOCALAPPDATA 'DNSPolicyManager\signin.code'
+    try {
+        $bytes = New-Object byte[] 32
+        $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+        $rng.GetBytes($bytes)
+        $rng.Dispose()
+        $code = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        $dir = Split-Path -Parent $codeFile
+        if (-not (Test-Path $dir)) { $null = New-Item -ItemType Directory -Path $dir -Force }
+        [System.IO.File]::WriteAllText($codeFile, '')
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $acl.SetAccessRuleProtection($true, $false)
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($me, 'FullControl', 'Allow')))
+        $fileInfo = New-Object System.IO.FileInfo($codeFile)
+        if ($fileInfo | Get-Member -Name SetAccessControl -MemberType Method) {
+            $fileInfo.SetAccessControl($acl)
+        } else {
+            [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl)
+        }
+        [System.IO.File]::WriteAllText($codeFile, $code)
+        return "$base/auth?code=$code"
+    } catch {
+        return $base
+    }
+}
+
 function Invoke-McpBuild {
     param([string]$McpDir, [int]$BridgePort)
     if (-not (Test-Path (Join-Path $McpDir 'package.json'))) {
@@ -98,7 +130,7 @@ try {
     if ($health.status -eq 'ok') {
         Write-Host "  Bridge already running on port $Port" -ForegroundColor Green
         if (-not $NoBrowser) {
-            Start-Process 'http://localhost:10010'
+            Start-Process (Get-AppUrl)
             Write-Host '  Browser opened.' -ForegroundColor Green
         }
         if ($MCP) {
@@ -218,7 +250,7 @@ if ($ready) {
     }
 
     if (-not $NoBrowser) {
-        Start-Process 'http://localhost:10010'
+        Start-Process (Get-AppUrl)
         Write-Host '  Browser opened.' -ForegroundColor Green
     }
 

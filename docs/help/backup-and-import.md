@@ -29,7 +29,7 @@ Restore policies from a previously exported JSON file.
 
 Each policy from the backup is created on the active server. A progress bar shows how many have been imported. Policies that already exist on the server may produce errors — these are shown as toast notifications.
 
-The execution mode must be set to **Live** for import to execute. In **Dry Run** mode, the app shows a warning.
+The execution mode must be set to **Live** for import to execute. In **Dry Run** mode nothing is sent: each policy is reported as held back and logged in the PowerShell tab.
 
 ## Blocklist Import
 
