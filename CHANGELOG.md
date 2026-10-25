@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-24
+
 > **Upgrade notes:** saved and session credentials must be re-entered once, Docker setups need a
 > shared `BRIDGE_TOKEN`, and non-loopback bridge binds need `-AllowRemote`. See `MANUAL_STEPS.md`.
 
