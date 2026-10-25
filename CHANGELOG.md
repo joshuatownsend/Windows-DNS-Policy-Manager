@@ -19,6 +19,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
     all loaded server data and reloads the current tab.
   - A response that arrives from the previous server after the switch is discarded.
 
+- **Generated PowerShell can't be hijacked by input (#147).** Every command generator now uses
+  one shared helper, mirrored in the MCP server and kept identical by a test. That covers the
+  wizards, DoH setup, Create Policy, Blocklists and the MCP `dns_generate_policy_commands` tool.
+  - Strings are escaped for double-quoted use, now including the curly double quotes PowerShell
+    also treats as quotes. Line breaks are flattened, so a value can't break out of a `#` comment
+    line.
+  - Unquoted positions take only a fixed vocabulary or an integer: `-Action`, `-Condition`,
+    criterion parameter names, processing orders, weights and the TTL inside
+    `[TimeSpan]::FromSeconds(...)`.
+  - Blocklists and Create Policy previously interpolated raw input. Create Policy's command also
+    runs through `/api/execute` in Live mode.
 - **Dry Run actually prevents DNS changes (#146).** The header toggle defaults to Dry Run, but
   most pages used to send changes anyway. The API client now holds back every request that would
   change a DNS server while Dry Run is on: records, zones, policies, server settings, DNSSEC,
@@ -120,6 +131,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - **The header's server switcher didn't switch.** Its menu items listened for `onSelect`, which
   the Base UI menu never fires, so picking a server did nothing. They now use `onClick`.
+- **Blocklist "Block" in Live mode blocked the whole zone.** The page sent the domain as `fqdn`,
+  a field the bridge's policy endpoint ignores, so it created a DENY/IGNORE policy with no
+  criteria, which matches every query. It now sends an `Fqdn` criterion.
 
 ### Changed
 

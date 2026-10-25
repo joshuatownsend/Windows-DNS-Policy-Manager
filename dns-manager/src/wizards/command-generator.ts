@@ -3,11 +3,11 @@
 // ⚠ KEEP IN SYNC with mcp-server/src/tools/command-gen.ts (same generator, two packages).
 //   If you change scenario logic here, mirror it there, and vice versa.
 
-/** Escape PowerShell metacharacters for safe use inside double-quoted strings.
- *  Covers: backtick, double quote, dollar sign (prevents $() subexpression execution). */
-export function psEscape(value: string): string {
-  return value.replace(/[`"$]/g, (ch) => "`" + ch);
-}
+import { POLICY_ACTIONS, POLICY_CONDITIONS, psEnum, psEscape, psInt } from "../lib/ps-escape";
+
+// Every string in `data` goes through psEscape (sanitizeData below) and is only ever placed
+// inside double quotes or a `#` comment. Unquoted positions take psEnum / psInt values only.
+export { psEscape };
 
 export function generateCommands(
   scenarioId: string,
@@ -100,10 +100,10 @@ export function generateCommands(
       cmds.push("# Domain Blocklist Configuration");
       cmds.push("");
       let domains = (data.blocklistDomains || "")
-        .split(/[\n,]+/)
+        .split(/[\s,]+/)
         .map((d: string) => d.trim())
         .filter(Boolean);
-      const blAction = data.blocklistAction || "IGNORE";
+      const blAction = psEnum(data.blocklistAction, POLICY_ACTIONS, "IGNORE");
       const prefix = data.blocklistPolicyName || "Blocklist";
       if (data.blocklistWildcard) {
         domains = domains.map((d: string) => (d.startsWith("*.") ? d : "*." + d));
@@ -125,8 +125,8 @@ export function generateCommands(
       const dcs: any[] = data.todDatacenters || [];
       const weights: Record<string, number> = data.todWeights || {};
       const recName = data.todRecordName || "@";
-      const ttlP = data.todTtl && parseInt(data.todTtl) > 0
-        ? ` -TimeToLive ([System.TimeSpan]::FromSeconds(${data.todTtl}))` : "";
+      const todTtl = psInt(data.todTtl, 0);
+      const ttlP = todTtl > 0 ? ` -TimeToLive ([System.TimeSpan]::FromSeconds(${todTtl}))` : "";
       const hasSub = dcs.some((dc: any) => dc.subnet);
       let po = 1;
 
@@ -152,12 +152,12 @@ export function generateCommands(
         if (hasSub) {
           dcs.forEach((dc: any) => {
             if (!dc.name || !dc.subnet) return;
-            const sp = dcs.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${weights[d.name] || 1}`);
+            const sp = dcs.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${psInt(weights[d.name], 1, 1)}`);
             cmds.push(`Add-DnsServerQueryResolutionPolicy -Name "${dc.name}PeakPolicy" -Action ALLOW -ClientSubnet "EQ,${dc.name}Subnet" -TimeOfDay "EQ,${data.todPeakHours}" -ZoneScope "${sp.join(";")}" -ZoneName "${data.zone}" -ProcessingOrder ${po}${serverParam}`);
             po++;
           });
         } else {
-          const sp = dcs.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${weights[d.name] || 1}`);
+          const sp = dcs.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${psInt(weights[d.name], 1, 1)}`);
           cmds.push(`Add-DnsServerQueryResolutionPolicy -Name "PeakHoursPolicy" -Action ALLOW -TimeOfDay "EQ,${data.todPeakHours}" -ZoneScope "${sp.join(";")}" -ZoneName "${data.zone}" -ProcessingOrder ${po}${serverParam}`);
           po++;
         }
@@ -185,14 +185,14 @@ export function generateCommands(
       cmds.push(`# Zone: ${data.zone}`);
       cmds.push("");
       const backends: any[] = data.backends || [];
-      const lbTtl = data.lbTtl && parseInt(data.lbTtl) > 0
-        ? ` -TimeToLive ([System.TimeSpan]::FromSeconds(${data.lbTtl}))` : "";
+      const lbTtlSeconds = psInt(data.lbTtl, 0);
+      const lbTtl = lbTtlSeconds > 0 ? ` -TimeToLive ([System.TimeSpan]::FromSeconds(${lbTtlSeconds}))` : "";
       const lbParts: string[] = [];
       backends.forEach((b: any) => {
         if (!b.name || !b.ip) return;
         cmds.push(`Add-DnsServerZoneScope -ZoneName "${data.zone}" -Name "${b.name}Scope"${serverParam}`);
         cmds.push(`Add-DnsServerResourceRecord -ZoneName "${data.zone}" -ZoneScope "${b.name}Scope" -A -Name "${data.lbRecordName || "@"}" -IPv4Address "${b.ip}"${lbTtl}${serverParam}`);
-        lbParts.push(`${b.name}Scope,${b.weight || 1}`);
+        lbParts.push(`${b.name}Scope,${psInt(b.weight, 1, 1)}`);
       });
       if (lbParts.length > 0) {
         cmds.push("");
@@ -230,7 +230,7 @@ export function generateCommands(
       glRegs.forEach((r: any) => {
         if (!r.name || !r.subnet) return;
         const rW = glW[r.name] || {};
-        const se = glDcs2.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${rW[d.name] || 1}`);
+        const se = glDcs2.filter((d: any) => d.name).map((d: any) => `${d.name}ZoneScope,${psInt(rW[d.name], 1, 1)}`);
         cmds.push(`Add-DnsServerQueryResolutionPolicy -Name "${r.name}Policy" -Action ALLOW -ClientSubnet "EQ,${r.name}Subnet" -ZoneScope "${se.join(";")}" -ZoneName "${data.zone}" -ProcessingOrder ${glO}${serverParam}`);
         glO++;
       });
@@ -297,11 +297,11 @@ export function generateCommands(
 
     case "queryfilter": {
       const fm = data.filterMode || "blocklist";
-      const fa = fm === "blocklist" ? (data.filterAction || "IGNORE") : "IGNORE";
+      const fa = fm === "blocklist" ? psEnum(data.filterAction, POLICY_ACTIONS, "IGNORE") : "IGNORE";
       const fOp = fm === "blocklist" ? "EQ" : "NE";
       const fName = data.filterPolicyName || "QueryFilter";
       const fCrit: string[] = data.filterCriteria || ["FQDN"];
-      const cond = data.filterCondition || "AND";
+      const cond = psEnum(data.filterCondition, POLICY_CONDITIONS, "AND");
 
       cmds.push("# Query Filter Configuration");
       cmds.push(`# Mode: ${fm === "blocklist" ? "Block matching" : "Allow only matching"}`);
@@ -309,7 +309,7 @@ export function generateCommands(
 
       const parts: string[] = [];
       if (fCrit.includes("FQDN") && data.filterFqdns) {
-        const fqdns = data.filterFqdns.split(/[\n,]+/).map((d: string) => d.trim()).filter(Boolean);
+        const fqdns = data.filterFqdns.split(/[\s,]+/).map((d: string) => d.trim()).filter(Boolean);
         if (fqdns.length) parts.push(`-FQDN "${fOp},${fqdns.join(",")}"`);
       }
       if (fCrit.includes("ClientSubnet") && data.filterSubnets) {
